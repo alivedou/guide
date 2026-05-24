@@ -18,6 +18,7 @@ let editingId = null;
 let toastTimer = null;
 let currentViewStyle = parseInt(localStorage.getItem('nav_view_style') || '0');
 let batchSelectMode = false;
+let isZenTempExpanded = false;
 let selectedCardIds = new Set();
 let themeMode = localStorage.getItem('nav_theme_mode') || 'auto';
 let simpleMode = localStorage.getItem('nav_simple_mode') === 'true';
@@ -163,9 +164,38 @@ document.addEventListener('DOMContentLoaded', () => {
     initStyleSwitcher();
     initVideoModal();
     initMonacoModal();
+    initZenMode();
     init();
     initSearch();
 });
+
+// ==================== 极简沉浸模式 (Zen Mode) 逻辑 ====================
+const initZenMode = () => {
+    const expandBtn = document.getElementById('zen-expand-btn');
+    if (expandBtn) {
+        expandBtn.addEventListener('click', () => {
+            isZenTempExpanded = true;
+            document.body.classList.remove('zen-active');
+            showToast('已进入发现模式');
+        });
+    }
+
+    // 滚轮触发展开
+    window.addEventListener('wheel', (e) => {
+        if (document.body.classList.contains('zen-active') && e.deltaY > 50) {
+            isZenTempExpanded = true;
+            document.body.classList.remove('zen-active');
+        }
+    });
+
+    // 点击外部区域展开（如果不是点击搜索框）
+    document.addEventListener('click', (e) => {
+        if (document.body.classList.contains('zen-active') && !e.target.closest('.search-wrapper')) {
+            isZenTempExpanded = true;
+            document.body.classList.remove('zen-active');
+        }
+    });
+};
 
 // ==================== 侧边栏初始化 ====================
 const initSidebar = () => {
@@ -542,7 +572,8 @@ const renderTools = () => {
 
 // ==================== 卡片 HTML 生成 ====================
 const buildCardInnerHTML = (item, adminHtml, style) => {
-    let fallbackAttr = `onerror="this.outerHTML='<span class=\\'emoji-icon\\'>'+window.utils.getRandomEmoji()+'</span>';"`;
+    // 默认图标：如果图片加载失败，使用一个规整的默认占位符或随机 Emoji，但确保它在 icon-wrapper 内居中且不撑开
+    let fallbackAttr = `onerror="this.onerror=null; this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 24 24\\' fill=\\'%23999\\'><path d=\\'M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z\\'/></svg>';"`;
     const safeIcon = utils.escapeHTML(item.icon);
     const isImgIcon = item.icon && item.icon.startsWith('http');
     const iconHtml = isImgIcon
@@ -894,8 +925,19 @@ const renderNav = () => {
     });
 
     // 渲染动态搜索框位置
-    const searchPos = (appData.settings && appData.settings.searchPosition) || 'top';
     const searchSection = document.getElementById('search-section');
+    const searchPos = (appData.settings && appData.settings.searchPosition) || 'top';
+    const isZenMode = appData.settings && appData.settings.zenMode;
+
+    // 处理 Zen Mode 初始状态
+    if (isZenMode && !isZenTempExpanded) {
+        document.body.classList.add('zen-active');
+        document.getElementById('zen-expand-btn').style.display = 'flex';
+    } else {
+        document.body.classList.remove('zen-active');
+        document.getElementById('zen-expand-btn').style.display = 'none';
+    }
+
     if (searchSection) {
         if (searchPos === 'belowFirst') {
             const firstSec = container.querySelector('.category-section');
@@ -906,6 +948,7 @@ const renderNav = () => {
                 if (mainContent) mainContent.insertBefore(searchSection, container);
             }
         } else {
+            // 顶置
             const mainContent = document.getElementById('main-content');
             if (mainContent) mainContent.insertBefore(searchSection, container);
         }
@@ -1295,7 +1338,7 @@ const updatePreview = (val) => {
     if (!val) { box.innerHTML = '🔗'; return; }
     const safeVal = utils.escapeHTML(val);
     if (safeVal.startsWith('http')) {
-        let fallbackAttr = `onerror="this.outerHTML='<span class=\\'emoji-icon\\'>'+window.utils.getRandomEmoji()+'</span>';"`;
+        let fallbackAttr = `onerror="this.onerror=null; this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 24 24\\' fill=\\'%23999\\'><path d=\\'M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z\\'/></svg>';"`;
         box.innerHTML = `<img src="${safeVal}" loading="lazy" ${fallbackAttr}>`;
     } else {
         box.innerHTML = `<span class="emoji-icon">${safeVal}</span>`;
@@ -1349,9 +1392,16 @@ const manageCats = () => {
         <div class="form-row" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px;">
             <label>搜索框位置</label>
             <select id="setting-search-pos" style="flex:1;">
-                <option value="top" ${(appData.settings && appData.settings.searchPosition === 'top') || !(appData.settings && appData.settings.searchPosition) ? 'selected' : ''}>页面顶部</option>
-                <option value="belowFirst" ${appData.settings && appData.settings.searchPosition === 'belowFirst' ? 'selected' : ''}>首个分类下方（含“常去网站”）</option>
+                <option value="top" ${(appData.settings && appData.settings.searchPosition === 'top') || !(appData.settings && appData.settings.searchPosition) ? 'selected' : ''}>顶部展示</option>
+                <option value="belowFirst" ${appData.settings && appData.settings.searchPosition === 'belowFirst' ? 'selected' : ''}>首个分类下方</option>
             </select>
+        </div>
+        <div class="form-row" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px;">
+            <label>极简沉浸</label>
+            <div style="display:flex; align-items:flex-start; gap:6px; flex:1;">
+                <input type="checkbox" id="setting-zen-mode" ${appData.settings && appData.settings.zenMode ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; margin-top:2px;">
+                <span style="font-size:12px; color:#999; line-height:1.4;">开启后初始仅显示搜索框，点击或滚动后展开内容</span>
+            </div>
         </div>
         <div id="cat-list-sort" style="max-height: 300px; overflow-y: auto;">
             ${appData.categories.map((c) => `
@@ -1390,6 +1440,13 @@ const manageCats = () => {
     document.getElementById('setting-search-pos').addEventListener('change', (e) => {
         if (!appData.settings) appData.settings = {};
         appData.settings.searchPosition = e.target.value;
+        renderNav();
+        saveAll(true);
+    });
+    document.getElementById('setting-zen-mode').addEventListener('change', (e) => {
+        if (!appData.settings) appData.settings = {};
+        appData.settings.zenMode = e.target.checked;
+        isZenTempExpanded = false; // 切换设置时重置临时状态
         renderNav();
         saveAll(true);
     });
@@ -1769,7 +1826,7 @@ const initSearch = () => {
             const parentCat = appData.categories.find(c => c.id === item.catId);
             const catName = parentCat ? parentCat.name : '未分类';
 
-            const fallbackAttr = `onerror="this.outerHTML='<span class=\\'emoji-icon\\'>'+window.utils.getRandomEmoji()+'</span>';"`;
+            const fallbackAttr = `onerror="this.onerror=null; this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 24 24\\' fill=\\'%23999\\'><path d=\\'M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z\\'/></svg>';"`;
             const safeIcon = utils.escapeHTML(item.icon);
             const isImgIcon = item.icon && item.icon.startsWith('http');
             const iconHtml = isImgIcon

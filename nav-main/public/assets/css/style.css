@@ -618,18 +618,22 @@ body::before {
 
 /* ==================== 卡片图标与标题（Style 0） ==================== */
 .icon-wrapper {
-    height: auto;
+    width: var(--icon-size, 48px);
+    height: var(--icon-size, 48px);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 2px auto 6px auto;
+    margin: 4px auto 8px auto;
+    overflow: hidden;
+    transition: all 0.3s ease;
 }
 
 .card img {
-    width: var(--icon-size);
-    height: var(--icon-size);
-    border-radius: 4px;
+    width: 85%;
+    height: 85%;
+    border-radius: 8px;
     object-fit: contain;
+    transition: all 0.3s ease;
 }
 
 .card .emoji-icon {
@@ -1738,14 +1742,98 @@ body.view-style-2 .card[data-tooltip]::before {
 }
 
 .search-wrapper {
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 24px;
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
     position: relative;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+/* ==================== 极简沉浸沉浸模式 (Zen Mode) ==================== */
+body.zen-active .sidebar,
+body.zen-active .sidebar-toggle,
+body.zen-active .grid-container,
+body.zen-active .category-section-title,
+body.zen-active .footer-info {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
+}
+
+body.zen-active .main-content {
+    margin-left: 0 !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 100vh;
+    padding-top: 0;
+}
+
+body.zen-active .search-section {
+    margin: 0 auto !important;
+    width: 100%;
+    transform: translateY(-20px);
+}
+
+.zen-expand-btn {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    z-index: 100;
+    transition: all 0.3s ease;
+    animation: bounce 2s infinite;
+}
+
+body.light-theme .zen-expand-btn {
+    color: rgba(0, 0, 0, 0.5);
+}
+
+.zen-expand-btn:hover {
+    color: #399dff;
+    transform: translateX(-50%) translateY(-5px);
+}
+
+.zen-expand-btn i {
+    font-size: 28px;
+}
+
+.zen-expand-btn span {
+    font-size: 13px;
+    letter-spacing: 1px;
+}
+
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {transform: translateX(-50%) translateY(0);}
+    40% {transform: translateX(-50%) translateY(-10px);}
+    60% {transform: translateX(-50%) translateY(-5px);}
+}
+
+body:not(.zen-active) .zen-expand-btn {
+    opacity: 0;
+    pointer-events: none;
+    display: none !important;
+}
+
+.sidebar, .sidebar-toggle, .grid-container, .category-section-title, .footer-info {
+    transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+body.light-theme .search-wrapper {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
 }
 
 .search-section:focus-within .search-wrapper {
@@ -1779,18 +1867,23 @@ body.light-theme .search-section:focus-within .search-wrapper {
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
-    color: var(--text) !important;
-    font-size: 16px;
+    color: #ffffff !important;
+    font-size: 17px;
+    font-weight: 500;
     padding: 0;
     margin: 0;
 }
 
+body.light-theme #sea-input {
+    color: #1a1a1a !important;
+}
+
 #sea-input::placeholder {
-    color: rgba(255, 255, 255, 0.45);
+    color: rgba(255, 255, 255, 0.75);
 }
 
 body.light-theme #sea-input::placeholder {
-    color: rgba(0, 0, 0, 0.4);
+    color: rgba(0, 0, 0, 0.55);
 }
 
 .sea-clear-btn {
