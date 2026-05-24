@@ -1361,49 +1361,53 @@ const manageCats = () => {
     ].map(opt => `<option value="${opt.value}" ${themeMode === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('');
 
     document.getElementById('edit-form-body').innerHTML = `
-        <div class="form-row" style="margin-bottom: 10px;">
-            <label>网格高度</label><input type="number" id="setting-width" value="${currentWidth}"><span style="color:#666; margin-left:10px;">px</span>
+        <div class="form-row" style="margin-bottom: 12px;">
+            <label><i class="ri-ruler-2-line"></i> 网格高度</label>
+            <input type="number" id="setting-width" value="${currentWidth}"><span style="color:#666; margin-left:10px;">px</span>
         </div>
-        <div class="form-row" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px;">
-            <label>自定义背景</label>
-            <div style="display:flex; align-items:center; gap:8px; flex:1;">
-                <input type="color" id="setting-bg-color" value="${bgIsColor ? currentBg : '#222222'}" style="width:40px; height:36px; padding:2px; border:none; border-radius:6px; cursor:pointer; background:transparent; flex-shrink:0;">
-                <input type="text" id="setting-bg" value="${utils.escapeHTML(currentBg)}" placeholder="填URL或纯色(如#222), 留空使用Bing" style="flex:1;">
+        <div class="form-row" style="margin-bottom: 15px; background: rgba(57, 157, 255, 0.1); padding: 12px; border-radius: 12px; border: 1px solid rgba(57, 157, 255, 0.2);">
+            <label style="color: #399dff;"><i class="ri-focus-3-line"></i> 极简沉浸</label>
+            <div style="display:flex; align-items:flex-start; gap:8px; flex:1;">
+                <input type="checkbox" id="setting-zen-mode" ${appData.settings && appData.settings.zenMode ? 'checked' : ''} style="width:20px; height:20px; cursor:pointer; margin-top:2px;">
+                <span style="font-size:12px; color:rgba(255,255,255,0.7); line-height:1.4;">开启后仅显示搜索框，点击或滚动后展开书签区</span>
             </div>
         </div>
-        <div class="form-row" style="margin-bottom: 10px;">
-            <label>主题模式</label>
-            <select id="setting-theme" style="flex:1;">${themeOptions}</select>
-        </div>
-        <div class="form-row" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px;">
-            <label>简约模式</label>
-            <div style="display:flex; align-items:flex-start; gap:6px; flex:1;">
-                <input type="checkbox" id="setting-simple-mode" ${simpleMode ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; margin-top:2px;">
-                <span style="font-size:12px; color:#999; line-height:1.4;">关闭模糊效果（提升低端设备性能）</span>
-            </div>
-        </div>
-        <div class="form-row" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px;">
-            <label>新窗口打开</label>
-            <div style="display:flex; align-items:flex-start; gap:6px; flex:1;">
-                <input type="checkbox" id="setting-new-tab" ${(appData.settings && appData.settings.openInNewTab) ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; margin-top:2px;">
-                <span style="font-size:12px; color:#999; line-height:1.4;">跳转外站链接时默认在新窗口/新标签页中打开</span>
-            </div>
-        </div>
-        <div class="form-row" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px;">
-            <label>搜索框位置</label>
+        <div class="form-row" style="margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 12px;">
+            <label><i class="ri-layout-top-line"></i> 搜索框位置</label>
             <select id="setting-search-pos" style="flex:1;">
-                <option value="top" ${(appData.settings && appData.settings.searchPosition === 'top') || !(appData.settings && appData.settings.searchPosition) ? 'selected' : ''}>顶部展示</option>
-                <option value="belowFirst" ${appData.settings && appData.settings.searchPosition === 'belowFirst' ? 'selected' : ''}>首个分类下方</option>
+                <option value="top" ${(appData.settings && appData.settings.searchPosition === 'top') || !(appData.settings && appData.settings.searchPosition) ? 'selected' : ''}>固定在页面顶部</option>
+                <option value="belowFirst" ${appData.settings && appData.settings.searchPosition === 'belowFirst' ? 'selected' : ''}>首个分类下方（居中效果）</option>
             </select>
         </div>
-        <div class="form-row" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 10px;">
-            <label>极简沉浸</label>
-            <div style="display:flex; align-items:flex-start; gap:6px; flex:1;">
-                <input type="checkbox" id="setting-zen-mode" ${appData.settings && appData.settings.zenMode ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer; margin-top:2px;">
-                <span style="font-size:12px; color:#999; line-height:1.4;">开启后初始仅显示搜索框，点击或滚动后展开内容</span>
+        <div class="form-row" style="margin-bottom: 12px;">
+            <label><i class="ri-image-line"></i> 自定义背景</label>
+            <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                <input type="color" id="setting-bg-color" value="${bgIsColor ? currentBg : '#222222'}" style="width:40px; height:36px; padding:2px; border:none; border-radius:6px; cursor:pointer; background:transparent; flex-shrink:0;">
+                <input type="text" id="setting-bg" value="${utils.escapeHTML(currentBg)}" placeholder="填URL或纯色, 留空使用Bing" style="flex:1;">
             </div>
         </div>
-        <div id="cat-list-sort" style="max-height: 300px; overflow-y: auto;">
+        <div class="form-row" style="margin-bottom: 12px;">
+            <label><i class="ri-palette-line"></i> 主题模式</label>
+            <select id="setting-theme" style="flex:1;">${themeOptions}</select>
+        </div>
+        <div class="form-row" style="margin-bottom: 12px;">
+            <label><i class="ri-shadow-line"></i> 简约模式</label>
+            <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                <input type="checkbox" id="setting-simple-mode" ${simpleMode ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer;">
+                <span style="font-size:12px; color:#999;">关闭背景模糊效果</span>
+            </div>
+        </div>
+        <div class="form-row" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 15px;">
+            <label><i class="ri-external-link-line"></i> 新窗口打开</label>
+            <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                <input type="checkbox" id="setting-new-tab" ${(appData.settings && appData.settings.openInNewTab) ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer;">
+                <span style="font-size:12px; color:#999;">点击书签时在新标签页打开</span>
+            </div>
+        </div>
+        <div style="margin-bottom: 10px; font-weight: bold; font-size: 14px; color: #399dff; display: flex; align-items: center; gap: 6px;">
+            <i class="ri-list-settings-line"></i> 分类管理与排序
+        </div>
+        <div id="cat-list-sort" style="max-height: 280px; overflow-y: auto;">
             ${appData.categories.map((c) => `
                 <div class="cat-item-row" data-id="${utils.escapeHTML(c.id)}" style="display:flex; gap:8px; margin-bottom:10px; align-items:center; background:rgba(255,255,255,0.05); padding:8px; border-radius:10px;">
                     <i class="ri-drag-move-fill drag-handle"></i>
