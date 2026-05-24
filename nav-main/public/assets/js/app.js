@@ -167,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initZenMode();
     init();
     initSearch();
+    initQuickNav();
 });
 
 // ==================== 极简沉浸模式 (Zen Mode) 逻辑 ====================
@@ -1797,6 +1798,42 @@ const closeModal = () => {
 };
 
 // ==================== 高颜值多模式检索模块 ====================
+/**
+ * 初始化快捷导航（回到顶部/直达底部）
+ */
+const initQuickNav = () => {
+    const group = document.getElementById('quick-nav-group');
+    const toTopBtn = document.getElementById('scroll-to-top');
+    const toBottomBtn = document.getElementById('scroll-to-bottom');
+    
+    if (!group || !toTopBtn || !toBottomBtn) return;
+
+    // 监听滚动显示/隐藏
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 300) {
+            group.classList.add('visible');
+        } else {
+            group.classList.remove('visible');
+        }
+    });
+
+    // 回到顶部
+    toTopBtn.addEventListener('click', () => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    });
+
+    // 直达底部
+    toBottomBtn.addEventListener('click', () => {
+        window.scrollTo({
+            top: document.documentElement.scrollHeight,
+            behavior: 'smooth'
+        });
+    });
+};
+
 const initSearch = () => {
     const seaInput = document.getElementById('sea-input');
     const seaClearBtn = document.getElementById('sea-clear-btn');
