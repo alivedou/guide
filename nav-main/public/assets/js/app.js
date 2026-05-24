@@ -175,7 +175,7 @@ const initZenMode = () => {
     if (expandBtn) {
         expandBtn.addEventListener('click', () => {
             isZenTempExpanded = true;
-            document.body.classList.remove('zen-active');
+            renderNav();
             showToast('已进入发现模式');
         });
     }
@@ -184,7 +184,7 @@ const initZenMode = () => {
     window.addEventListener('wheel', (e) => {
         if (document.body.classList.contains('zen-active') && e.deltaY > 50) {
             isZenTempExpanded = true;
-            document.body.classList.remove('zen-active');
+            renderNav();
         }
     });
 
@@ -192,7 +192,7 @@ const initZenMode = () => {
     document.addEventListener('click', (e) => {
         if (document.body.classList.contains('zen-active') && !e.target.closest('.search-wrapper')) {
             isZenTempExpanded = true;
-            document.body.classList.remove('zen-active');
+            renderNav();
         }
     });
 };
@@ -632,13 +632,34 @@ const clearSelection = () => {
     renderNav();
 };
 
-const batchDelete = () => {
+const batchDelete = async () => {
+    if (!isAdmin) {
+        showToast("未登录或已失效，请重新登录", "#e67e22");
+        return;
+    }
     if (selectedCardIds.size === 0) return;
     if (!confirm(`确定删除选中的 ${selectedCardIds.size} 个网站？`)) return;
-    appData.items = appData.items.filter(item => !selectedCardIds.has(item.id));
-    clearSelection();
-    saveAll(false);
-    showToast('批量删除成功');
+    
+    showLoader('正在处理批量删除...');
+    try {
+        const idsToDelete = new Set(Array.from(selectedCardIds).map(id => String(id)));
+        appData.items = appData.items.filter(item => !idsToDelete.has(String(item.id)));
+        
+        clearSelection(); // This clears IDs and calls renderNav()
+        
+        // 发起同步
+        const success = await saveAll(false);
+        if (success) {
+            showToast('批量删除并同步成功');
+        } else {
+            showToast('本地操作完成，但同步失败', '#e67e22');
+        }
+    } catch (err) {
+        console.error("Batch delete error:", err);
+        showToast("批量删除过程中出错", "#e74c3c");
+    } finally {
+        hideLoader();
+    }
 };
 
 const showBatchMoveDialog = () => {
@@ -927,10 +948,11 @@ const renderNav = () => {
     // 渲染动态搜索框位置
     const searchSection = document.getElementById('search-section');
     const searchPos = (appData.settings && appData.settings.searchPosition) || 'top';
-    const isZenMode = appData.settings && appData.settings.zenMode;
+    const isZenModeSetting = appData.settings && appData.settings.zenMode;
+    const isActuallyZen = isZenModeSetting && !isZenTempExpanded;
 
     // 处理 Zen Mode 初始状态
-    if (isZenMode && !isZenTempExpanded) {
+    if (isActuallyZen) {
         document.body.classList.add('zen-active');
         document.getElementById('zen-expand-btn').style.display = 'flex';
     } else {
@@ -939,7 +961,12 @@ const renderNav = () => {
     }
 
     if (searchSection) {
-        if (searchPos === 'belowFirst') {
+        // 关键修复：极简模式下（未展开时），无论设置如何，强制置顶（即放在 grid-container 外部）
+        // 否则如果 searchPos 是 belowFirst，搜索框会被塞进透明隐藏的 grid-container 里导致看不见
+        if (isActuallyZen) {
+            const mainContent = document.getElementById('main-content');
+            if (mainContent) mainContent.insertBefore(searchSection, container);
+        } else if (searchPos === 'belowFirst') {
             const firstSec = container.querySelector('.category-section');
             if (firstSec) {
                 firstSec.parentNode.insertBefore(searchSection, firstSec.nextSibling);
@@ -1550,14 +1577,8 @@ const confirmEdit = () => {
                 appData.items[idx] = { ...appData.items[idx], url, title, desc, icon, bgColor, catId };
             }
         } else {
-            const catLetter = catId.charAt(0).toUpperCase();
-            const siblingItems = appData.items.filter(i => i.catId === catId);
-            let nextNum = 1;
-            if (siblingItems.length > 0) {
-                const ids = siblingItems.map(i => parseInt(i.id.slice(1)) || 0);
-                nextNum = Math.max(...ids) + 1;
-            }
-            const newId = `${catLetter}${String(nextNum).padStart(3, '0')}`;
+            // 使用更可靠的全局唯一 ID，避免分类 ID 首字母相同导致的冲突
+            const newId = 'i' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
             appData.items.push({ id: newId, url, title, desc, icon, bgColor, catId, hidden: false });
         }
     }
@@ -1574,13 +1595,48 @@ const toggleHide = (type, id) => {
     if (type === 'categories') manageCats();
 };
 
-const deleteObj = (type, id) => {
-    if (confirm('确定删除？')) {
-        const idx = appData[type].findIndex(o => o.id === id);
-        if (idx > -1) appData[type].splice(idx, 1);
-        renderNav();
-        if (type === 'categories') manageCats();
-        saveAll(false);
+const deleteObj = async (type, id) => {
+    if (!isAdmin) {
+        showToast("管理权限未开启，无法删除", "#e67e22");
+        return;
+    }
+    if (!id) {
+        console.error("Delete failed: No ID provided");
+        return;
+    }
+    const confirmMsg = type === 'categories' ? '确定删除该分类及其下的所有网址吗？' : '确定删除该网址吗？';
+    
+    if (confirm(confirmMsg)) {
+        showLoader('正在处理删除请求...');
+        try {
+            console.log(`Deleting ${type} with ID: ${id}`);
+            const targetId = String(id);
+
+            if (type === 'categories') {
+                appData.categories = appData.categories.filter(c => String(c.id) !== targetId);
+                appData.items = appData.items.filter(i => String(i.catId) !== targetId);
+            } else {
+                appData.items = appData.items.filter(i => String(i.id) !== targetId);
+            }
+
+            // 同步前先刷新 UI 给用户即时反馈
+            renderNav();
+            if (type === 'categories') manageCats();
+            
+            // 发起持久化保存
+            const success = await saveAll(false);
+            
+            if (success) {
+                showToast("删除并同步成功");
+            } else {
+                showToast("本地已移除，但云端保存失败", "#e67e22");
+            }
+        } catch (err) {
+            console.error("Delete error:", err);
+            showToast("删除操作中途出错", "#e74c3c");
+        } finally {
+            hideLoader();
+        }
     }
 };
 
@@ -1589,9 +1645,10 @@ const doLogin = async () => {
     showLoader('正在验证管理员身份...');
     try {
         const rawPwd = document.getElementById('auth-input').value.trim();
-        if (!rawPwd) {
+        // 如果环境变量 TOKEN 为空，理论上空密码是对的，这里不强制拦截，只做简单提示
+        if (!rawPwd && !confirm("您正在尝试使用空密码登录，如果未设置 TOKEN 变量这是正确的。确认继续？")) {
             hideLoader();
-            return showToast("请输入密码", "#e67e22");
+            return;
         }
 
         sysToken = await hashPassword(rawPwd);
@@ -1635,6 +1692,10 @@ const doLogout = async () => {
 
 // ==================== 数据操作 ====================
 const saveAll = async (silent = false) => {
+    if (isAdmin === false) {
+        if (!silent) showToast("未进入管理状态", "#e67e22");
+        return false;
+    }
     if (!silent) showLoader('正在同步配置中...');
 
     const dataToSave = { ...appData };
@@ -1649,10 +1710,19 @@ const saveAll = async (silent = false) => {
             body: JSON.stringify(dataToSave)
         });
         if (!silent) hideLoader();
-        if (res.ok && !silent) { showToast("保存成功！"); }
-        else if (!res.ok && !silent) { showToast("保存失败，权限不足", "#e74c3c"); }
+        if (res.ok) {
+            if (!silent) showToast("保存成功！");
+            return true;
+        } else {
+            if (!silent) showToast("保存失败，权限不足", "#e74c3c");
+            return false;
+        }
     } catch (error) {
-        if (!silent) { hideLoader(); showToast("网络错误，配置仅保存在本地", "#e67e22"); }
+        if (!silent) { 
+            hideLoader(); 
+            showToast("网络错误，配置仅保存在本地", "#e67e22"); 
+        }
+        return false;
     }
 };
 

@@ -14,7 +14,7 @@ const PORT = 3000;
 app.use(express.json({ limit: '10mb' }));
 
 // ====== SHA-256 哈希辅助函数用于校验管理员令牌 ======
-const TOKEN_ENV = process.env.TOKEN || "";
+const TOKEN_ENV = (process.env.TOKEN || "").trim();
 let expectedToken = TOKEN_ENV;
 if (expectedToken.length !== 64) {
     expectedToken = crypto.createHash('sha256').update(TOKEN_ENV).digest('hex');

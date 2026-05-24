@@ -49,7 +49,7 @@ export async function onRequest(context) {
     // ==========================================
     // 核心安全优化：动态识别明文与哈希
     // ==========================================
-    let expectedToken = env.TOKEN || "";
+    let expectedToken = (env.TOKEN || "").trim();
     // SHA-256 哈希值的固定长度是 64。
     // 如果长度不是 64，说明你在 Cloudflare 后台填的是“明文密码”。
     // 我们就在后端内部安全地将其转为哈希值，用来与前端发来的哈希值比对。

@@ -1791,22 +1791,27 @@ body.zen-active .category-section-title,
 body.zen-active .footer-info {
     opacity: 0;
     pointer-events: none;
-    transform: translateY(20px);
+    transform: translateY(30px);
 }
 
 body.zen-active .main-content {
     margin-left: 0 !important;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
     min-height: 100vh;
-    padding-top: 0;
 }
 
 body.zen-active .search-section {
-    margin: 0 auto !important;
-    width: 100%;
-    transform: translateY(-20px);
+    position: fixed;
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 720px;
+    margin: 0 !important;
+    z-index: 1000;
+}
+
+body:not(.zen-active) .search-section {
+    transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 .zen-expand-btn {
