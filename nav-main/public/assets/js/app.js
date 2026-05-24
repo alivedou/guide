@@ -1833,28 +1833,38 @@ const initSearch = () => {
     if (engineTrigger) {
         engineTrigger.addEventListener('click', (e) => {
             e.stopPropagation();
-            engineList.classList.toggle('show');
+            // 先尝试移除所有之前的状态，再切换
+            const isShown = engineList.classList.contains('show');
+            document.querySelectorAll('.engine-list').forEach(el => el.classList.remove('show'));
+            if (!isShown) {
+                engineList.classList.add('show');
+            }
         });
     }
 
     engineItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.stopPropagation();
-            currentEngine = item.getAttribute('data-engine');
-            currentEnginePrefix = item.getAttribute('data-action');
+            const engineId = item.getAttribute('data-engine');
+            const actionUrl = item.getAttribute('data-action');
             
-            // 持久化选择
-            localStorage.setItem('nav_search_engine', currentEngine);
-            localStorage.setItem('nav_search_prefix', currentEnginePrefix);
-            
-            updateEngineTriggerUI(currentEngine);
-            engineList.classList.remove('show');
-            seaInput.focus();
-
-            // 如果输入框有内容，切换引擎顺便触发搜索
-            const query = seaInput.value.trim();
-            if (query) {
-                window.open(currentEnginePrefix + encodeURIComponent(query), '_blank');
+            if (engineId && actionUrl) {
+                currentEngine = engineId;
+                currentEnginePrefix = actionUrl;
+                
+                // 持久化选择
+                localStorage.setItem('nav_search_engine', currentEngine);
+                localStorage.setItem('nav_search_prefix', currentEnginePrefix);
+                
+                updateEngineTriggerUI(currentEngine);
+                engineList.classList.remove('show');
+                seaInput.focus();
+    
+                // 如果输入框有内容，切换引擎顺便触发搜索
+                const query = seaInput.value.trim();
+                if (query) {
+                    window.open(currentEnginePrefix + encodeURIComponent(query), '_blank');
+                }
             }
         });
     });
