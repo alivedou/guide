@@ -1803,24 +1803,55 @@ const initSearch = () => {
     const seaDropdown = document.getElementById('sea-dropdown');
     const resultsHeader = document.getElementById('local-results-header');
     const resultsList = document.getElementById('local-results-list');
-    const engineTabs = document.querySelectorAll('.engine-tab');
+    
+    // 新增：搜素引擎选择器相关
+    const engineTrigger = document.getElementById('current-engine-trigger');
+    const engineList = document.getElementById('engine-list');
+    const engineItems = document.querySelectorAll('.engine-item');
 
     if (!seaInput) return;
 
-    let currentEngine = 'bing';
-    let currentEnginePrefix = 'https://cn.bing.com/search?q=';
+    let currentEngine = localStorage.getItem('nav_search_engine') || 'bing';
+    let currentEnginePrefix = localStorage.getItem('nav_search_prefix') || 'https://cn.bing.com/search?q=';
 
-    // 1. 网页搜索引擎切换逻辑
-    engineTabs.forEach(tab => {
-        tab.addEventListener('click', (e) => {
+    // 更新触发器 UI 的函数
+    const updateEngineTriggerUI = (engineId) => {
+        const item = Array.from(engineItems).find(i => i.getAttribute('data-engine') === engineId);
+        if (item && engineTrigger) {
+            const logo = item.querySelector('.engine-logo').innerHTML;
+            engineTrigger.innerHTML = logo;
+            
+            // 同时更新所有 item 的激活状态
+            engineItems.forEach(i => i.classList.toggle('active', i === item));
+        }
+    };
+
+    // 初始化 UI
+    updateEngineTriggerUI(currentEngine);
+
+    // 1. 搜索引擎切换逻辑
+    if (engineTrigger) {
+        engineTrigger.addEventListener('click', (e) => {
             e.stopPropagation();
-            engineTabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            currentEngine = tab.getAttribute('data-engine');
-            currentEnginePrefix = tab.getAttribute('data-action');
+            engineList.classList.toggle('show');
+        });
+    }
+
+    engineItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            currentEngine = item.getAttribute('data-engine');
+            currentEnginePrefix = item.getAttribute('data-action');
+            
+            // 持久化选择
+            localStorage.setItem('nav_search_engine', currentEngine);
+            localStorage.setItem('nav_search_prefix', currentEnginePrefix);
+            
+            updateEngineTriggerUI(currentEngine);
+            engineList.classList.remove('show');
             seaInput.focus();
 
-            // 如果输入框有内容，点击切换引擎，也支持直接触发该引擎搜索
+            // 如果输入框有内容，切换引擎顺便触发搜索
             const query = seaInput.value.trim();
             if (query) {
                 window.open(currentEnginePrefix + encodeURIComponent(query), '_blank');
@@ -1973,10 +2004,19 @@ const initSearch = () => {
     // 点击页面其他区域自动关闭
     document.addEventListener('click', (e) => {
         const wrapper = document.getElementById('search-wrapper');
+        const selector = document.getElementById('search-engine-selector');
         if (wrapper && !wrapper.contains(e.target)) {
             seaDropdown.style.display = 'none';
         }
+        if (selector && !selector.contains(e.target)) {
+            engineList.classList.remove('show');
+        }
     });
+
+    // 自动聚焦搜索框
+    setTimeout(() => {
+        if (seaInput) seaInput.focus();
+    }, 200);
 };
 
 // ==================== 事件绑定 ====================

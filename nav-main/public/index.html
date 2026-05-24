@@ -92,23 +92,26 @@
                 <div class="search-section" id="search-section">
                     <div class="search-wrapper" id="search-wrapper">
                         <div class="search-input-group">
-                            <i class="ri-search-2-line search-icon"></i>
-                            <input type="text" id="sea-input" placeholder="输入关键词搜索本站，回车使用 Bing 搜索..." autocomplete="off">
+                            <div class="search-engine-selector" id="search-engine-selector">
+                                <div class="current-engine" id="current-engine-trigger">
+                                    <i class="ri-search-2-line"></i>
+                                </div>
+                                <div class="engine-list" id="engine-list">
+                                    <div class="engine-item active" data-engine="bing" data-action="https://cn.bing.com/search?q=">
+                                        <span class="engine-logo">🔍</span> 必应
+                                    </div>
+                                    <div class="engine-item" data-engine="google" data-action="https://www.google.com/search?q=">
+                                        <span class="engine-logo">🌐</span> 谷歌
+                                    </div>
+                                    <div class="engine-item" data-engine="baidu" data-action="https://www.baidu.com/s?wd=">
+                                        <span class="engine-logo">🇨🇳</span> 百度
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="text" id="sea-input" placeholder="输入关键词搜索本站，回车进行云端跳转..." autocomplete="off">
                             <button id="sea-clear-btn" class="sea-clear-btn" title="清空"><i class="ri-close-line"></i></button>
                         </div>
                         <div class="search-dropdown" id="sea-dropdown" style="display: none;">
-                            <!-- 网页搜索引擎快捷菜单 -->
-                            <div class="engine-tabs">
-                                <div class="engine-tab active" data-engine="bing" data-action="https://cn.bing.com/search?q=">
-                                    <span class="engine-logo">🔍</span>必应 Bing
-                                </div>
-                                <div class="engine-tab" data-engine="google" data-action="https://www.google.com/search?q=">
-                                    <span class="engine-logo">🌐</span>谷歌 Google
-                                </div>
-                                <div class="engine-tab" data-engine="baidu" data-action="https://www.baidu.com/s?wd=">
-                                    <span class="engine-logo">🇨🇳</span>百度 Baidu
-                                </div>
-                            </div>
                             <!-- 站内搜索匹配项或全部分类菜单列表 -->
                             <div class="local-results-container">
                                 <div class="local-results-header" id="local-results-header"><i class="ri-global-line"></i> 直达本站内容</div>
