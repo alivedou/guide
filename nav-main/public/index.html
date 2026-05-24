@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人网站导航</title>
+    
+    <!-- DNS 预解析与预连接（优化图标加载速度） -->
+    <link rel="dns-prefetch" href="https://favicon.im">
+    <link rel="preconnect" href="https://favicon.im" crossorigin>
+    <link rel="dns-prefetch" href="https://icons.duckduckgo.com">
+    <link rel="preconnect" href="https://icons.duckduckgo.com" crossorigin>
+    
+    <!-- 预加载外部资源 -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" as="style">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    
+    <!-- PWA 配置 -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#111111">
+    <link rel="apple-touch-icon" href="https://icons.duckduckgo.com/ip3/github.com.ico">
+    
+    <!-- 拖拽排序库 -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
+    
+    <!-- Monaco Editor -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js" defer></script>
+    
+    <!-- 样式文件 -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+    <!-- Toast 提示 -->
+    <div id="toast">操作成功</div>
+    
+    <!-- 全局加载遮罩 -->
+    <div id="global-loading-overlay" class="modal" style="z-index: 9999;">
+        <div class="global-spinner"></div>
+        <div id="global-loading-text" style="color: #fff; font-size: 15px; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">正在处理中...</div>
+    </div>
+
+    <!-- 移动端汉堡菜单按钮 -->
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="打开导航菜单">
+        <i class="ri-menu-line"></i>
+    </button>
+    <!-- 移动端遮罩 -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <div class="app-layout">
+        <!-- 左侧导航栏 -->
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-logo">🌐</span>
+                <span class="sidebar-title">个人导航</span>
+            </div>
+            <nav id="sidebar-nav" class="sidebar-nav"></nav>
+            <div id="sidebar-footer" class="sidebar-footer">
+                <div class="sidebar-style-switcher">
+                    <button class="sidebar-style-btn active" data-style="0" title="经典图标样式">
+                        <i class="ri-grid-fill"></i><span>默认</span>
+                    </button>
+                    <button class="sidebar-style-btn" data-style="2" title="缤纷模式">
+                        <i class="ri-palette-fill"></i><span>缤纷</span>
+                    </button>
+                </div>
+                <div id="sidebar-admin-actions" class="sidebar-admin-section"></div>
+            </div>
+        </aside>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 骨架屏（加载占位） -->
+            <div id="skeleton-screen">
+                <div class="skel-tabs">
+                    <div class="skel-tab skel-anim"></div>
+                    <div class="skel-tab skel-anim"></div>
+                    <div class="skel-tab skel-anim"></div>
+                </div>
+                <div class="skel-grid">
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                </div>
+            </div>
+
+            <!-- 导航内容 -->
+            <div id="main-content" style="display: none;">
+                <!-- 高自定义立体搜索框区域 -->
+                <div class="search-section" id="search-section">
+                    <div class="search-wrapper" id="search-wrapper">
+                        <div class="search-input-group">
+                            <i class="ri-search-2-line search-icon"></i>
+                            <input type="text" id="sea-input" placeholder="输入关键词搜索本站，回车使用 Bing 搜索..." autocomplete="off">
+                            <button id="sea-clear-btn" class="sea-clear-btn" title="清空"><i class="ri-close-line"></i></button>
+                        </div>
+                        <div class="search-dropdown" id="sea-dropdown" style="display: none;">
+                            <!-- 网页搜索引擎快捷菜单 -->
+                            <div class="engine-tabs">
+                                <div class="engine-tab active" data-engine="bing" data-action="https://cn.bing.com/search?q=">
+                                    <span class="engine-logo">🔍</span>必应 Bing
+                                </div>
+                                <div class="engine-tab" data-engine="google" data-action="https://www.google.com/search?q=">
+                                    <span class="engine-logo">🌐</span>谷歌 Google
+                                </div>
+                                <div class="engine-tab" data-engine="baidu" data-action="https://www.baidu.com/s?wd=">
+                                    <span class="engine-logo">🇨🇳</span>百度 Baidu
+                                </div>
+                            </div>
+                            <!-- 站内搜索匹配项或全部分类菜单列表 -->
+                            <div class="local-results-container">
+                                <div class="local-results-header" id="local-results-header"><i class="ri-global-line"></i> 直达本站内容</div>
+                                <div id="local-results-list" class="local-results-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="grid-container" class="grid-container"></div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- 页脚缓存信息 -->
+    <div id="footer-cache" class="footer-info"></div>
+    
+    <!-- 隐藏的文件输入框（用于导入配置） -->
+    <input type="file" id="import-file" accept=".json" style="display:none">
+
+    <!-- 登录验证弹窗 -->
+    <div id="auth-overlay" class="modal">
+        <div class="modal-content" style="text-align:center">
+            <button id="btn-close-auth" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#777; cursor:pointer; font-size:24px">×</button>
+            <h3>管理验证</h3>
+            <input type="password" id="auth-input" placeholder="请输入Token" autocomplete="new-password" style="text-align:center; margin: 20px 0">
+            <button id="btn-login" class="tab-btn active" style="width:100%">进入后台</button>
+        </div>
+    </div>
+
+    <!-- 编辑弹窗 -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <button id="btn-close-edit" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#777; cursor:pointer; font-size:24px">×</button>
+            <h4 id="edit-title" style="margin-bottom:20px; font-size:16px">编辑详情</h4>
+            <div id="edit-form-body"></div>
+            <button id="btn-confirm-edit" class="tab-btn active" style="width:100%; margin-top:10px">确认保存修改</button>
+        </div>
+    </div>
+
+    <!-- 视频播放弹窗 -->
+    <div id="video-modal" class="modal">
+        <div class="video-modal-content">
+            <button id="btn-close-video" class="video-close-btn"><i class="ri-close-line"></i></button>
+            <div class="video-player-wrapper">
+                <iframe id="video-iframe" src="" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" frameborder="0"></iframe>
+            </div>
+            <div class="video-info">
+                <h3 id="video-title"></h3>
+                <p id="video-desc"></p>
+                <a id="video-link" href="#" target="_blank" class="video-ext-link">
+                    <i class="ri-external-link-line"></i> 在原平台打开
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monaco Editor 弹窗 -->
+    <div id="monaco-modal" class="modal">
+        <div class="monaco-modal-content">
+            <div class="monaco-header">
+                <h4><i class="ri-code-s-slash-line"></i> JSON 数据编辑器</h4>
+                <div class="monaco-actions">
+                    <button id="btn-monaco-format" class="monaco-action-btn" title="格式化"><i class="ri-align-left"></i> 格式化</button>
+                    <button id="btn-monaco-save" class="monaco-action-btn primary" title="保存"><i class="ri-save-line"></i> 保存</button>
+                    <button id="btn-close-monaco" class="monaco-action-btn close" title="关闭"><i class="ri-close-line"></i></button>
+                </div>
+            </div>
+            <div id="monaco-container" class="monaco-container"></div>
+        </div>
+    </div>
+
+    <!-- JavaScript 文件 -->
+    <script src="/assets/js/utils.js"></script>
+    <script src="/assets/js/app.js"></script>
+</body>
+</html>

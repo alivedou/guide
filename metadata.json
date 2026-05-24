@@ -1,0 +1,6 @@
+{
+  "name": "Customizable Navigation Website",
+  "description": "高度自定义的、支持实时检索、多搜索引擎切换及 Cloudflare KV 云端同步的高颜值导航网站。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
