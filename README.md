@@ -15,7 +15,6 @@
 **项目地址** [项目地址](https://github.com/alivedou/nav/tree/dev)
 
 ---
-git
 ## 🎨 核心亮点与能力
 
 *   **极简主义视觉设计**：支持卡片宽度实时无极微调、两种视觉主线风格（经典毛玻璃/高颜值缤纷模式）、毛玻璃/卡片背景开关以及自定义高分辨率背景（内置必应每日壁纸缓存自适应获取）。
@@ -26,7 +25,17 @@ git
 
 ## ☁️ 部署至 Cloudflare Pages 详细步骤
 
-Cloudflare Pages 免费额度充足，是极速上线个人导航页面的不二选择。请按照以下步骤，三分钟完成部署：
+部署本项目需要两个免费的账号：`github`账号和`Cloudflare`账号。
+| 平台 | 注册地址 | 登录地址 |
+| :--- | :--- | :--- |
+| **Cloudflare** | [https://dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up) | [https://dash.cloudflare.com/login](https://dash.cloudflare.com/login) |
+| **GitHub** | [https://github.com/signup](https://github.com/signup) | [https://github.com/login](https://github.com/login) |
+
+注册好后，需要先fork到你自己的仓库（`推荐项`），或者选择项目zip包上传到你的仓库。
+**项目地址** [项目地址](https://github.com/alivedou/nav/tree/dev)
+然后就是在Cloudflare 进行部署操作。 [https://dash.cloudflare.com/login](https://dash.cloudflare.com/login) 
+
+请按照以下步骤，三分钟完成部署：
 
 ### 第一步：创建 Cloudflare Workers KV 空间
 1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)。
@@ -35,10 +44,9 @@ Cloudflare Pages 免费额度充足，是极速上线个人导航页面的不二
 4. 将命名空间命名为 **`nav`**或者其他你好记的名字，并点击保存。
 
 ### 第二步：部署 Cloudflare Pages 项目
-你可以通过 **连接 GitHub 仓库自动部署**（推荐，后续有更新只需要 push 即可自动打包）或 **直接手动上传文件夹**。
 
-#### 选项 A：使用 GitHub 自动部署（强烈推荐 👍）
-1. 将本项目的所有文件推送到您的私有或公开 GitHub 仓库。
+#### 使用 GitHub 自动部署
+1. 需要将本项目的所有文件fork到您的私有或公开 GitHub 仓库。
 2. 在 Cloudflare 控制台左侧点击 **Workers 和 Pages** -> **创建项目 (Create Application)** -> 切换到 **Pages (页面)** 标签页。
 3. 点击 **“连接到 Git” (Connect to Git)** 并授权指定您的导航项目仓库。
 4. 进入构建设置 (Build settings)，进行如下填写（**非常重要，需完美定位目录**）：
