@@ -214,14 +214,20 @@ const initSidebar = () => {
         overlay.classList.remove('visible');
     });
 
-    // 点击侧边栏导航项后关闭（移动端）
-    document.getElementById('sidebar-nav').addEventListener('click', (e) => {
-        const item = e.target.closest('.sidebar-nav-item');
-        if (item && window.innerWidth <= 768) {
-            sidebar.classList.remove('open');
-            overlay.classList.remove('visible');
+    // 点击侧边栏内任何操作项后关闭（针对移动端/平板）
+    sidebar.addEventListener('click', (e) => {
+        const item = e.target.closest('.sidebar-nav-item, .sidebar-style-btn');
+        if (item && window.innerWidth <= 1024) { 
+            closeSidebar();
         }
     });
+};
+
+const closeSidebar = () => {
+    const overlay = document.getElementById('sidebar-overlay');
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('visible');
 };
 
 // ==================== 视频播放弹窗 ====================
@@ -572,26 +578,69 @@ const renderTools = () => {
 };
 
 // ==================== 卡片 HTML 生成 ====================
+/**
+ * 处理图标加载失败的降级逻辑
+ * @param {HTMLImageElement} el - 图片对象
+ * @param {string} originalUrl - 网站源码 URL
+ */
+window.handleIconError = (el, originalUrl) => {
+    const src = el.src;
+    
+    // 阶段1: 如果是自定义图标加载失败，尝试获取该网站根目录下的 favicon.ico (最原始的方案)
+    if (!el.dataset.attempt) {
+        try {
+            const urlObj = new URL(originalUrl);
+            const rootFavicon = `${urlObj.origin}/favicon.ico`;
+            if (src !== rootFavicon) {
+                el.dataset.attempt = "1";
+                el.src = rootFavicon;
+                return;
+            }
+        } catch (e) {
+            console.warn("Invalid URL for icon fallback:", originalUrl);
+        }
+    }
+    
+    // 阶段2: 如果 root favicon 也失败，尝试备用国内 API (QQSuu)
+    if (el.dataset.attempt === "1") {
+        try {
+            const domain = new URL(originalUrl).hostname;
+            const backupApi = `https://favicon.qqsuu.cn/${domain}`;
+            if (src !== backupApi) {
+                el.dataset.attempt = "2";
+                el.src = backupApi;
+                return;
+            }
+        } catch (e) { }
+    }
+
+    // 阶段3: 全部失败，最后显示占位 SVG
+    el.onerror = null; // 防止死循环
+    el.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23999"><path d="M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z"/></svg>';
+};
+
 const buildCardInnerHTML = (item, adminHtml, style) => {
-    // 默认图标：如果图片加载失败，使用一个规整的默认占位符或随机 Emoji，但确保它在 icon-wrapper 内居中且不撑开
-    let fallbackAttr = `onerror="this.onerror=null; this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 24 24\\' fill=\\'%23999\\'><path d=\\'M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z\\'/></svg>';"`;
+    const cardSafeUrl = utils.escapeHTML(item.url);
     const safeIcon = utils.escapeHTML(item.icon);
     const isImgIcon = item.icon && item.icon.startsWith('http');
+    
+    // 使用统一的错误处理函数
+    let fallbackAttr = `onerror="handleIconError(this, '${cardSafeUrl}')"`;
+    
     const iconHtml = isImgIcon
         ? `<img src="${safeIcon}" loading="lazy" ${fallbackAttr}>`
         : `<span class="emoji-icon">${safeIcon || '🔗'}</span>`;
 
-    const safeUrl = utils.escapeHTML(item.url);
     const safeTitle = utils.escapeHTML(item.title);
     const targetAttr = (appData.settings && appData.settings.openInNewTab) ? '_blank' : '_self';
 
     if (style === 2) {
-        return `${adminHtml}<a href="${safeUrl}" target="${targetAttr}">
+        return `${adminHtml}<a href="${cardSafeUrl}" target="${targetAttr}">
             <div class="icon-wrapper">${iconHtml}</div>
             <div class="card-text-block"><h3>${safeTitle}</h3></div>
         </a>`;
     } else {
-        return `${adminHtml}<a href="${safeUrl}" target="${targetAttr}"><div class="icon-wrapper">${iconHtml}</div><h3>${safeTitle}</h3></a>`;
+        return `${adminHtml}<a href="${cardSafeUrl}" target="${targetAttr}"><div class="icon-wrapper">${iconHtml}</div><h3>${safeTitle}</h3></a>`;
     }
 };
 
@@ -994,7 +1043,7 @@ const buildVideoCard = (item, videoInfo) => {
 
     const safeTitle = utils.escapeHTML(item.title);
     const safeDesc = utils.escapeHTML(item.desc || '');
-    const safeUrl = utils.escapeHTML(item.url);
+    const videoSafeUrl = utils.escapeHTML(item.url);
 
     // 平台标识
     let badgeHtml = '';
@@ -1119,7 +1168,7 @@ const openItemEdit = (id, catId) => {
         ? appData.items.find(i => i.id === id)
         : { id: 'i' + Date.now(), title: '', url: '', desc: '', icon: '', catId: catId };
 
-    const safeUrl = utils.escapeHTML(item.url);
+    const editSafeUrl = utils.escapeHTML(item.url);
     const safeTitle = utils.escapeHTML(item.title);
     const safeIcon = utils.escapeHTML(item.icon);
     const safeDesc = utils.escapeHTML(item.desc || '');
@@ -1132,7 +1181,7 @@ const openItemEdit = (id, catId) => {
 
     document.getElementById('edit-title').innerText = id ? '编辑网站' : '新增网站';
     document.getElementById('edit-form-body').innerHTML = `
-        <div class="form-row"><label>网站 URL</label><input id="f-url" value="${safeUrl}"></div>
+        <div class="form-row"><label>网站 URL</label><input id="f-url" value="${editSafeUrl}"></div>
         ${isVideoCat || videoInfo ? `<div style="background:rgba(57,157,255,0.1); border:1px solid rgba(57,157,255,0.3); border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:12px; color:rgba(255,255,255,0.8);">
             <i class="ri-film-line"></i> 视频链接已自动识别${videoInfo ? '（' + (videoInfo.type === 'bilibili' ? 'Bilibili' : 'YouTube') + '）' : ''}，点击卡片将直接播放
         </div>` : ''}
@@ -1144,14 +1193,21 @@ const openItemEdit = (id, catId) => {
                 <div id="preview-box" class="preview-container"></div>
             </div>
         </div>
-        <div class="form-row"><label style="font-size:12px; font-weight:normal; color:#999;">Favicon.im</label>
+        <div class="form-row"><label style="font-size:12px; font-weight:normal; color:#999;">原生图标 (Origin)</label>
+            <div style="display:flex; align-items:center; width:100%;">
+                <input type="radio" name="icon_sel" id="opt-fav0" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
+                <input id="txt-fav0" readonly placeholder="站点根目录 favicon.ico" style="flex:1; min-width:0; color:#aaa; font-size:13px; cursor:pointer; background:rgba(0,0,0,0.3);">
+                <div class="preview-container" style="background:rgba(0,0,0,0.3);"><img id="img-fav0" src="" loading="lazy"></div>
+            </div>
+        </div>
+        <div class="form-row"><label style="font-size:12px; font-weight:normal; color:#999;">Iowen API (国内加速)</label>
             <div style="display:flex; align-items:center; width:100%;">
                 <input type="radio" name="icon_sel" id="opt-fav1" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
                 <input id="txt-fav1" readonly placeholder="等待填写 URL 自动解析..." style="flex:1; min-width:0; color:#aaa; font-size:13px; cursor:pointer; background:rgba(0,0,0,0.3);">
                 <div class="preview-container" style="background:rgba(0,0,0,0.3);"><img id="img-fav1" src="" loading="lazy"></div>
             </div>
         </div>
-        <div class="form-row"><label style="font-size:12px; font-weight:normal; color:#999;">DuckDuckGo</label>
+        <div class="form-row"><label style="font-size:12px; font-weight:normal; color:#999;">QQSuu API (国内加速)</label>
             <div style="display:flex; align-items:center; width:100%;">
                 <input type="radio" name="icon_sel" id="opt-fav2" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
                 <input id="txt-fav2" readonly placeholder="等待填写 URL 自动解析..." style="flex:1; min-width:0; color:#aaa; font-size:13px; cursor:pointer; background:rgba(0,0,0,0.3);">
@@ -1203,9 +1259,10 @@ const openItemEdit = (id, catId) => {
     document.getElementById('f-url').addEventListener('input', (e) => debouncedHandleUrlInput(e.target.value));
     document.getElementById('f-icon').addEventListener('input', (e) => updatePreview(e.target.value));
 
-    ['1', '2'].forEach(num => {
+    ['0', '1', '2'].forEach(num => {
         const opt = document.getElementById('opt-fav' + num);
         const txt = document.getElementById('txt-fav' + num);
+        if (!opt || !txt) return;
         opt.addEventListener('change', () => selectIcon(txt.value));
         txt.addEventListener('click', () => { if (txt.value) { opt.checked = true; selectIcon(txt.value); } });
     });
@@ -1331,33 +1388,43 @@ const selectIcon = (url) => {
 const handleUrlInput = (url, autoSelect = true) => {
     if (url && url.startsWith('http')) {
         try {
-            const domain = new URL(url).hostname;
-            const icon1 = "https://favicon.im/" + domain;
-            const icon2 = "https://icons.duckduckgo.com/ip3/" + domain + ".ico";
+            const urlObj = new URL(url);
+            const domain = urlObj.hostname;
+            const origin = urlObj.origin;
+            const icon0 = origin + "/favicon.ico";
+            const icon1 = "https://api.iowen.cn/favicon/" + domain + ".png";
+            const icon2 = "https://favicon.qqsuu.cn/" + domain;
+            
+            document.getElementById('txt-fav0').value = icon0;
+            document.getElementById('img-fav0').src = icon0;
             document.getElementById('txt-fav1').value = icon1;
             document.getElementById('img-fav1').src = icon1;
             document.getElementById('txt-fav2').value = icon2;
             document.getElementById('img-fav2').src = icon2;
+            
             const currentIconVal = document.getElementById('f-icon').value;
             if (autoSelect && !currentIconVal) {
                 document.getElementById('opt-fav1').checked = true;
                 selectIcon(icon1);
+            } else if (currentIconVal === icon0) {
+                document.getElementById('opt-fav0').checked = true;
             } else if (currentIconVal === icon1) {
                 document.getElementById('opt-fav1').checked = true;
             } else if (currentIconVal === icon2) {
                 document.getElementById('opt-fav2').checked = true;
             } else {
-                document.getElementById('opt-fav1').checked = false;
-                document.getElementById('opt-fav2').checked = false;
+                ['0', '1', '2'].forEach(n => document.getElementById('opt-fav' + n).checked = false);
             }
         } catch (e) { }
     } else {
-        document.getElementById('txt-fav1').value = "";
-        document.getElementById('img-fav1').src = "";
-        document.getElementById('opt-fav1').checked = false;
-        document.getElementById('txt-fav2').value = "";
-        document.getElementById('img-fav2').src = "";
-        document.getElementById('opt-fav2').checked = false;
+        ['0', '1', '2'].forEach(n => {
+            const txt = document.getElementById('txt-fav' + n);
+            const img = document.getElementById('img-fav' + n);
+            const opt = document.getElementById('opt-fav' + n);
+            if (txt) txt.value = "";
+            if (img) img.src = "";
+            if (opt) opt.checked = false;
+        });
     }
 };
 
@@ -1390,8 +1457,18 @@ const manageCats = () => {
 
     document.getElementById('edit-form-body').innerHTML = `
         <div class="form-row" style="margin-bottom: 12px;">
-            <label><i class="ri-ruler-2-line"></i> 网格高度</label>
-            <input type="number" id="setting-width" value="${currentWidth}"><span style="color:#666; margin-left:10px;">px</span>
+            <label><i class="ri-ruler-2-line"></i> 网格尺寸</label>
+            <div style="display:flex; flex-direction:column; gap:8px; flex:1;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="number" id="setting-width" value="${currentWidth}" style="flex:1;">
+                    <span style="color:#666;">px</span>
+                </div>
+                <div class="preset-width-btns" style="display:flex; gap:6px;">
+                    <button class="preset-w-btn" data-w="85" style="flex:1; padding:4px; font-size:11px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#ccc; cursor:pointer;">紧凑</button>
+                    <button class="preset-w-btn" data-w="105" style="flex:1; padding:4px; font-size:11px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#ccc; cursor:pointer;">标准</button>
+                    <button class="preset-w-btn" data-w="125" style="flex:1; padding:4px; font-size:11px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#ccc; cursor:pointer;">舒适</button>
+                </div>
+            </div>
         </div>
         <div class="form-row" style="margin-bottom: 15px; background: rgba(57, 157, 255, 0.1); padding: 12px; border-radius: 12px; border: 1px solid rgba(57, 157, 255, 0.2);">
             <label style="color: #399dff;"><i class="ri-focus-3-line"></i> 极简沉浸</label>
@@ -1453,6 +1530,18 @@ const manageCats = () => {
     `;
 
     document.getElementById('setting-width').addEventListener('input', (e) => changeCardWidth(e.target.value));
+    
+    document.querySelectorAll('.preset-w-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const w = btn.getAttribute('data-w');
+            document.getElementById('setting-width').value = w;
+            changeCardWidth(w);
+            // Highlight selected
+            document.querySelectorAll('.preset-w-btn').forEach(b => b.style.background = 'rgba(255,255,255,0.05)');
+            btn.style.background = 'rgba(255,255,255,0.15)';
+        });
+    });
+
     document.getElementById('setting-theme').addEventListener('change', (e) => {
         themeMode = e.target.value;
         localStorage.setItem('nav_theme_mode', themeMode);
@@ -1939,9 +2028,14 @@ const initSearch = () => {
         resultsList.appendChild(grid);
     };
 
+    let currentSearchIndex = -1;
+    let searchResultItems = [];
+
     // 3. 执行本站模糊联想搜索
     const executeLocalSearch = (val) => {
         const query = val.toLowerCase().trim();
+        currentSearchIndex = -1; // 重置选中索引
+
         if (!query) {
             seaClearBtn.style.display = 'none';
             renderCategoryShortcuts();
@@ -1965,15 +2059,18 @@ const initSearch = () => {
         if (matched.length === 0) {
             resultsHeader.innerHTML = `<i class="ri-global-line"></i> 本站搜索`;
             resultsList.innerHTML = `<div class="local-search-empty">未匹配到本站内容，回车直接进行 Bing 检索 🔍</div>`;
+            searchResultItems = [];
             return;
         }
 
         resultsHeader.innerHTML = `<i class="ri-global-line"></i> 匹配本站内容 (${matched.length} 项)`;
         resultsList.innerHTML = '';
+        searchResultItems = [];
 
-        matched.forEach(item => {
+        matched.forEach((item, index) => {
             const itemElement = document.createElement('div');
             itemElement.className = 'local-result-item';
+            itemElement.setAttribute('data-index', index);
 
             const parentCat = appData.categories.find(c => c.id === item.catId);
             const catName = parentCat ? parentCat.name : '未分类';
@@ -1996,26 +2093,37 @@ const initSearch = () => {
                 <div class="local-result-cat">${utils.escapeHTML(catName)}</div>
             `;
 
-            itemElement.addEventListener('click', (e) => {
-                e.stopPropagation();
+            const triggerAction = () => {
                 seaDropdown.style.display = 'none';
                 seaInput.value = '';
                 seaClearBtn.style.display = 'none';
                 seaInput.blur();
 
-                // 遵循跳转新窗设定
                 const target = (appData.settings && appData.settings.openInNewTab) ? '_blank' : '_self';
-                
-                // 处理视频模式与普通直链跳转
                 const videoInfo = detectVideoPlatform(item.url);
                 if (videoInfo) {
                     openVideoModal(item, videoInfo);
                 } else if (item.url) {
                     window.open(item.url, target);
                 }
+            };
+
+            itemElement.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerAction();
             });
 
             resultsList.appendChild(itemElement);
+            searchResultItems.push({ element: itemElement, action: triggerAction });
+        });
+    };
+
+    const updateSearchHighlight = () => {
+        searchResultItems.forEach((item, idx) => {
+            item.element.classList.toggle('active', idx === currentSearchIndex);
+            if (idx === currentSearchIndex) {
+                item.element.scrollIntoView({ block: 'nearest' });
+            }
         });
     };
 
@@ -2038,8 +2146,36 @@ const initSearch = () => {
         seaInput.focus();
     });
 
-    // 键盘回车快捷搜索网页
+    // 键盘回车快捷搜索网页与本站内容导航
     seaInput.addEventListener('keydown', (e) => {
+        if (searchResultItems.length > 0) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                currentSearchIndex = (currentSearchIndex + 1) % searchResultItems.length;
+                updateSearchHighlight();
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                currentSearchIndex = (currentSearchIndex - 1 + searchResultItems.length) % searchResultItems.length;
+                updateSearchHighlight();
+                return;
+            }
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                currentSearchIndex = (currentSearchIndex + 1) % searchResultItems.length;
+                updateSearchHighlight();
+                return;
+            }
+            if (e.key === 'Enter') {
+                if (currentSearchIndex >= 0) {
+                    e.preventDefault();
+                    searchResultItems[currentSearchIndex].action();
+                    return;
+                }
+            }
+        }
+
         if (e.key === 'Enter') {
             const query = seaInput.value.trim();
             if (query) {

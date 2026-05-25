@@ -2265,12 +2265,12 @@ body.light-theme .local-results-header {
     color: inherit;
 }
 
-.local-result-item:hover {
+.local-result-item:hover, .local-result-item.active {
     background: rgba(255, 255, 255, 0.08);
 }
 
-body.light-theme .local-result-item:hover {
-    background: rgba(0, 0, 0, 0.05);
+body.light-theme .local-result-item:hover, body.light-theme .local-result-item.active {
+    background: rgba(0, 0, 0, 0.04);
 }
 
 .local-result-left {
