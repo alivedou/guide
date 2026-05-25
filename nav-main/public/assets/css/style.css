@@ -424,7 +424,20 @@ body::before {
     margin-left: var(--sidebar-width);
     flex: 1;
     min-height: 100vh;
-    padding: 20px 20px 80px;
+    padding: 20px 20px 40px;
+    display: flex;
+    flex-direction: column;
+}
+
+#main-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+#grid-container.grid-container {
+    flex: 1;
+    width: 100%;
 }
 
 .grid-container {
@@ -972,15 +985,22 @@ input[type="radio"] {
 
 /* ==================== 页脚信息 ==================== */
 .footer-info {
-    position: fixed;
-    bottom: 10px;
-    left: 0;
-    right: 0;
+    margin-top: 50px;
+    padding-bottom: 20px;
     text-align: center;
     color: rgba(255, 255, 255, 0.4);
     font-size: 11px;
-    pointer-events: none;
     z-index: 50;
+    transition: opacity 0.3s ease;
+}
+
+body.light-theme .footer-info {
+    color: rgba(0, 0, 0, 0.3);
+}
+
+.copyright-text a:hover {
+    opacity: 1 !important;
+    text-decoration: underline !important;
 }
 
 /* ==================== 拖拽排序相关 ==================== */

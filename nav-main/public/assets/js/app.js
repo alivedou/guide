@@ -485,9 +485,6 @@ const init = async (forceRender = false) => {
             renderTools();
             renderNav();
             applyBackgroundConfig();
-            if (appData.lastUpdated) {
-                document.getElementById('footer-cache').innerText = '最后同步：' + utils.escapeHTML(appData.lastUpdated);
-            }
         } catch (e) {
             toggleSkeleton(true);
         }
@@ -527,10 +524,6 @@ const init = async (forceRender = false) => {
             toggleSkeleton(false);
             renderTools();
             renderNav();
-        }
-
-        if (appData.lastUpdated) {
-            document.getElementById('footer-cache').innerText = '最后同步：' + utils.escapeHTML(appData.lastUpdated);
         }
 
     } catch (e) {
