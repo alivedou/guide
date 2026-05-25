@@ -1,6 +1,6 @@
 {
   "name": "Customizable Navigation Website",
-  "description": "导航网站。",
+  "description": "我的个人导航网站。",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
