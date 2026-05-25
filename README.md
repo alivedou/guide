@@ -32,8 +32,8 @@
 | **GitHub** | [https://github.com/signup](https://github.com/signup) | [https://github.com/login](https://github.com/login) |
 
 注册好后，需要先**fork**到你自己的仓库（`推荐项`），或者选择项目zip包上传到你的仓库。
-**项目地址** [项目地址](https://github.com/alivedou/nav/tree/dev)
-然后就是在Cloudflare 进行部署操作。 [https://dash.cloudflare.com/login](https://dash.cloudflare.com/login) 
+- **项目地址** [项目地址](https://github.com/alivedou/nav/tree/dev)
+- 然后就是在Cloudflare 进行部署操作。 [https://dash.cloudflare.com/login](https://dash.cloudflare.com/login) 
 
 请按照以下步骤，三分钟完成部署：
 
