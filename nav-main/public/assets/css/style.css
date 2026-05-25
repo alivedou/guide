@@ -2013,6 +2013,7 @@ body.zen-active .search-section {
     max-width: 720px;
     margin: 0 !important;
     z-index: 1000;
+    transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 body:not(.zen-active) .search-section {

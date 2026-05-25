@@ -184,18 +184,34 @@ const initZenMode = () => {
     // 滚轮触发展开
     window.addEventListener('wheel', (e) => {
         if (document.body.classList.contains('zen-active') && e.deltaY > 50) {
-            isZenTempExpanded = true;
-            renderNav();
+            expandZen();
         }
     });
 
     // 点击外部区域展开（如果不是点击搜索框）
     document.addEventListener('click', (e) => {
         if (document.body.classList.contains('zen-active') && !e.target.closest('.search-wrapper')) {
-            isZenTempExpanded = true;
-            renderNav();
+            expandZen();
         }
     });
+
+    // 搜索框回车触发展开 (当内容为空时)
+    const seaInput = document.getElementById('sea-input');
+    if (seaInput) {
+        seaInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !seaInput.value.trim() && document.body.classList.contains('zen-active')) {
+                expandZen();
+            }
+        });
+    }
+};
+
+const expandZen = () => {
+    isZenTempExpanded = true;
+    renderNav();
+    // 自动聚焦搜索框，防止重新渲染丢失焦点
+    const seaInput = document.getElementById('sea-input');
+    if (seaInput) seaInput.focus();
 };
 
 // ==================== 侧边栏初始化 ====================
@@ -1067,24 +1083,16 @@ const renderNav = () => {
         document.getElementById('zen-expand-btn').style.display = 'none';
     }
 
-    if (searchSection) {
-        // 关键修复：极简模式下（未展开时），无论设置如何，强制置顶（即放在 grid-container 外部）
-        // 否则如果 searchPos 是 belowFirst，搜索框会被塞进透明隐藏的 grid-container 里导致看不见
-        if (isActuallyZen) {
-            const mainContent = document.getElementById('main-content');
-            if (mainContent) mainContent.insertBefore(searchSection, container);
-        } else if (searchPos === 'belowFirst') {
-            const firstSec = container.querySelector('.category-section');
-            if (firstSec) {
-                firstSec.parentNode.insertBefore(searchSection, firstSec.nextSibling);
-            } else {
-                const mainContent = document.getElementById('main-content');
-                if (mainContent) mainContent.insertBefore(searchSection, container);
-            }
-        } else {
-            // 顶置
-            const mainContent = document.getElementById('main-content');
-            if (mainContent) mainContent.insertBefore(searchSection, container);
+    // 移除动态移动搜索框位置的逻辑，改为纯 CSS 控制，防止 DOM 重插导致的闪烁和焦点丢失
+    if (searchSection && searchPos === 'belowFirst' && !isActuallyZen) {
+        const firstSec = container.querySelector('.category-section');
+        if (firstSec && firstSec.nextSibling !== searchSection) {
+            firstSec.parentNode.insertBefore(searchSection, firstSec.nextSibling);
+        }
+    } else if (searchSection && searchPos !== 'belowFirst' && !isActuallyZen) {
+        const mainContent = document.getElementById('main-content');
+        if (mainContent && mainContent.firstChild !== searchSection) {
+            mainContent.insertBefore(searchSection, container);
         }
     }
 
