@@ -586,37 +586,64 @@ const renderTools = () => {
 window.handleIconError = (el, originalUrl) => {
     const src = el.src;
     
-    // 阶段1: 如果是自定义图标加载失败，尝试获取该网站根目录下的 favicon.ico (最原始的方案)
+    // 基础域名提取
+    let domain = '';
+    let origin = '';
+    try {
+        const urlObj = new URL(originalUrl);
+        domain = urlObj.hostname;
+        origin = urlObj.origin;
+    } catch (e) {
+        return;
+    }
+
+    // 阶段1: 根目录 favicon.ico
     if (!el.dataset.attempt) {
-        try {
-            const urlObj = new URL(originalUrl);
-            const rootFavicon = `${urlObj.origin}/favicon.ico`;
-            if (src !== rootFavicon) {
-                el.dataset.attempt = "1";
-                el.src = rootFavicon;
-                return;
-            }
-        } catch (e) {
-            console.warn("Invalid URL for icon fallback:", originalUrl);
+        const rootFavicon = `${origin}/favicon.ico`;
+        if (src !== rootFavicon) {
+            el.dataset.attempt = "1";
+            el.src = rootFavicon;
+            return;
         }
     }
     
-    // 阶段2: 如果 root favicon 也失败，尝试备用国内 API (QQSuu)
+    // 阶段2: QQSuu API
     if (el.dataset.attempt === "1") {
-        try {
-            const domain = new URL(originalUrl).hostname;
-            const backupApi = `https://favicon.qqsuu.cn/${domain}`;
-            if (src !== backupApi) {
-                el.dataset.attempt = "2";
-                el.src = backupApi;
-                return;
-            }
-        } catch (e) { }
+        const backupApi = `https://favicon.qqsuu.cn/${domain}`;
+        if (src !== backupApi) {
+            el.dataset.attempt = "2";
+            el.src = backupApi;
+            return;
+        }
     }
 
-    // 阶段3: 全部失败，最后显示占位 SVG
+    // 阶段3: Google Favicon API
+    if (el.dataset.attempt === "2") {
+        const googleApi = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+        if (src !== googleApi) {
+            el.dataset.attempt = "3";
+            el.src = googleApi;
+            return;
+        }
+    }
+
+    // 阶段4: DuckDuckGo API
+    if (el.dataset.attempt === "3") {
+        const ddgApi = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+        if (src !== ddgApi) {
+            el.dataset.attempt = "4";
+            el.src = ddgApi;
+            return;
+        }
+    }
+
+    // 阶段5: 全部失败，显示文字占位图 (取域名首字母)
     el.onerror = null; // 防止死循环
-    el.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23999"><path d="M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z"/></svg>';
+    const firstChar = domain.split('.').filter(s => s !== 'www')[0]?.[0] || domain[0] || '🔗';
+    const bgColor = '#399dff';
+    const svg = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="${encodeURIComponent(bgColor)}"/><text x="50" y="65" font-family="Arial" font-size="60" font-weight="bold" fill="white" text-anchor="middle">${encodeURIComponent(firstChar.toUpperCase())}</text></svg>`;
+    el.src = svg;
+    el.style.borderRadius = '8px';
 };
 
 const buildCardInnerHTML = (item, adminHtml, style) => {
@@ -1181,7 +1208,13 @@ const openItemEdit = (id, catId) => {
 
     document.getElementById('edit-title').innerText = id ? '编辑网站' : '新增网站';
     document.getElementById('edit-form-body').innerHTML = `
-        <div class="form-row"><label>网站 URL</label><input id="f-url" value="${editSafeUrl}"></div>
+        <div class="form-row">
+            <label>网站 URL</label>
+            <div style="display:flex; width:100%; gap:8px;">
+                <input id="f-url" value="${editSafeUrl}" placeholder="https://..." style="flex:1;">
+                <button type="button" class="manage-cat-btn" id="btn-icon-magic" title="一键抓取并修复图标" style="border:1px solid var(--primary); color:white; background:var(--primary); padding:0 12px; height:40px; border-radius:10px;"><i class="ri-magic-line"></i></button>
+            </div>
+        </div>
         ${isVideoCat || videoInfo ? `<div style="background:rgba(57,157,255,0.1); border:1px solid rgba(57,157,255,0.3); border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:12px; color:rgba(255,255,255,0.8);">
             <i class="ri-film-line"></i> 视频链接已自动识别${videoInfo ? '（' + (videoInfo.type === 'bilibili' ? 'Bilibili' : 'YouTube') + '）' : ''}，点击卡片将直接播放
         </div>` : ''}
@@ -1193,25 +1226,37 @@ const openItemEdit = (id, catId) => {
                 <div id="preview-box" class="preview-container"></div>
             </div>
         </div>
-        <div class="form-row"><label style="font-size:12px; font-weight:normal; color:#999;">原生图标 (Origin)</label>
-            <div style="display:flex; align-items:center; width:100%;">
-                <input type="radio" name="icon_sel" id="opt-fav0" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
-                <input id="txt-fav0" readonly placeholder="站点根目录 favicon.ico" style="flex:1; min-width:0; color:#aaa; font-size:13px; cursor:pointer; background:rgba(0,0,0,0.3);">
-                <div class="preview-container" style="background:rgba(0,0,0,0.3);"><img id="img-fav0" src="" loading="lazy"></div>
+        <div style="background:rgba(255,255,255,0.03); border-radius:12px; padding:10px; margin-bottom:15px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span style="font-size:12px; color:#aaa;">多源图标备份 (自动抓取)</span>
             </div>
-        </div>
-        <div class="form-row"><label style="font-size:12px; font-weight:normal; color:#999;">Iowen API (国内加速)</label>
-            <div style="display:flex; align-items:center; width:100%;">
-                <input type="radio" name="icon_sel" id="opt-fav1" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
-                <input id="txt-fav1" readonly placeholder="等待填写 URL 自动解析..." style="flex:1; min-width:0; color:#aaa; font-size:13px; cursor:pointer; background:rgba(0,0,0,0.3);">
-                <div class="preview-container" style="background:rgba(0,0,0,0.3);"><img id="img-fav1" src="" loading="lazy"></div>
+            <div class="form-row" style="margin-bottom:8px;"><label style="font-size:11px; font-weight:normal; color:#999;">原生图标 (Origin)</label>
+                <div style="display:flex; align-items:center; width:100%;">
+                    <input type="radio" name="icon_sel" id="opt-fav0" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
+                    <input id="txt-fav0" readonly placeholder="站点根目录 favicon.ico" style="flex:1; min-width:0; color:#aaa; font-size:11px; cursor:pointer; background:rgba(0,0,0,0.3);">
+                    <div class="preview-container" style="background:rgba(0,0,0,0.3);"><img id="img-fav0" src="" loading="lazy"></div>
+                </div>
             </div>
-        </div>
-        <div class="form-row"><label style="font-size:12px; font-weight:normal; color:#999;">QQSuu API (国内加速)</label>
-            <div style="display:flex; align-items:center; width:100%;">
-                <input type="radio" name="icon_sel" id="opt-fav2" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
-                <input id="txt-fav2" readonly placeholder="等待填写 URL 自动解析..." style="flex:1; min-width:0; color:#aaa; font-size:13px; cursor:pointer; background:rgba(0,0,0,0.3);">
-                <div class="preview-container" style="background:rgba(0,0,0,0.3);"><img id="img-fav2" src="" loading="lazy"></div>
+            <div class="form-row" style="margin-bottom:8px;"><label style="font-size:11px; font-weight:normal; color:#999;">Iowen API (首选加速)</label>
+                <div style="display:flex; align-items:center; width:100%;">
+                    <input type="radio" name="icon_sel" id="opt-fav1" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
+                    <input id="txt-fav1" readonly placeholder="..." style="flex:1; min-width:0; color:#aaa; font-size:11px; cursor:pointer; background:rgba(0,0,0,0.3);">
+                    <div class="preview-container" style="background:rgba(0,0,0,0.3);"><img id="img-fav1" src="" loading="lazy"></div>
+                </div>
+            </div>
+            <div class="form-row" style="margin-bottom:8px;"><label style="font-size:11px; font-weight:normal; color:#999;">DuckDuckGo API</label>
+                <div style="display:flex; align-items:center; width:100%;">
+                    <input type="radio" name="icon_sel" id="opt-fav2" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
+                    <input id="txt-fav2" readonly placeholder="..." style="flex:1; min-width:0; color:#aaa; font-size:11px; cursor:pointer; background:rgba(0,0,0,0.3);">
+                    <div class="preview-container" style="background:rgba(0,0,0,0.3);"><img id="img-fav2" src="" loading="lazy"></div>
+                </div>
+            </div>
+            <div class="form-row" style="margin-bottom:0;"><label style="font-size:11px; font-weight:normal; color:#999;">Google API</label>
+                <div style="display:flex; align-items:center; width:100%;">
+                    <input type="radio" name="icon_sel" id="opt-fav3" style="width:18px; height:18px; flex-shrink:0; margin:0 6px 0 0; cursor:pointer;">
+                    <input id="txt-fav3" readonly placeholder="..." style="flex:1; min-width:0; color:#aaa; font-size:11px; cursor:pointer; background:rgba(0,0,0,0.3);">
+                    <div class="preview-container" style="background:rgba(0,0,0,0.3);"><img id="img-fav3" src="" loading="lazy"></div>
+                </div>
             </div>
         </div>
         <div class="form-row"><label style="font-size:12px; font-weight:normal; color:#999;">图标搜索</label>
@@ -1258,8 +1303,15 @@ const openItemEdit = (id, catId) => {
 
     document.getElementById('f-url').addEventListener('input', (e) => debouncedHandleUrlInput(e.target.value));
     document.getElementById('f-icon').addEventListener('input', (e) => updatePreview(e.target.value));
+    
+    // 一键抓取修复功能
+    document.getElementById('btn-icon-magic').addEventListener('click', () => {
+        const url = document.getElementById('f-url').value.trim();
+        if (!url) { showToast('请先输入网站 URL', '#e67e22'); return; }
+        handleUrlInput(url, true); // 强制执行并自动选优
+    });
 
-    ['0', '1', '2'].forEach(num => {
+    ['0', '1', '2', '3'].forEach(num => {
         const opt = document.getElementById('opt-fav' + num);
         const txt = document.getElementById('txt-fav' + num);
         if (!opt || !txt) return;
@@ -1385,47 +1437,78 @@ const selectIcon = (url) => {
     updatePreview(url);
 };
 
-const handleUrlInput = (url, autoSelect = true) => {
-    if (url && url.startsWith('http')) {
-        try {
-            const urlObj = new URL(url);
-            const domain = urlObj.hostname;
-            const origin = urlObj.origin;
-            const icon0 = origin + "/favicon.ico";
-            const icon1 = "https://api.iowen.cn/favicon/" + domain + ".png";
-            const icon2 = "https://favicon.qqsuu.cn/" + domain;
-            
-            document.getElementById('txt-fav0').value = icon0;
-            document.getElementById('img-fav0').src = icon0;
-            document.getElementById('txt-fav1').value = icon1;
-            document.getElementById('img-fav1').src = icon1;
-            document.getElementById('txt-fav2').value = icon2;
-            document.getElementById('img-fav2').src = icon2;
-            
-            const currentIconVal = document.getElementById('f-icon').value;
-            if (autoSelect && !currentIconVal) {
-                document.getElementById('opt-fav1').checked = true;
-                selectIcon(icon1);
-            } else if (currentIconVal === icon0) {
-                document.getElementById('opt-fav0').checked = true;
-            } else if (currentIconVal === icon1) {
-                document.getElementById('opt-fav1').checked = true;
-            } else if (currentIconVal === icon2) {
-                document.getElementById('opt-fav2').checked = true;
-            } else {
-                ['0', '1', '2'].forEach(n => document.getElementById('opt-fav' + n).checked = false);
-            }
-        } catch (e) { }
-    } else {
-        ['0', '1', '2'].forEach(n => {
+/**
+ * 自动识别 URL 对应的图标备选项
+ * @param {string} url - 网站 URL
+ * @param {boolean} autoSelect - 是否自动选择最可能成功的图标
+ */
+const handleUrlInput = (url, autoSelect = false) => {
+    if (!url || !url.startsWith('http')) {
+        ['0', '1', '2', '3'].forEach(n => {
             const txt = document.getElementById('txt-fav' + n);
             const img = document.getElementById('img-fav' + n);
             const opt = document.getElementById('opt-fav' + n);
             if (txt) txt.value = "";
-            if (img) img.src = "";
-            if (opt) opt.checked = false;
+            if (img) { img.src = ""; img.style.display = 'none'; }
+            if (opt) { opt.checked = false; opt.disabled = true; }
         });
+        return;
     }
+
+    try {
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname;
+        const origin = urlObj.origin;
+        
+        const favs = [
+            `${origin}/favicon.ico`,
+            `https://api.iowen.cn/favicon/${domain}.png`,
+            `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+            `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+        ];
+
+        let firstSuccessIdx = -1;
+
+        favs.forEach((favUrl, i) => {
+            const txt = document.getElementById('txt-fav' + i);
+            const img = document.getElementById('img-fav' + i);
+            const opt = document.getElementById('opt-fav' + i);
+            
+            if (txt && img) {
+                txt.value = favUrl;
+                img.src = favUrl;
+                img.style.display = 'block';
+                
+                img.onerror = () => {
+                    img.style.display = 'none';
+                    if (opt) opt.disabled = true;
+                };
+
+                img.onload = () => {
+                    img.style.display = 'block';
+                    if (opt) opt.disabled = false;
+                    
+                    // 智能选优逻辑：如果开启了自动选择，且当前还没选过，选第一个加载成功的
+                    if (autoSelect) {
+                        const currentIconVal = document.getElementById('f-icon').value;
+                        if (!currentIconVal || currentIconVal === '') {
+                             if (firstSuccessIdx === -1) {
+                                 firstSuccessIdx = i;
+                                 selectIcon(favUrl);
+                                 if (opt) opt.checked = true;
+                                 showToast(`已自动匹配最优图标 (${i===0?'原站':i===1?'Iowen':i===2?'DDG':'Google'})`);
+                             }
+                        }
+                    }
+                };
+            }
+        });
+
+        // 默认预览 (给第一个 Iowen 接口)
+        if (!document.getElementById('f-icon').value) {
+            updatePreview(favs[1]);
+        }
+    } catch (e) { }
 };
 
 const updatePreview = (val) => {
