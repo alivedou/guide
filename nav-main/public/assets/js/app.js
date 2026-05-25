@@ -572,11 +572,15 @@ const renderTools = () => {
 
 // ==================== 卡片 HTML 生成 ====================
 /**
- * 处理图标加载失败的降级逻辑
+ * 处理图标加载失败的降级逻辑 (v2.5 - 中国大陆优化版)
  * @param {HTMLImageElement} el - 图片对象
  * @param {string} originalUrl - 网站源码 URL
  */
 window.handleIconError = (el, originalUrl) => {
+    // 防止死循环及清理旧定时器
+    if (el.dataset.healing === "done") return;
+    if (el.timeout) { clearTimeout(el.timeout); el.timeout = null; }
+    
     const src = el.src;
     
     // 基础域名提取
@@ -587,56 +591,89 @@ window.handleIconError = (el, originalUrl) => {
         domain = urlObj.hostname;
         origin = urlObj.origin;
     } catch (e) {
+        // 如果 URL 解析失败（可能是相对路径或格式错误），尝试简单的正则提取或直接放弃
+        const match = originalUrl.match(/https?:\/\/([^\/]+)/);
+        if (match) {
+            domain = match[1];
+            origin = match[0];
+        } else {
+            gotoPlaceholder(el, '🔗');
+            return;
+        }
+    }
+
+    const nextStep = () => {
+        const attempt = parseInt(el.dataset.attempt || "0");
+        el.dataset.attempt = (attempt + 1).toString();
+        window.handleIconError(el, originalUrl);
+    };
+
+    const attempt = parseInt(el.dataset.attempt || "0");
+
+    // 阶段 1: 尝试原站根目录 favicon.ico
+    if (attempt === 0) {
+        const rootFav = `${origin}/favicon.ico`;
+        el.dataset.attempt = "1";
+        if (src !== rootFav) {
+            el.src = rootFav;
+        } else {
+            nextStep();
+        }
         return;
     }
 
-    // 阶段1: 根目录 favicon.ico
-    if (!el.dataset.attempt) {
-        const rootFavicon = `${origin}/favicon.ico`;
-        if (src !== rootFavicon) {
-            el.dataset.attempt = "1";
-            el.src = rootFavicon;
-            return;
-        }
+    // 阶段 2: Iowen API (国内较稳)
+    if (attempt === 1) {
+        el.dataset.attempt = "2";
+        el.src = `https://api.iowen.cn/favicon/${domain}.png`;
+        return;
     }
+
+    // 阶段 3: QQSuu API (国内极稳)
+    if (attempt === 2) {
+        el.dataset.attempt = "3";
+        el.src = `https://favicon.qqsuu.cn/${domain}`;
+        return;
+    }
+
+    // 阶段 4: Google API (中国大陆需 2.5s 超时跳过)
+    if (attempt === 3) {
+        el.dataset.attempt = "4";
+        el.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+        el.timeout = setTimeout(() => {
+            if (el.dataset.attempt === "4") nextStep();
+        }, 2500);
+        return;
+    }
+
+    // 阶段 5: DuckDuckGo API (中国大陆需 2.5s 超时跳过)
+    if (attempt === 4) {
+        el.dataset.attempt = "5";
+        el.src = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+        el.timeout = setTimeout(() => {
+            if (el.dataset.attempt === "5") nextStep();
+        }, 2200);
+        return;
+    }
+
+    // 终极阶段: 显示文字占位图 (取域名首字母)
+    gotoPlaceholder(el, domain);
+};
+
+/**
+ * 切换到 SVG 占位图
+ */
+const gotoPlaceholder = (el, domainName) => {
+    el.onerror = null;
+    el.dataset.healing = "done";
+    if (el.timeout) clearTimeout(el.timeout);
     
-    // 阶段2: QQSuu API
-    if (el.dataset.attempt === "1") {
-        const backupApi = `https://favicon.qqsuu.cn/${domain}`;
-        if (src !== backupApi) {
-            el.dataset.attempt = "2";
-            el.src = backupApi;
-            return;
-        }
-    }
-
-    // 阶段3: Google Favicon API
-    if (el.dataset.attempt === "2") {
-        const googleApi = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-        if (src !== googleApi) {
-            el.dataset.attempt = "3";
-            el.src = googleApi;
-            return;
-        }
-    }
-
-    // 阶段4: DuckDuckGo API
-    if (el.dataset.attempt === "3") {
-        const ddgApi = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
-        if (src !== ddgApi) {
-            el.dataset.attempt = "4";
-            el.src = ddgApi;
-            return;
-        }
-    }
-
-    // 阶段5: 全部失败，显示文字占位图 (取域名首字母)
-    el.onerror = null; // 防止死循环
-    const firstChar = domain.split('.').filter(s => s !== 'www')[0]?.[0] || domain[0] || '🔗';
+    const firstChar = domainName.split('.').filter(s => s !== 'www')[0]?.[0] || domainName[0] || '🔗';
     const bgColor = '#399dff';
-    const svg = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="${encodeURIComponent(bgColor)}"/><text x="50" y="65" font-family="Arial" font-size="60" font-weight="bold" fill="white" text-anchor="middle">${encodeURIComponent(firstChar.toUpperCase())}</text></svg>`;
+    const svg = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="${encodeURIComponent(bgColor)}"/><text x="50" y="68" font-family="system-ui, -apple-system, sans-serif" font-size="62" font-weight="bold" fill="white" text-anchor="middle">${encodeURIComponent(firstChar.toUpperCase())}</text></svg>`;
     el.src = svg;
-    el.style.borderRadius = '8px';
+    el.style.borderRadius = '20%';
+    el.style.padding = '2px';
 };
 
 const buildCardInnerHTML = (item, adminHtml, style) => {
@@ -1456,6 +1493,7 @@ const handleUrlInput = (url, autoSelect = false) => {
         const favs = [
             `${origin}/favicon.ico`,
             `https://api.iowen.cn/favicon/${domain}.png`,
+            `https://favicon.qqsuu.cn/${domain}`,
             `https://icons.duckduckgo.com/ip3/${domain}.ico`,
             `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
         ];
@@ -1466,7 +1504,8 @@ const handleUrlInput = (url, autoSelect = false) => {
             const txt = document.getElementById('txt-fav' + i);
             const img = document.getElementById('img-fav' + i);
             const opt = document.getElementById('opt-fav' + i);
-            
+            if (i === 4 && !txt) return; // 容错处理
+
             if (txt && img) {
                 txt.value = favUrl;
                 img.src = favUrl;
@@ -1489,7 +1528,8 @@ const handleUrlInput = (url, autoSelect = false) => {
                                  firstSuccessIdx = i;
                                  selectIcon(favUrl);
                                  if (opt) opt.checked = true;
-                                 showToast(`已自动匹配最优图标 (${i===0?'原站':i===1?'Iowen':i===2?'DDG':'Google'})`);
+                                 const labels = ['原站', 'Iowen', 'QQSuu', 'DDG', 'Google'];
+                                 showToast(`已自动匹配最优图标 (${labels[i] || '未知'})`);
                              }
                         }
                     }
