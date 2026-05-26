@@ -169,6 +169,36 @@ document.addEventListener('DOMContentLoaded', () => {
     init();
     initSearch();
     initQuickNav();
+
+    // 方案二：全局快捷键支持 + 初始聚焦
+    // 页面加载完成后默认聚焦到搜索框
+    setTimeout(() => {
+        const seaInput = document.getElementById('sea-input');
+        if (seaInput && !document.body.classList.contains('zen-active')) {
+            seaInput.focus();
+        }
+    }, 300);
+
+    // 全局拦截：当用户在非输入框内输入字符时，自动跳转到搜索框
+    document.addEventListener('keydown', (e) => {
+        const seaInput = document.getElementById('sea-input');
+        if (!seaInput) return;
+        
+        // 忽略组合键
+        if (e.ctrlKey || e.altKey || e.metaKey) return;
+        
+        // 如果当前按键是 ESC 且搜索面板开着，可以关掉下拉（由别的逻辑处理），这里不管
+        if (e.key === 'Escape') return;
+
+        // 获取当前获得焦点的元素
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        const isFocusInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+        
+        // 仅在失去焦点或焦点不在输入框时，且按了打印字符或Backspace，拦截
+        if (!isFocusInput && (e.key.length === 1 || e.key === 'Backspace')) {
+            seaInput.focus();
+        }
+    });
 });
 
 // ==================== 极简沉浸模式 (Zen Mode) 逻辑 ====================
