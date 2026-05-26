@@ -840,11 +840,12 @@ const renderNav = () => {
 
     const clickData = JSON.parse(localStorage.getItem('nav_clicks') || '{}');
     const hasFrequent = Object.keys(clickData).length > 0;
+    const showFreq = (!appData.settings || appData.settings.showFrequent !== false);
 
     let cats = isAdmin ? [...appData.categories] : appData.categories.filter(c => !c.hidden);
 
     // 常去虚拟分类
-    if (hasFrequent) {
+    if (hasFrequent && showFreq) {
         cats.unshift({ id: 'VIRTUAL_FREQ', name: '常去网站', icon: '⭐', hidden: false });
     }
 
@@ -880,8 +881,11 @@ const renderNav = () => {
                 const input = section.querySelector('input');
                 if (input) input.focus();
             }
-            isAutoScrolling = false;
         }, 50);
+
+        setTimeout(() => {
+            isAutoScrolling = false;
+        }, 1000);
 
         if (window.innerWidth <= 1024) {
             const sidebar = document.getElementById('sidebar');
@@ -1176,14 +1180,13 @@ const renderNav = () => {
                 mainContent.insertBefore(navSearchSection, container);
             }
         } else {
-            // 普通模式：固定在第一个分类下方
-            const firstSec = container.querySelector('.category-section');
-            if (firstSec) {
-                if (firstSec.nextSibling !== navSearchSection) {
-                    firstSec.parentNode.insertBefore(navSearchSection, firstSec.nextSibling);
+            // 普通模式：搜索框需要放置在“最顶部”或“常去网站”下方
+            const freqSec = document.getElementById('section-VIRTUAL_FREQ');
+            if (freqSec && freqSec.parentNode === container) {
+                if (freqSec.nextSibling !== navSearchSection) {
+                    freqSec.parentNode.insertBefore(navSearchSection, freqSec.nextSibling);
                 }
             } else {
-                // 如果没有分类，置顶
                 const mainContent = document.getElementById('main-content');
                 if (mainContent && mainContent.firstChild !== navSearchSection) {
                     mainContent.insertBefore(navSearchSection, container);
@@ -1707,6 +1710,13 @@ const manageCats = () => {
             </div>
         </div>
         <div class="form-row" style="margin-bottom: 12px;">
+            <label><i class="ri-star-line"></i> 常去网站</label>
+            <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                <input type="checkbox" id="setting-freq" ${(!appData.settings || appData.settings.showFrequent !== false) ? 'checked' : ''} style="width:18px; height:18px; cursor:pointer;">
+                <span style="font-size:12px; color:#999;">开启后常去网站列表显示在搜索框上方</span>
+            </div>
+        </div>
+        <div class="form-row" style="margin-bottom: 12px;">
             <label><i class="ri-image-line"></i> 自定义背景</label>
             <div style="display:flex; align-items:center; gap:8px; flex:1;">
                 <input type="color" id="setting-bg-color" value="${bgIsColor ? currentBg : '#222222'}" style="width:40px; height:36px; padding:2px; border:none; border-radius:6px; cursor:pointer; background:transparent; flex-shrink:0;">
@@ -1784,6 +1794,13 @@ const manageCats = () => {
         if (!appData.settings) appData.settings = {};
         appData.settings.zenMode = e.target.checked;
         isZenTempExpanded = false; // 切换设置时重置临时状态
+        renderNav();
+        saveAll(true);
+    });
+    
+    document.getElementById('setting-freq').addEventListener('change', (e) => {
+        if (!appData.settings) appData.settings = {};
+        appData.settings.showFrequent = e.target.checked;
         renderNav();
         saveAll(true);
     });
@@ -2124,18 +2141,34 @@ const initQuickNav = () => {
 
     // 回到顶部
     toTopBtn.addEventListener('click', () => {
+        isAutoScrolling = true;
+        activeCatId = 'CAT_SEARCH';
+        document.querySelectorAll('.sidebar-nav-item').forEach(el => {
+            el.classList.toggle('active', el.getAttribute('data-cat-id') === 'CAT_SEARCH');
+        });
         window.scrollTo({
             top: 0,
             behavior: 'smooth'
         });
+        setTimeout(() => isAutoScrolling = false, 1000);
     });
 
     // 直达底部
     toBottomBtn.addEventListener('click', () => {
+        isAutoScrolling = true;
+        const sections = document.querySelectorAll('.category-section');
+        if (sections.length > 0) {
+            const lastCatId = sections[sections.length - 1].id.replace('section-', '');
+            activeCatId = lastCatId;
+            document.querySelectorAll('.sidebar-nav-item').forEach(el => {
+                el.classList.toggle('active', el.getAttribute('data-cat-id') === lastCatId);
+            });
+        }
         window.scrollTo({
             top: document.documentElement.scrollHeight,
             behavior: 'smooth'
         });
+        setTimeout(() => isAutoScrolling = false, 1000);
     });
 };
 
@@ -2234,7 +2267,18 @@ const initSearch = () => {
                 seaInput.blur();
                 const section = document.getElementById('section-' + cat.id);
                 if (section) {
+                    activeCatId = cat.id;
+                    isAutoScrolling = true;
+                    // Update sidebar immediately
+                    document.querySelectorAll('.sidebar-nav-item').forEach(el => {
+                        el.classList.toggle('active', el.getAttribute('data-cat-id') === cat.id);
+                    });
+                    
                     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    
+                    setTimeout(() => {
+                        isAutoScrolling = false;
+                    }, 1000);
                 }
             });
             grid.appendChild(btn);
