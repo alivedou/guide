@@ -360,7 +360,20 @@ body::before {
     background: var(--primary);
     color: white;
     border-color: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 2px 12px rgba(57, 157, 255, 0.35);
+    box-shadow: 0 4px 15px rgba(57, 157, 255, 0.45);
+    font-weight: 600;
+    transform: translateX(4px);
+}
+
+.sidebar-nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 20%;
+    height: 60%;
+    width: 4px;
+    background: white;
+    border-radius: 0 4px 4px 0;
 }
 
 .sidebar-nav-item.hidden-item {
@@ -447,8 +460,8 @@ body::before {
 
 /* ==================== 分类区块（连续滚动） ==================== */
 .category-section {
-    margin-bottom: 16px;
-    scroll-margin-top: 10px;
+    margin-bottom: 24px;
+    scroll-margin-top: 30px;
 }
 
 .category-section-title {
@@ -1784,10 +1797,11 @@ body.view-style-2 .card[data-tooltip]::before {
 /* ==================== 高颜值立体搜索框 ==================== */
 .search-section {
     max-width: 62rem;
-    margin: 0 auto 28px;
+    margin: 45px auto 45px;
     width: 100%;
     position: relative;
     z-index: 900;
+    scroll-margin-top: 50px;
 }
 
 .search-wrapper {

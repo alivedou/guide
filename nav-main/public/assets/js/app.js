@@ -19,6 +19,7 @@ let toastTimer = null;
 let currentViewStyle = parseInt(localStorage.getItem('nav_view_style') || '0');
 let batchSelectMode = false;
 let isZenTempExpanded = false;
+let isAutoScrolling = false; // 新增：防止侧边栏点击滚动与监听器冲突
 let selectedCardIds = new Set();
 let themeMode = localStorage.getItem('nav_theme_mode') || 'auto';
 let simpleMode = localStorage.getItem('nav_simple_mode') === 'true';
@@ -207,11 +208,18 @@ const initZenMode = () => {
 };
 
 const expandZen = () => {
-    isZenTempExpanded = true;
-    renderNav();
+    if (!isZenTempExpanded) {
+        isZenTempExpanded = true;
+        renderNav();
+    }
     // 自动聚焦搜索框，防止重新渲染丢失焦点
-    const seaInput = document.getElementById('sea-input');
-    if (seaInput) seaInput.focus();
+    setTimeout(() => {
+        const seaInput = document.getElementById('sea-input');
+        if (seaInput) {
+            seaInput.focus();
+            // 举一反三：给予一点视觉提示（如发光或晃动）？用户没要求，保持简洁。
+        }
+    }, 100);
 };
 
 // ==================== 侧边栏初始化 ====================
@@ -818,6 +826,15 @@ const showBatchMoveDialog = () => {
 const renderNav = () => {
     const sidebarNav = document.getElementById('sidebar-nav');
     const container = document.getElementById('grid-container');
+    const mainContent = document.getElementById('main-content');
+    const navSearchSection = document.getElementById('search-section');
+    
+    // 保护搜索框：在清空容器前，如果发现搜索框在容器内，立即将其移出至父容器顶级
+    // 这样 container.innerHTML = '' 就不会连累到它
+    if (navSearchSection && mainContent && (navSearchSection.parentNode === container || navSearchSection.parentNode !== mainContent)) {
+        mainContent.insertBefore(navSearchSection, container);
+    }
+
     sidebarNav.innerHTML = '';
     container.innerHTML = '';
 
@@ -834,19 +851,89 @@ const renderNav = () => {
     if (cats.length > 0 && !activeCatId) activeCatId = cats[0].id;
     if (!cats.find(c => c.id === activeCatId) && cats.length > 0) activeCatId = cats[0].id;
 
+    // 插入搜索导航项 (固定在首位)
+    const searchNavItem = document.createElement('div');
+    searchNavItem.className = 'sidebar-nav-item' + (activeCatId === 'CAT_SEARCH' ? ' active' : '');
+    searchNavItem.setAttribute('data-cat-id', 'CAT_SEARCH');
+    searchNavItem.innerHTML = `<span class="nav-icon">🔍</span><span class="nav-label">内置搜索</span>`;
+    searchNavItem.addEventListener('click', (e) => {
+        e.preventDefault();
+        activeCatId = 'CAT_SEARCH';
+        isAutoScrolling = true;
+
+        // 如果在极简模式，先展开
+        if (document.body.classList.contains('zen-active')) {
+            expandZen();
+        }
+
+        // 立即更新侧边栏视觉（不依赖 renderNav 的自动逻辑，防止失焦感）
+        document.querySelectorAll('.sidebar-nav-item').forEach(el => {
+            el.classList.toggle('active', el.getAttribute('data-cat-id') === 'CAT_SEARCH');
+        });
+
+        // 稍微延迟确保 DOM 在 expandZen/renderNav 后稳定
+        setTimeout(() => {
+            const section = document.getElementById('search-section');
+            if (section) {
+                // 确保它不在极简模式的 fixed 定位才滚动
+                section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const input = section.querySelector('input');
+                if (input) input.focus();
+            }
+            isAutoScrolling = false;
+        }, 50);
+
+        if (window.innerWidth <= 1024) {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.classList.remove('visible');
+            const overlay = document.getElementById('sidebar-overlay');
+            if (overlay) overlay.classList.remove('visible');
+        }
+    });
+    sidebarNav.appendChild(searchNavItem);
+
     // 渲染侧边栏导航项
     cats.forEach((cat) => {
         const item = document.createElement('div');
         item.className = 'sidebar-nav-item' + (activeCatId === cat.id ? ' active' : '') + (cat.hidden ? ' hidden-item' : '');
         item.setAttribute('data-cat-id', cat.id);
         item.innerHTML = `<span class="nav-icon">${utils.escapeHTML(cat.icon)}</span><span class="nav-label">${utils.escapeHTML(cat.name)}</span>`;
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (activeCatId === cat.id) return; // 已经在当前分类，不重复执行
+            
             activeCatId = cat.id;
-            renderNav();
-            // 滚动到对应分类区块
+
+            // 1. 开启互斥锁，防止滚动监听器干扰
+            isAutoScrolling = true;
+
+            // 举一反三：如果当前在极简模式且尚未展开，点击菜单应触发展开
+            if (document.body.classList.contains('zen-active')) {
+                expandZen(); 
+            }
+            
+            // 2. 更新视觉高亮
+            document.querySelectorAll('.sidebar-nav-item').forEach(el => {
+                el.classList.toggle('active', el.getAttribute('data-cat-id') === cat.id);
+            });
+
+            // 3. 滚动到对应分类区块
             const section = document.getElementById('section-' + cat.id);
             if (section) {
                 section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            // 4. 滚动结束后释放锁 (平滑滚动通常在 500ms-1000ms 内完成)
+            setTimeout(() => {
+                isAutoScrolling = false;
+            }, 1000);
+
+            // 5. 移动端自闭合
+            if (window.innerWidth <= 1024) {
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar) sidebar.classList.remove('visible');
+                const overlay = document.getElementById('sidebar-overlay');
+                if (overlay) overlay.classList.remove('visible');
             }
         });
         sidebarNav.appendChild(item);
@@ -1068,9 +1155,7 @@ const renderNav = () => {
         container.appendChild(section);
     });
 
-    // 渲染动态搜索框位置
-    const searchSection = document.getElementById('search-section');
-    const searchPos = (appData.settings && appData.settings.searchPosition) || 'top';
+    // 渲染动态搜索框位置 (固定逻辑：极简模式在顶，普通模式在第一个分类下方)
     const isZenModeSetting = appData.settings && appData.settings.zenMode;
     const isActuallyZen = isZenModeSetting && !isZenTempExpanded;
 
@@ -1083,16 +1168,27 @@ const renderNav = () => {
         document.getElementById('zen-expand-btn').style.display = 'none';
     }
 
-    // 移除动态移动搜索框位置的逻辑，改为纯 CSS 控制，防止 DOM 重插导致的闪烁和焦点丢失
-    if (searchSection && searchPos === 'belowFirst' && !isActuallyZen) {
-        const firstSec = container.querySelector('.category-section');
-        if (firstSec && firstSec.nextSibling !== searchSection) {
-            firstSec.parentNode.insertBefore(searchSection, firstSec.nextSibling);
-        }
-    } else if (searchSection && searchPos !== 'belowFirst' && !isActuallyZen) {
-        const mainContent = document.getElementById('main-content');
-        if (mainContent && mainContent.firstChild !== searchSection) {
-            mainContent.insertBefore(searchSection, container);
+    if (navSearchSection) {
+        if (isActuallyZen) {
+            // 极简模式：固定置顶
+            const mainContent = document.getElementById('main-content');
+            if (mainContent && mainContent.firstChild !== navSearchSection) {
+                mainContent.insertBefore(navSearchSection, container);
+            }
+        } else {
+            // 普通模式：固定在第一个分类下方
+            const firstSec = container.querySelector('.category-section');
+            if (firstSec) {
+                if (firstSec.nextSibling !== navSearchSection) {
+                    firstSec.parentNode.insertBefore(navSearchSection, firstSec.nextSibling);
+                }
+            } else {
+                // 如果没有分类，置顶
+                const mainContent = document.getElementById('main-content');
+                if (mainContent && mainContent.firstChild !== navSearchSection) {
+                    mainContent.insertBefore(navSearchSection, container);
+                }
+            }
         }
     }
 
@@ -1194,7 +1290,7 @@ const buildVideoCard = (item, videoInfo) => {
 let scrollSpyInitialized = false;
 const initScrollSpy = () => {
     // 使用 IntersectionObserver 替代 scroll 监听以提升性能
-    const sections = document.querySelectorAll('.category-section');
+    const sections = document.querySelectorAll('.category-section, #search-section');
     if (sections.length === 0) return;
 
     // 清理旧的 observer
@@ -1203,18 +1299,27 @@ const initScrollSpy = () => {
     }
 
     const observer = new IntersectionObserver((entries) => {
+        // 如果正在执行侧边栏引导的自动滚动，忽略监听
+        if (isAutoScrolling) return;
+
         entries.forEach(entry => {
+            // 当元素占据视口上半部分时判定为激活
             if (entry.isIntersecting) {
-                const catId = entry.target.id.replace('section-', '');
+                let catId = '';
+                if (entry.target.id === 'search-section') {
+                    catId = 'CAT_SEARCH';
+                } else {
+                    catId = entry.target.id.replace('section-', '');
+                }
+                
                 activeCatId = catId;
-                // 更新侧边栏高亮
                 document.querySelectorAll('.sidebar-nav-item').forEach(item => {
                     item.classList.toggle('active', item.getAttribute('data-cat-id') === catId);
                 });
             }
         });
     }, {
-        rootMargin: '-20% 0px -60% 0px',
+        rootMargin: '-15% 0px -80% 0px', 
         threshold: 0
     });
 
@@ -1601,13 +1706,6 @@ const manageCats = () => {
                 <span style="font-size:12px; color:rgba(255,255,255,0.7); line-height:1.4;">开启后仅显示搜索框，点击或滚动后展开书签区</span>
             </div>
         </div>
-        <div class="form-row" style="margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 12px;">
-            <label><i class="ri-layout-top-line"></i> 搜索框位置</label>
-            <select id="setting-search-pos" style="flex:1;">
-                <option value="top" ${(appData.settings && appData.settings.searchPosition === 'top') || !(appData.settings && appData.settings.searchPosition) ? 'selected' : ''}>固定在页面顶部</option>
-                <option value="belowFirst" ${appData.settings && appData.settings.searchPosition === 'belowFirst' ? 'selected' : ''}>首个分类下方（居中效果）</option>
-            </select>
-        </div>
         <div class="form-row" style="margin-bottom: 12px;">
             <label><i class="ri-image-line"></i> 自定义背景</label>
             <div style="display:flex; align-items:center; gap:8px; flex:1;">
@@ -1679,12 +1777,6 @@ const manageCats = () => {
     document.getElementById('setting-new-tab').addEventListener('change', (e) => {
         if (!appData.settings) appData.settings = {};
         appData.settings.openInNewTab = e.target.checked;
-        renderNav();
-        saveAll(true);
-    });
-    document.getElementById('setting-search-pos').addEventListener('change', (e) => {
-        if (!appData.settings) appData.settings = {};
-        appData.settings.searchPosition = e.target.value;
         renderNav();
         saveAll(true);
     });
