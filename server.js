@@ -174,10 +174,10 @@ app.get('/api/config', authenticate, (req, res) => {
 
 app.post('/api/config', authenticate, (req, res) => {
     if (req.user.id === 'guest') return res.status(401).end();
-    const { categories, items, settings } = req.body;
+    const { categories, items, settings, clicks_history } = req.body;
     const userId = req.user.id;
 
-    if (categories.length > 20) return res.status(403).json({ error: 'Quota exceeded' });
+    if (categories && categories.length > 20) return res.status(403).json({ error: 'Quota exceeded' });
 
     db.transaction(() => {
         db.prepare('DELETE FROM categories WHERE user_id = ?').run(userId);
@@ -194,7 +194,15 @@ app.post('/api/config', authenticate, (req, res) => {
             );
         }
     })();
-    syncUserToKV(userId);
+    
+    // 关键加固：在同步到 KV 时保留点击历史 (Task 2.5.4)
+    const currentData = syncUserToKV(userId);
+    if (clicks_history) {
+        currentData.clicks_history = clicks_history;
+        const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
+        fs.writeFileSync(kvPath, JSON.stringify(currentData, null, 2));
+    }
+    
     res.json({ success: true });
 });
 

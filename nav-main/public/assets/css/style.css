@@ -2021,6 +2021,23 @@ body.light-theme .quick-nav-btn:hover {
     }
 }
 
+/* ==================== 搜索态隔离 (Task 2.5.2) ==================== */
+body.is-searching .grid-container {
+    opacity: 0.05;
+    filter: blur(8px) grayscale(1);
+    transform: translateY(20px) scale(0.98);
+    pointer-events: none;
+}
+
+body.is-searching .category-section-title {
+    opacity: 0;
+    transform: translateX(-20px);
+}
+
+.grid-container, .category-section-title {
+    transition: all 0.5s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
 /* ==================== 极简沉浸沉浸模式 (Zen Mode) ==================== */
 .sidebar,
 .sidebar-toggle,
