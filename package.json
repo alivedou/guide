@@ -1,0 +1,15 @@
+{
+  "name": "customizable-navigation-website",
+  "version": "1.0.0",
+  "description": "高度自定义的导航网站",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "build": "echo 'Build successfully copy'",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
