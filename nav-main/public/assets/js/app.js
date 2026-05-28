@@ -26,16 +26,91 @@ let currentEnginePrefix = localStorage.getItem('nav_search_prefix') || 'https://
 
 // ==================== 1. 初始化入口 ====================
 document.addEventListener('DOMContentLoaded', () => {
+    initSiteConfig();
     initThemeMode();
     initSidebar();
     initZenMode();
     init();
     initSearch();
     initAuthUI();
+    initAnnouncements();
     initGlobalEvents();
 });
 
 // ==================== 2. 辅助工具 ====================
+// Task 4.1: 全站 SEO 与标题下发
+const initSiteConfig = async () => {
+    try {
+        const res = await fetch('/api/admin/site-config');
+        if (res.ok) {
+            const config = await res.json();
+            document.title = config.siteTitle || "CloudNav 导航";
+            const favicon = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="apple-touch-icon"]');
+            if (favicon && config.faviconUrl) favicon.href = config.faviconUrl;
+            
+            // SEO Meta 注入
+            if (config.seoDescription) {
+                let descMeta = document.querySelector('meta[name="description"]');
+                if (!descMeta) {
+                    descMeta = document.createElement('meta');
+                    descMeta.name = "description";
+                    document.head.appendChild(descMeta);
+                }
+                descMeta.content = config.seoDescription;
+            }
+        }
+    } catch (e) { console.warn('[Config] Failed to load site config'); }
+};
+
+// Task 4.2: 公告系统
+const initAnnouncements = async () => {
+    try {
+        const res = await fetch('/api/announcements');
+        if (!res.ok) return;
+        const { announcements } = await res.json();
+        if (!announcements || announcements.length === 0) return;
+
+        announcements.forEach(notice => {
+            const hasRead = localStorage.getItem(`read_notice_${notice.id}`);
+            if (hasRead) return;
+
+            if (notice.type === 'important') {
+                renderImportantNotice(notice);
+            } else {
+                renderQuietNotice(notice);
+            }
+        });
+    } catch (e) { console.warn('[Notice] Failed to fetch announcements'); }
+};
+
+const renderImportantNotice = (notice) => {
+    const banner = document.createElement('div');
+    banner.className = 'important-banner';
+    banner.innerHTML = `
+        <div class="banner-content">
+            <i class="ri-error-warning-line"></i>
+            <span>${notice.content}</span>
+            <button onclick="this.parentElement.parentElement.remove(); localStorage.setItem('read_notice_${notice.id}', 'true')">不再提示</button>
+        </div>
+    `;
+    document.body.prepend(banner);
+};
+
+const renderQuietNotice = (notice) => {
+    showToast(`新公告: ${notice.title} (点击侧边栏查看)`, "#3498db");
+    const adminArea = document.getElementById('sidebar-admin-actions');
+    if (adminArea && !document.querySelector('.notice-bell')) {
+        const bell = document.createElement('div');
+        bell.className = 'notice-bell';
+        bell.innerHTML = '<i class="ri-notification-3-line"></i><span class="bell-dot"></span>';
+        bell.onclick = () => {
+            alert(`【公告】${notice.title}\n\n${notice.content}`);
+            bell.remove();
+            localStorage.setItem('read_notice_${notice.id}', 'true');
+        };
+        adminArea.prepend(bell);
+    }
+};
 const showToast = (m, c = "#27ae60") => {
     const t = document.getElementById('toast');
     if (!t) return;
@@ -574,6 +649,7 @@ const renderTools = () => {
                     ${roleBadge}
                 </div>
                 <div class="user-actions">
+                    ${isAdmin ? `<button class="icon-btn" onclick="openAdminHub()" title="管理后台"><i class="ri-shield-user-line"></i></button>` : ''}
                     <button class="icon-btn ${isPageManagementMode ? 'active' : ''}" onclick="togglePageManagement()" title="页面管理"><i class="ri-layout-masonry-line"></i></button>
                     <button class="icon-btn" onclick="openEditModal('')" title="添加新书签"><i class="ri-add-circle-line"></i></button>
                     <button class="icon-btn" onclick="showToast('偏好设置即将上线')" title="设置"><i class="ri-settings-3-line"></i></button>
@@ -724,24 +800,35 @@ const togglePageManagement = (force) => {
 
 const initSortable = () => {
     destroySortable(); // 清理旧实例
-    const grids = document.querySelectorAll('.nav-grid');
     
+    // 1. 书签网格排序 (支持跨分类)
+    const grids = document.querySelectorAll('.nav-grid');
     grids.forEach(grid => {
         const catId = grid.closest('.category-section').id.replace('section-', '');
-        if (catId === 'VIRTUAL_FREQ') return; // 常去网站不支持排序
+        if (catId === 'VIRTUAL_FREQ') return;
 
         const sortable = new Sortable(grid, {
-            group: 'shared-bookmarks', // 允许跨分类拖拽
+            group: 'shared-bookmarks',
             animation: 150,
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
-            handle: '.icon-wrapper', // 拖拽手柄
-            onEnd: (evt) => {
-                handleSortEnd(evt);
-            }
+            handle: '.icon-wrapper',
+            onEnd: (evt) => handleSortEnd(evt, 'item')
         });
         sortableInstances.push(sortable);
     });
+
+    // 2. 侧边栏分类排序 (仅管理模式开启)
+    const sidebarNav = document.getElementById('sidebar-nav');
+    if (sidebarNav) {
+        const catSortable = new Sortable(sidebarNav, {
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            handle: '.nav-icon',
+            onEnd: (evt) => handleSortEnd(evt, 'category')
+        });
+        sortableInstances.push(catSortable);
+    }
 };
 
 const destroySortable = () => {
@@ -749,36 +836,47 @@ const destroySortable = () => {
     sortableInstances = [];
 };
 
-const handleSortEnd = (evt) => {
-    const fromCatId = evt.from.closest('.category-section').id.replace('section-', '');
-    const toCatId = evt.to.closest('.category-section').id.replace('section-', '');
-    const itemId = evt.item.getAttribute('data-id');
+const handleSortEnd = (evt, type) => {
+    if (type === 'item') {
+        const fromCatId = evt.from.closest('.category-section').id.replace('section-', '');
+        const toCatId = evt.to.closest('.category-section').id.replace('section-', '');
+        const itemId = evt.item.getAttribute('data-id');
 
-    console.log(`[Sort] Moved ${itemId} from ${fromCatId} to ${toCatId}`);
+        console.log(`[Sort] Moved item ${itemId} from ${fromCatId} to ${toCatId}`);
 
-    // 更新本地内存中的数据状态
-    const item = appData.items.find(i => i.id === itemId);
-    if (item) {
-        item.catId = toCatId;
-        item.cat_id = toCatId;
+        // 更新本地内存状态
+        const item = appData.items.find(i => i.id === itemId);
+        if (item) {
+            item.catId = toCatId;
+            item.cat_id = toCatId;
+        }
+
+        // 重新物理校准所有 items 顺序 (基于当前 DOM 顺序)
+        const newItemsOrder = [];
+        document.querySelectorAll('.nav-grid .card').forEach(card => {
+            const id = card.getAttribute('data-id');
+            const found = appData.items.find(i => i.id === id);
+            if (found) newItemsOrder.push(found);
+        });
+        
+        // 补全不在 DOM 中的 items (如果有)
+        appData.items.forEach(i => {
+            if (!newItemsOrder.find(ni => ni.id === i.id)) newItemsOrder.push(i);
+        });
+        appData.items = newItemsOrder;
+
+    } else if (type === 'category') {
+        console.log('[Sort] Categories reordered');
+        const newCatOrder = [];
+        document.querySelectorAll('.sidebar-nav-item').forEach(nav => {
+            const label = nav.querySelector('.nav-label')?.innerText;
+            const found = appData.categories.find(c => c.name === label);
+            if (found) newCatOrder.push(found);
+        });
+        appData.categories = newCatOrder;
     }
 
-    // 重新校准全量 items 的排序权重 (简单的基于当前 DOM 顺序)
-    const newItemsOrder = [];
-    document.querySelectorAll('.nav-grid .card').forEach(card => {
-        const id = card.getAttribute('data-id');
-        const found = appData.items.find(i => i.id === id);
-        if (found) newItemsOrder.push(found);
-    });
-
-    // 补全那些不在当前 DOM 中的 items (如果有的话)
-    appData.items.forEach(i => {
-        if (!newItemsOrder.find(ni => ni.id === i.id)) newItemsOrder.push(i);
-    });
-
-    appData.items = newItemsOrder;
-
-    // 触发防抖云端同步
+    // 触发防抖同步
     clearTimeout(syncTimer);
     syncTimer = setTimeout(syncConfigToCloud, 2000);
 };
@@ -841,31 +939,157 @@ const doBatchDelete = async () => {
 const openBatchMoveModal = () => {
     if (selectedIds.size === 0) return;
     
-    // 复用编辑弹窗的分类选择逻辑
-    const catOptions = appData.categories.map(c => 
-        `<option value="${c.id}">${c.name}</option>`
-    ).join('');
-
-    const targetCatId = prompt("请输入要移动到的分类 ID (可通过侧边栏查看或输入分类全名):");
-    if (!targetCatId) return;
-
-    // 简单的模糊匹配或精确匹配
-    const targetCat = appData.categories.find(c => c.id === targetCatId || c.name === targetCatId);
-    if (!targetCat) return showToast("找不到目标分类", "#e67e22");
-
-    appData.items.forEach(i => {
-        if (selectedIds.has(i.id)) {
-            i.catId = targetCat.id;
-            i.cat_id = targetCat.id;
-        }
-    });
-
-    selectedIds.clear();
-    showToast(`成功移动至 ${targetCat.name}`);
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
     
-    syncConfigToCloud();
-    renderNav();
-    updateBatchBar();
+    if (!modal || !body) return;
+
+    title.innerText = `批量移动 (${selectedIds.size} 个书签)`;
+    body.innerHTML = `
+        <div class="form-group">
+            <label>选择目标分类</label>
+            <select id="batch-move-cat" class="edit-input">
+                ${appData.categories.filter(c => c.id !== 'VIRTUAL_FREQ').map(c => `
+                    <option value="${c.id}">${c.name}</option>
+                `).join('')}
+            </select>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+    confirmBtn.style.display = 'block';
+    confirmBtn.onclick = () => {
+        const targetCatId = document.getElementById('batch-move-cat').value;
+        const targetCat = appData.categories.find(c => c.id === targetCatId);
+        
+        if (!targetCat) return showToast("无效的目标分类", "#e67e22");
+
+        appData.items.forEach(i => {
+            if (selectedIds.has(i.id)) {
+                i.catId = targetCatId;
+                i.cat_id = targetCatId;
+            }
+        });
+
+        modal.style.display = 'none';
+        selectedIds.clear();
+        showToast(`成功移动至 ${targetCat.name}`);
+        
+        syncConfigToCloud();
+        renderNav();
+        updateBatchBar();
+    };
+};
+
+// ==================== 10. Task 4.1: 管理员后台 (Admin Hub) ====================
+
+const openAdminHub = async () => {
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    
+    if (!modal || !body) return;
+
+    title.innerText = "管理员控制中心 (Admin Hub)";
+    body.innerHTML = '<div class="admin-hub-loading">正在加载全站数据...</div>';
+    modal.style.display = 'flex';
+    confirmBtn.style.display = 'none'; // 后台采用即时操作
+
+    try {
+        const [usersRes, configRes] = await Promise.all([
+            fetch('/api/admin/users', { headers: { 'Authorization': sysToken } }),
+            fetch('/api/admin/site-config')
+        ]);
+        
+        const { users } = await usersRes.json();
+        const config = await configRes.json();
+
+        body.innerHTML = `
+            <div class="admin-hub-tabs">
+                <button class="hub-tab active" onclick="switchHubTab('users')">用户管理</button>
+                <button class="hub-tab" onclick="switchHubTab('config')">全站设置</button>
+            </div>
+            <div id="hub-content-users" class="hub-pane active">
+                <table class="admin-table">
+                    <thead><tr><th>用户名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+                    <tbody>
+                        ${users.map(u => `
+                            <tr>
+                                <td>${u.username}</td>
+                                <td><span class="role-badge ${u.role}">${u.role}</span></td>
+                                <td><span class="status-badge ${u.status}">${u.status}</span></td>
+                                <td>
+                                    ${u.role === 'admin' ? '-' : `
+                                        <button class="action-link" onclick="toggleUserStatus('${u.id}', '${u.status}')">
+                                            ${u.status === 'active' ? '冻结' : '解冻'}
+                                        </button>
+                                    `}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div id="hub-content-config" class="hub-pane">
+                <div class="form-group">
+                    <label>站点标题</label>
+                    <input type="text" id="admin-site-title" value="${config.siteTitle || ''}">
+                </div>
+                <div class="form-group">
+                    <label>SEO 描述</label>
+                    <textarea id="admin-site-desc">${config.seoDescription || ''}</textarea>
+                </div>
+                <button class="tab-btn active" style="width:100%" onclick="saveSiteConfig()">保存全站配置</button>
+            </div>
+        `;
+    } catch (e) {
+        body.innerHTML = `<div class="error-text">加载失败: ${e.message}</div>`;
+    }
+};
+
+window.switchHubTab = (tab) => {
+    document.querySelectorAll('.hub-tab').forEach(t => t.classList.toggle('active', t.innerText.includes(tab === 'users' ? '用户' : '全站')));
+    document.querySelectorAll('.hub-pane').forEach(p => p.classList.toggle('active', p.id === `hub-content-${tab}`));
+};
+
+window.toggleUserStatus = async (userId, currentStatus) => {
+    const newStatus = currentStatus === 'active' ? 'frozen' : 'active';
+    if (!confirm(`确定要将该用户设为 ${newStatus} 吗？`)) return;
+
+    try {
+        const res = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, status: newStatus })
+        });
+        if (res.ok) {
+            showToast("状态更新成功");
+            openAdminHub(); // 刷新
+        }
+    } catch (e) { showToast("操作失败", "#e74c3c"); }
+};
+
+window.saveSiteConfig = async () => {
+    const config = {
+        siteTitle: document.getElementById('admin-site-title').value,
+        seoDescription: document.getElementById('admin-site-desc').value,
+        faviconUrl: "/favicon.ico"
+    };
+
+    try {
+        const res = await fetch('/api/admin/site-config', {
+            method: 'POST',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        if (res.ok) {
+            showToast("全站配置已更新，正在应用...");
+            initSiteConfig();
+        }
+    } catch (e) { showToast("保存失败", "#e74c3c"); }
 };
 
 const initGlobalEvents = () => {

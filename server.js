@@ -229,6 +229,80 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ success: true, token, user: { username: user.username, role: user.role } });
 });
 
+// ====== Task 4.1: 管理员管控枢纽 (Admin Hub) ======
+
+app.get('/api/admin/users', authenticate, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    const users = db.prepare('SELECT id, username, role, status, last_login, created_at FROM users ORDER BY created_at DESC').all();
+    res.json({ success: true, users });
+});
+
+app.patch('/api/admin/users', authenticate, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    const { userId, status } = req.body;
+    db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, userId);
+    
+    db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+      .run(req.user.id, 'CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, req.ip);
+      
+    res.json({ success: true });
+});
+
+app.get('/api/admin/site-config', (req, res) => {
+    const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+    if (fs.existsSync(configPath)) {
+        res.json(JSON.parse(fs.readFileSync(configPath, 'utf-8')));
+    } else {
+        res.json({
+            siteTitle: "CloudNav 导航",
+            faviconUrl: "/favicon.ico",
+            seoKeywords: "导航, 自定义, 云端存储",
+            seoDescription: "极致简洁的个人自定义导航网站"
+        });
+    }
+});
+
+app.post('/api/admin/site-config', authenticate, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    const config = req.body;
+    const kvDir = path.join(__dirname, 'local_kv');
+    if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
+    fs.writeFileSync(path.join(kvDir, 'site_config.json'), JSON.stringify(config, null, 2));
+    
+    db.prepare('INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)')
+      .run(req.user.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config));
+      
+    res.json({ success: true });
+});
+
+// ====== Task 4.2: 公告系统 (Broadcast) ======
+
+app.get('/api/announcements', (req, res) => {
+    const list = db.prepare('SELECT id, title, content, type, is_top, created_at FROM announcements WHERE status = "published" ORDER BY is_top DESC, created_at DESC LIMIT 5').all();
+    res.json({ success: true, announcements: list });
+});
+
+app.get('/api/admin/announcements', authenticate, (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_user') return res.status(403).json({ error: 'Forbidden' });
+    const list = db.prepare('SELECT * FROM announcements ORDER BY is_top DESC, created_at DESC').all();
+    res.json({ success: true, announcements: list });
+});
+
+app.post('/api/admin/announcements', authenticate, (req, res) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_user') return res.status(403).json({ error: 'Forbidden' });
+    const { title, content, type, is_top } = req.body;
+    db.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top) VALUES (?, ?, ?, ?, ?)')
+      .run(req.user.id, title, content, type, is_top ? 1 : 0);
+    res.json({ success: true });
+});
+
+app.delete('/api/admin/announcements', authenticate, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    const { id } = req.body;
+    db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
+    res.json({ success: true });
+});
+
 // ====== 4.4 页面数据 API ======
 
 app.get('/api/config', authenticate, (req, res) => {

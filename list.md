@@ -30,16 +30,29 @@
 ## 🛠️ Phase 3: 自动化管理与图标自愈 (4.2/4.4)
 - [x] **Task 3.1: 6 级图标自愈引擎** (级联降级策略：原站 -> iowen -> QQ -> Google -> DuckDuckGo -> 文字兜底)
 - [x] **Task 3.2: 魔法棒 (Magic Wand) 自动化采集** (后端 HTMLRewriter 抓取 metadata，实现标题/描述/图标一键填入)
-- [ ] **Task 3.3: 页面管理 (Page Management) 深度集成** (实现 SortableJS 跨分类拖拽排版 + 底部多选批量管理工具栏)
+- [x] **Task 3.3: 页面管理 (Page Management) 深度集成** (实现 SortableJS 跨分类拖拽排版与实时防抖云同步)
+- [x] **Task 3.4: 批处理工具栏 (Batch Bar)** (多选模式支持、批量移动分类与一键物理删除)
+- [ ] **Task 3.5: 导入/导出与 JSON 专家模式** (集成 Monaco Editor 实现代码级配置修改与本地 JSON 备份)
 
 ## 🛡️ Phase 4: 全站管控中心 (4.3)
-- [ ] **Task 4.1: 管理员管控枢纽 (Admin Hub)** (实现用户状态熔断、全站 SEO 配置与管理行为审计日志)
-- [ ] **Task 4.2: 多态公告下发系统 (Broadcast)** (实现 Important(顶部常驻) 与 Quiet(右下角静默) 两种形态的公告通知)
+- [x] **Task 4.1: 管理员管控枢纽 (Admin Hub)**
+    - [x] **后端**: 实现 `/api/admin/users` 分页查询与 `active/frozen` 状态熔断逻辑。
+    - [x] **审计**: 在 D1 `audit_logs` 记录所有管理员高危操作。
+    - [x] **配置**: 实现 `/api/admin/site-config` 接口，支持全站 Title/Logo/SEO 实时下发。
+- [x] **Task 4.2: 多态公告下发系统 (Broadcast)**
+    - [x] **渲染引擎**: 前端实现 `Important` (顶部横幅) 与 `Quiet` (右下角铃铛) 渲染组件。
+    - [x] **下发逻辑**: 公共接口 `/api/announcements` 动态分发已发布且未过期的通告。
+    - [x] **已读闭环**: 利用 `localStorage` 实现公告关闭后的静默逻辑，避免重复骚扰。
 - [x] **Task 4.3: 云端资源配额与风控 (Guardrail)** (后端强制执行 20 cats/100 items 限制，并补全 Token 过期校验机制)
+- [ ] **Task 4.4: 邀请制与注册策略** (实现全局注册开关、邀请码批量生成与核销审计)
 
 ## 📱 Phase 5: 跨端一致性与 PWA (4.5)
-- [ ] **Task 5.1: PWA 离线支持优化** (ServiceWorker 静态资源与图标拦截缓存)
-- [ ] **Task 5.2: 响应式断点微调** (针对折叠屏与 Pad 的手势优化)
+- [ ] **Task 5.1: 智能 ServiceWorker** (实现静态资源预缓存与“魔法棒”图标拦截本地缓存)
+- [ ] **Task 5.2: 响应式手势与断点** (针对折叠屏与 Pad 优化侧边栏抽屉手势，微调网格响应式布局)
+
+## ✨ Phase 6: 体验打磨与“出厂”校验
+- [ ] **Task 6.1: 引导系统 (Onboarding)** (新用户首次登录自动填充 `system_default.json` 模板数据)
+- [ ] **Task 6.2: 性能审计与瘦身** (清理冗余 CSS、压缩 KV 存储结构并进行全站加载速度优化)
 
 ---
 *最后更新日期: 2026-05-28*

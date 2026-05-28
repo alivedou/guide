@@ -2451,3 +2451,140 @@ body.light-theme .icon-btn-action {
     background: rgba(0, 0, 0, 0.05);
     color: #3d4f5f;
 }
+
+/* ==================== Task 4.1 & 4.2: Admin & Notices ==================== */
+.important-banner {
+    background: #e67e22;
+    color: white;
+    padding: 8px 16px;
+    z-index: 1000;
+    font-size: 13px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.banner-content button {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    padding: 2px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.notice-bell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: rgba(52, 152, 219, 0.2);
+    border-radius: 50%;
+    margin-bottom: 12px;
+    cursor: pointer;
+    color: #3498db;
+}
+
+.bell-dot {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    background: #e74c3c;
+    border-radius: 50%;
+    border: 1px solid #fff;
+}
+
+.admin-hub-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.hub-tab {
+    background: none;
+    border: none;
+    color: #888;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-weight: bold;
+    border-bottom: 2px solid transparent;
+}
+
+.hub-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.hub-pane {
+    display: none;
+}
+
+.hub-pane.active {
+    display: block;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.admin-table th, .admin-table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.role-badge, .status-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+.role-badge.admin { background: #e74c3c; color: white; }
+.role-badge.user { background: #3498db; color: white; }
+.status-badge.active { background: #2ecc71; color: white; }
+.status-badge.frozen { background: #95a5a6; color: white; }
+
+.action-link {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: #888;
+}
+
+.form-group input, .form-group textarea {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    color: white;
+    padding: 8px;
+    border-radius: 6px;
+}
