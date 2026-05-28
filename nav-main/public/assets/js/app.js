@@ -35,7 +35,25 @@ document.addEventListener('DOMContentLoaded', () => {
     initAuthUI();
     initAnnouncements();
     initGlobalEvents();
+    checkSWUpdate();
 });
+
+// Task 4.2: PWA 更新感知
+const checkSWUpdate = async () => {
+    if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) {
+            reg.onupdatefound = () => {
+                const worker = reg.installing;
+                worker.onstatechange = () => {
+                    if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                        showToast("检测到新版本，请刷新页面以体验最新功能", "#3498db");
+                    }
+                };
+            };
+        }
+    }
+};
 
 // ==================== 2. 辅助工具 ====================
 // Task 4.1: 全站 SEO 与标题下发
@@ -57,6 +75,16 @@ const initSiteConfig = async () => {
                     document.head.appendChild(descMeta);
                 }
                 descMeta.content = config.seoDescription;
+            }
+
+            if (config.seoKeywords) {
+                let keyMeta = document.querySelector('meta[name="keywords"]');
+                if (!keyMeta) {
+                    keyMeta = document.createElement('meta');
+                    keyMeta.name = "keywords";
+                    document.head.appendChild(keyMeta);
+                }
+                keyMeta.content = config.seoKeywords;
             }
         }
     } catch (e) { console.warn('[Config] Failed to load site config'); }
@@ -558,6 +586,7 @@ const renderNav = () => {
                 // 为磁贴增加 Tab 索引与唯一 ID，方便键盘流转 (Task 2.5.3)
                 card.setAttribute('tabindex', '0');
                 card.setAttribute('data-id', item.id);
+                card.style.animationDelay = `${idx * 0.03}s`;
                 
                 let html = buildCardHtml(item);
                 
@@ -599,9 +628,52 @@ const renderNav = () => {
                 
                 grid.appendChild(card);
             });
+
+            // Task 4.4: 磁贴末尾的新增入口 (仅管理模式)
+            if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
+                const addCard = document.createElement('div');
+                const catItemCount = items.length;
+                const isCatFull = catItemCount >= 100;
+
+                addCard.className = `card add-new-card ${isCatFull ? 'disabled' : ''}`;
+                addCard.innerHTML = `
+                    <div class="icon-wrapper"><i class="ri-add-line"></i></div>
+                    <h3>${isCatFull ? '已满' : '新增书签'}</h3>
+                `;
+                addCard.onclick = () => {
+                    if (isCatFull) return showToast("该分类已达到 100 个书签上限", "#e74c3c");
+                    activeCatId = cat.id;
+                    openEditModal('');
+                };
+                grid.appendChild(addCard);
+            }
+
             section.appendChild(grid);
             container.appendChild(section);
         });
+
+        // Task 4.4: 侧边栏新增分类入口 (仅管理模式)
+        if (isPageManagementMode && isAdmin) {
+            const addCatBtn = document.createElement('div');
+            const isCatLimit = appData.categories.length >= 20;
+            const sidebarNav = document.getElementById('sidebar-nav');
+            if (sidebarNav) {
+                addCatBtn.className = `sidebar-nav-item add-cat-nav ${isCatLimit ? 'disabled' : ''}`;
+                addCatBtn.innerHTML = `<span class="nav-icon"><i class="ri-add-line"></i></span><span class="nav-label">${isCatLimit ? '分类已满' : '添加分类'}</span>`;
+                addCatBtn.onclick = () => {
+                    if (isCatLimit) return showToast("最多只能创建 20 个分类", "#e74c3c");
+                    const name = prompt("请输入新分类名称:");
+                    if (name) {
+                        const newCat = { id: 'cat_' + Date.now(), name, icon: '📂', hidden: false };
+                        appData.categories.push(newCat);
+                        showToast(`分类 ${name} 已创建`);
+                        syncConfigToCloud();
+                        renderNav();
+                    }
+                };
+                sidebarNav.appendChild(addCatBtn);
+            }
+        }
 
         isActuallyZen = appData.settings?.zenMode && !isZenTempExpanded;
         document.body.classList.toggle('zen-active', isActuallyZen);
@@ -647,6 +719,11 @@ const renderTools = () => {
         const userDisplayName = appData.username || '已登录用户';
         const roleBadge = isAdmin ? '<span class="admin-badge">ADMIN</span>' : '';
         
+        // Task 1.1: 配额状态感知
+        const isAllFull = appData.categories.length > 0 && appData.categories.every(cat => 
+            appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length >= 100
+        );
+
         // 管理员模式视觉高亮切换
         if (isAdmin && adminBanner) {
             adminBanner.style.display = 'flex';
@@ -657,27 +734,62 @@ const renderTools = () => {
         }
 
         area.innerHTML = `
-            <div class="sidebar-user-card">
-                <div class="user-info">
-                    <span class="user-name">${userDisplayName}</span>
-                    ${roleBadge}
+            <div class="sidebar-admin-container">
+                <div class="sidebar-nav-label">管理面板</div>
+                
+                ${isAdmin ? `
+                <div class="sidebar-nav-item admin-tool-btn" onclick="openAdminHub()">
+                    <span class="nav-icon"><i class="ri-shield-user-line"></i></span>
+                    <span class="nav-label">控制中心</span>
+                </div>` : ''}
+
+                <div class="sidebar-nav-item admin-tool-btn ${isPageManagementMode ? 'active' : ''}" onclick="togglePageManagement()">
+                    <span class="nav-icon"><i class="ri-layout-masonry-line"></i></span>
+                    <span class="nav-label">页面管理</span>
                 </div>
-                <div class="user-actions">
-                    ${isAdmin ? `<button class="icon-btn" onclick="openAdminHub()" title="管理后台"><i class="ri-shield-user-line"></i></button>` : ''}
-                    <button class="icon-btn ${isPageManagementMode ? 'active' : ''}" onclick="togglePageManagement()" title="页面管理"><i class="ri-layout-masonry-line"></i></button>
-                    <button class="icon-btn" onclick="openEditModal('')" title="添加新书签"><i class="ri-add-circle-line"></i></button>
-                    <button class="icon-btn" onclick="openJsonEditor()" title="JSON 专家模式"><i class="ri-code-s-slash-line"></i></button>
-                    <button class="icon-btn" onclick="exportConfig()" title="导出配置"><i class="ri-download-2-line"></i></button>
-                    <button class="icon-btn" onclick="document.getElementById('import-file').click()" title="导入配置"><i class="ri-upload-2-line"></i></button>
-                    <button class="icon-btn" onclick="doResetConfig()" title="恢复默认配置"><i class="ri-refresh-line"></i></button>
-                    <button class="icon-btn" onclick="doLogout()" title="退出登录"><i class="ri-logout-box-r-line"></i></button>
+
+                <div class="sidebar-nav-item admin-tool-btn ${isAllFull ? 'disabled' : ''}" 
+                     onclick="${isAllFull ? 'showToast(\'书签配额已满\', \'#e74c3c\')' : 'openEditModal(\'\')'}">
+                    <span class="nav-icon"><i class="ri-add-circle-line"></i></span>
+                    <span class="nav-label">新增网址</span>
+                </div>
+
+                <div class="sidebar-nav-item admin-tool-btn" onclick="openJsonEditor()">
+                    <span class="nav-icon"><i class="ri-code-s-slash-line"></i></span>
+                    <span class="nav-label">专家模式</span>
+                </div>
+
+                <div class="sidebar-nav-item admin-tool-btn" onclick="exportConfig()">
+                    <span class="nav-icon"><i class="ri-download-2-line"></i></span>
+                    <span class="nav-label">备份导出</span>
+                </div>
+
+                <div class="sidebar-nav-item admin-tool-btn" onclick="document.getElementById('import-file').click()">
+                    <span class="nav-icon"><i class="ri-upload-2-line"></i></span>
+                    <span class="nav-label">配置导入</span>
+                </div>
+
+                <div class="sidebar-nav-item admin-tool-btn" onclick="doResetConfig()">
+                    <span class="nav-icon"><i class="ri-refresh-line"></i></span>
+                    <span class="nav-label">重置模板</span>
+                </div>
+
+                <div class="sidebar-nav-item admin-tool-btn logout-btn" onclick="doLogout()">
+                    <span class="nav-icon"><i class="ri-logout-box-r-line"></i></span>
+                    <span class="nav-label">退出系统</span>
+                </div>
+
+                <div class="sidebar-user-info">
+                    <i class="ri-user-smile-line"></i>
+                    <span>${userDisplayName} ${roleBadge}</span>
                 </div>
             </div>
         `;
     } else {
         area.innerHTML = `
             <div class="sidebar-nav-item" onclick="document.getElementById('auth-overlay').style.display='flex'">
-                <i class="ri-user-line"></i> <span>登录 / 注册</span>
+                <span class="nav-icon"><i class="ri-user-line"></i></span>
+                <span class="nav-label">登录 / 注册</span>
             </div>
         `;
     }
@@ -988,6 +1100,12 @@ const openBatchMoveModal = () => {
         
         if (!targetCat) return showToast("无效的目标分类", "#e67e22");
 
+        // Task 4.3: 批量移动配额校验
+        const currentItemsInTarget = appData.items.filter(i => (i.catId === targetCatId || i.cat_id === targetCatId) && !selectedIds.has(i.id));
+        if (currentItemsInTarget.length + selectedIds.size > 100) {
+            return showToast(`目标分类已满，无法容纳新增的 ${selectedIds.size} 个书签`, "#e74c3c");
+        }
+
         appData.items.forEach(i => {
             if (selectedIds.has(i.id)) {
                 i.catId = targetCatId;
@@ -1021,21 +1139,24 @@ const openAdminHub = async () => {
     confirmBtn.style.display = 'none'; // 后台采用即时操作
 
     try {
-        const [usersRes, configRes, inviteRes] = await Promise.all([
+        const [usersRes, configRes, inviteRes, announceRes] = await Promise.all([
             fetch('/api/admin/users', { headers: { 'Authorization': sysToken } }),
             fetch('/api/admin/site-config'),
-            fetch('/api/admin/invitations', { headers: { 'Authorization': sysToken } })
+            fetch('/api/admin/invitations', { headers: { 'Authorization': sysToken } }),
+            fetch('/api/admin/announcements', { headers: { 'Authorization': sysToken } })
         ]);
         
         const { users } = await usersRes.json();
         const config = await configRes.json();
         const { invitations } = await inviteRes.json();
+        const { announcements } = await announceRes.json();
 
         body.innerHTML = `
             <div class="admin-hub-tabs">
                 <button class="hub-tab active" onclick="switchHubTab('users')">用户管理</button>
                 <button class="hub-tab" onclick="switchHubTab('config')">全站设置</button>
                 <button class="hub-tab" onclick="switchHubTab('invites')">邀请管理</button>
+                <button class="hub-tab" onclick="switchHubTab('announcements')">公告管理</button>
             </div>
             <div id="hub-content-users" class="hub-pane active">
                 <table class="admin-table">
@@ -1044,11 +1165,17 @@ const openAdminHub = async () => {
                         ${users.map(u => `
                             <tr>
                                 <td>${u.username}</td>
-                                <td><span class="role-badge ${u.role}">${u.role}</span></td>
+                                <td>
+                                    <select onchange="updateUserAdmin('${u.id}', { role: this.value })" ${u.role === 'admin' ? 'disabled' : ''}>
+                                        <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+                                        <option value="super_user" ${u.role === 'super_user' ? 'selected' : ''}>Super User</option>
+                                        <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+                                    </select>
+                                </td>
                                 <td><span class="status-badge ${u.status}">${u.status}</span></td>
                                 <td>
                                     ${u.role === 'admin' ? '-' : `
-                                        <button class="action-link" onclick="toggleUserStatus('${u.id}', '${u.status}')">
+                                        <button class="action-link" onclick="updateUserAdmin('${u.id}', { status: '${u.status === 'active' ? 'frozen' : 'active'}' })">
                                             ${u.status === 'active' ? '冻结' : '解冻'}
                                         </button>
                                     `}
@@ -1062,6 +1189,14 @@ const openAdminHub = async () => {
                 <div class="form-group">
                     <label>站点标题</label>
                     <input type="text" id="admin-site-title" value="${config.siteTitle || ''}">
+                </div>
+                <div class="form-group">
+                    <label>Favicon URL</label>
+                    <input type="text" id="admin-favicon-url" value="${config.faviconUrl || ''}">
+                </div>
+                <div class="form-group">
+                    <label>SEO 关键词</label>
+                    <input type="text" id="admin-site-keywords" value="${config.seoKeywords || ''}">
                 </div>
                 <div class="form-group">
                     <label>SEO 描述</label>
@@ -1094,6 +1229,55 @@ const openAdminHub = async () => {
                                     <td>${i.used_by_name || '-'}</td>
                                     <td>
                                         ${i.status === 'unused' ? `<button class="action-link" onclick="deleteInvite('${i.code}')">删除</button>` : '-'}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="hub-content-announcements" class="hub-pane">
+                <div class="admin-announce-editor">
+                    <div class="form-group">
+                        <label>公告标题</label>
+                        <input type="text" id="announce-title" placeholder="请输入标题">
+                    </div>
+                    <div class="form-group">
+                        <label>公告内容</label>
+                        <textarea id="announce-content" rows="3" placeholder="请输入公告内容"></textarea>
+                    </div>
+                    <div class="form-row" style="display:flex; gap:15px; margin-bottom:10px;">
+                        <div class="form-group" style="flex:1">
+                            <label>类型</label>
+                            <select id="announce-type">
+                                <option value="quiet">Quiet (静默铃铛)</option>
+                                <option value="important">Important (顶部条幅)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex:1">
+                            <label>过期时间</label>
+                            <input type="datetime-local" id="announce-expire">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+                            <input type="checkbox" id="announce-top"> 置顶公告
+                        </label>
+                    </div>
+                    <button class="tab-btn active" style="width:100%; margin-top:10px;" onclick="saveAnnouncement()">发布公告</button>
+                </div>
+                <hr style="border:0; border-top:1px solid var(--glass-border); margin:15px 0;">
+                <div style="max-height: 200px; overflow-y: auto;">
+                    <table class="admin-table">
+                        <thead><tr><th>标题</th><th>类型</th><th>状态</th><th>操作</th></tr></thead>
+                        <tbody>
+                            ${announcements.map(a => `
+                                <tr>
+                                    <td>${a.title}</td>
+                                    <td>${a.type}</td>
+                                    <td>${a.status}</td>
+                                    <td>
+                                        <button class="action-link" onclick="deleteAnnouncement(${a.id})">删除</button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -1143,6 +1327,78 @@ window.deleteInvite = async (code) => {
     } catch (e) { showToast("删除失败", "#e74c3c"); }
 };
 
+window.updateUserAdmin = async (userId, payload) => {
+    const adminPassword = prompt("执行管理操作，请输入您的管理员密码进行二次验证:");
+    if (adminPassword === null) return;
+    if (!adminPassword) return showToast("请输入密码", "#e67e22");
+
+    try {
+        const res = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, ...payload, adminPassword })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast("操作成功");
+            openAdminHub();
+        } else {
+            showToast(data.error || "操作失败", "#e74c3c");
+        }
+    } catch (e) { showToast("请求失败", "#e74c3c"); }
+};
+
+window.saveAnnouncement = async () => {
+    const payload = {
+        title: document.getElementById('announce-title').value.trim(),
+        content: document.getElementById('announce-content').value.trim(),
+        type: document.getElementById('announce-type').value,
+        expire_at: document.getElementById('announce-expire').value,
+        is_top: document.getElementById('announce-top').checked
+    };
+
+    if (!payload.title || !payload.content) return showToast("标题和内容不能为空", "#e67e22");
+
+    try {
+        const res = await fetch('/api/admin/announcements', {
+            method: 'POST',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            showToast("公告已发布");
+            openAdminHub();
+        }
+    } catch (e) { showToast("发布失败", "#e74c3c"); }
+};
+
+window.deleteAnnouncement = async (id) => {
+    if (!confirm("确定要删除这条公告吗？")) return;
+    try {
+        const res = await fetch('/api/admin/announcements', {
+            method: 'DELETE',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        if (res.ok) {
+            showToast("已删除");
+            openAdminHub();
+        }
+    } catch (e) { showToast("删除失败", "#e74c3c"); }
+};
+
+window.formatMonacoJson = () => {
+    if (!monacoEditor) return;
+    try {
+        const val = monacoEditor.getValue();
+        const obj = JSON.parse(val);
+        monacoEditor.setValue(JSON.stringify(obj, null, 4));
+        showToast("已完成格式化");
+    } catch (e) {
+        showToast("JSON 格式错误，无法格式化", "#e74c3c");
+    }
+};
+
 window.copyUnusedInvites = () => {
     const cells = document.querySelectorAll('#hub-content-invites td[style*="monospace"]');
     const unused = [];
@@ -1174,10 +1430,11 @@ window.toggleUserStatus = async (userId, currentStatus) => {
 window.saveSiteConfig = async () => {
     const config = {
         siteTitle: document.getElementById('admin-site-title').value,
+        faviconUrl: document.getElementById('admin-favicon-url').value,
+        seoKeywords: document.getElementById('admin-site-keywords').value,
         seoDescription: document.getElementById('admin-site-desc').value,
         allowOpenRegistration: document.getElementById('admin-allow-reg').checked,
-        requireInvitation: document.getElementById('admin-require-invite').checked,
-        faviconUrl: "/favicon.ico"
+        requireInvitation: document.getElementById('admin-require-invite').checked
     };
 
     try {
@@ -1206,7 +1463,13 @@ const openJsonEditor = () => {
     if (!modal || !body) return;
 
     title.innerText = "JSON 专家模式 (专家级定制)";
-    body.innerHTML = '<div id="monaco-container" style="height: 400px; border-radius: 8px; overflow: hidden; border: 1px solid var(--glass-border);"></div>';
+    body.innerHTML = `
+        <div style="margin-bottom: 10px; display:flex; gap:10px;">
+            <button class="action-link" onclick="formatMonacoJson()"><i class="ri-magic-line"></i> 一键美化</button>
+            <span style="color:var(--text-dim); font-size:12px;">提示: 修改后点击下方“应用”保存到云端</span>
+        </div>
+        <div id="monaco-container" style="height: 400px; border-radius: 8px; overflow: hidden; border: 1px solid var(--glass-border);"></div>
+    `;
     modal.style.display = 'flex';
     confirmBtn.style.display = 'block';
     confirmBtn.innerText = "应用并同步到云端";
@@ -1238,6 +1501,13 @@ const openJsonEditor = () => {
             // 简单结构校验
             if (!parsed.categories || !parsed.items) throw new Error("缺少核心字段 (categories/items)");
             
+            // Task 4.3: 专家模式配额校验
+            if (parsed.categories.length > 20) throw new Error("分类数量超出上限 (20)");
+            for (const cat of parsed.categories) {
+                const count = parsed.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
+                if (count > 100) throw new Error(`分类 [${cat.name}] 下的书签数量 (${count}) 超出上限 (100)`);
+            }
+
             appData = parsed;
             showLoader('正在同步专家配置...');
             await syncConfigToCloud();
@@ -1304,6 +1574,13 @@ const initGlobalEvents = () => {
                     const parsed = JSON.parse(event.target.result);
                     if (!parsed.categories || !parsed.items) throw new Error("非法的 CloudNav 配置格式");
                     
+                    // Task 4.3: 导入配额校验
+                    if (parsed.categories.length > 20) throw new Error("分类数量超出上限 (20)");
+                    for (const cat of parsed.categories) {
+                        const count = parsed.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
+                        if (count > 100) throw new Error(`分类 [${cat.name}] 下的书签数量 (${count}) 超出上限 (100)`);
+                    }
+
                     if (!confirm("导入将覆盖当前所有配置，确定继续吗？")) return;
                     
                     appData = parsed;
@@ -1469,16 +1746,10 @@ const initGlobalEvents = () => {
             }
         }
 
-        // 8. Escape 一键复位
+        // 8. Escape 一键复位 (Task 2.2)
         if (e.key === 'Escape') { 
             const sea = document.getElementById('sea-input');
             const dropdown = document.getElementById('sea-dropdown');
-            if (sea) {
-                sea.value = '';
-                sea.blur();
-                if (dropdown) dropdown.style.display = 'none';
-                document.body.classList.remove('is-searching'); // 退出搜索态
-            }
 
             const modals = document.querySelectorAll('.modal');
             let anyModalOpen = false;
@@ -1498,11 +1769,19 @@ const initGlobalEvents = () => {
                 return;
             }
 
-            // 极简模式下的复位逻辑
-            if (isZenTempExpanded) { 
-                isZenTempExpanded = false; 
-                renderNav(); 
+            // 如果是在展开态，回归极简态
+            if (isZenTempExpanded) {
+                isZenTempExpanded = false;
+                renderNav();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
+
+            if (sea) {
+                sea.value = '';
+                sea.focus(); // 回归搜索聚焦状态
+                if (dropdown) dropdown.style.display = 'none';
+                document.body.classList.remove('is-searching'); 
             }
         }
     });
@@ -1610,6 +1889,7 @@ const triggerMagicWand = async () => {
 const saveItem = async () => {
     const modal = document.getElementById('edit-modal');
     const id = modal.getAttribute('data-editing-id');
+    const catId = document.getElementById('edit-cat').value;
     
     const payload = {
         id: id || 'item_' + Date.now(),
@@ -1617,15 +1897,22 @@ const saveItem = async () => {
         title: document.getElementById('edit-title-input').value.trim(),
         icon: document.getElementById('edit-icon').value.trim(),
         desc: document.getElementById('edit-desc').value.trim(),
-        cat_id: document.getElementById('edit-cat').value,
+        catId: catId,
+        cat_id: catId, // 双重保险：兼容后端不同版本的字段名
         hidden: document.getElementById('edit-hidden').checked
     };
 
     if (!payload.url || !payload.title) return showToast("网址和标题不能为空", "#e67e22");
 
+    // Task 4.3: 前端配额阻断
+    const targetCatItems = appData.items.filter(i => (i.catId === payload.catId || i.cat_id === payload.catId) && i.id !== id);
+    if (targetCatItems.length >= 100) {
+        return showToast("目标分类已满 (上限 100 个书签)", "#e74c3c");
+    }
+
     showLoader('正在保存...');
     try {
-        // 先克隆一份数据避免直接修改全局状态导致渲染不一致
+        // 关键修复：直接在本地内存中先执行更新，确保 renderNav 能立即看到
         const newItems = [...appData.items];
         if (id) {
             const idx = newItems.findIndex(i => i.id === id);
@@ -1646,7 +1933,9 @@ const saveItem = async () => {
         if (res.ok) {
             showToast("保存成功");
             modal.style.display = 'none';
-            await init(true); // 重新加载数据
+            appData.items = newItems; // 同步内存
+            renderNav(); // 立即渲染
+            await init(true); // 后台执行完整初始化
         } else {
             showToast("保存失败", "#e74c3c");
         }

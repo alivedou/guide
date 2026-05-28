@@ -419,6 +419,91 @@ body.is-searching .grid-container {
     padding: 10px 8px;
     border-top: 1px solid var(--glass-border);
     flex-shrink: 0;
+    max-height: 400px; /* 限制高度并允许滚动 */
+    overflow-y: auto;
+}
+
+/* 隐藏底部滚动条 */
+.sidebar-footer::-webkit-scrollbar {
+    width: 0;
+}
+
+.sidebar-admin-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sidebar-nav-label {
+    padding: 12px 14px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.25);
+    letter-spacing: 1.2px;
+    user-select: none;
+}
+
+.admin-tool-btn {
+    opacity: 0.8;
+    background: transparent;
+    border: 1px solid transparent;
+}
+
+.admin-tool-btn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+}
+
+.admin-tool-btn.active {
+    background: rgba(57, 157, 255, 0.1) !important;
+    color: var(--primary) !important;
+    border-color: rgba(57, 157, 255, 0.2) !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.admin-tool-btn.active::before {
+    display: none;
+}
+
+.admin-tool-btn.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+.logout-btn {
+    margin-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 12px;
+    color: #ff6b6b !important;
+}
+
+.logout-btn:hover {
+    background: rgba(255, 107, 107, 0.08) !important;
+}
+
+.sidebar-user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    margin-top: 15px;
+}
+
+.sidebar-user-info .admin-badge {
+    font-size: 10px;
+    background: var(--primary);
+    color: white;
+    padding: 2px 4px;
+    border-radius: 4px;
+    margin-left: 4px;
 }
 
 .sidebar-footer .manage-cat-btn {
@@ -576,19 +661,6 @@ body.is-searching .grid-container {
     margin: 0 auto;
     width: 100%;
     grid-template-columns: repeat(auto-fill, minmax(min(var(--card-w, 85px), 100%), 1fr));
-    animation: fadeInUp 0.4s ease-out;
-}
-
-/* 淡入上浮动画 */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(15px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 
 /* ==================== 卡片样式（Style 0 默认） ==================== */
@@ -598,14 +670,58 @@ body.is-searching .grid-container {
     border-radius: var(--radius);
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     position: relative;
+    overflow: hidden;
+    animation: fadeInUp 0.5s cubic-bezier(0.165, 0.84, 0.44, 1) both;
+}
+
+/* 淡入上浮动画 */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Task 4.4: 新增网址虚线卡片 */
+.add-new-card {
     cursor: pointer;
     min-height: var(--card-h, 85px);
     height: var(--card-h, 85px);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     width: 100%;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px dashed var(--glass-border) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.add-new-card:hover {
+    border-color: var(--primary) !important;
+    background: rgba(57, 157, 255, 0.1) !important;
+    transform: translateY(-2px);
+}
+
+.add-new-card i {
+    font-size: 24px;
+    color: var(--primary);
+    margin-bottom: 4px;
+}
+
+.add-new-card h3 {
+    font-size: 12px !important;
+    color: var(--text-dim) !important;
+}
+
+.add-new-card.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .card:hover {
@@ -2170,11 +2286,17 @@ body.zen-active .search-section {
     max-width: 720px;
     margin: 0 !important;
     z-index: 1000;
-    transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+    transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: zenSearchBreath 4s ease-in-out infinite;
+}
+
+@keyframes zenSearchBreath {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+    50% { transform: translate(-50%, -50%) scale(1.02); box-shadow: 0 15px 50px rgba(0,0,0,0.4); }
 }
 
 body:not(.zen-active) .search-section {
-    transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+    transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .zen-expand-btn {

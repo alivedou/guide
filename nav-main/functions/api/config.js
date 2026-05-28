@@ -138,6 +138,18 @@ export async function onRequestPost(context) {
       return new Response(JSON.stringify({ error: "分类数量已达到上限 (20)", code: "ERR_QUOTA_EXCEEDED" }), { status: 403 });
     }
 
+    // 统计每个分类下的书签数量
+    if (items) {
+      const catCounts = {};
+      for (const item of items) {
+        const cId = item.catId || item.cat_id;
+        catCounts[cId] = (catCounts[cId] || 0) + 1;
+        if (catCounts[cId] > 100) {
+          return new Response(JSON.stringify({ error: "单个分类下的书签不能超过 100 个", code: "ERR_QUOTA_EXCEEDED" }), { status: 403 });
+        }
+      }
+    }
+
     // 1. D1 事务持久化 (Task 6.3)
     const queries = [
       env.DB.prepare('DELETE FROM categories WHERE user_id = ?').bind(userId),

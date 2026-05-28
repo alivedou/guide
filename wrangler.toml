@@ -1,0 +1,15 @@
+name = "cloudnav"
+pages_build_output_dir = "./nav-main/public"
+
+[vars]
+JWT_SECRET = "cloudnav-secret-2026"
+
+[[kv_namespaces]]
+binding = "nav"
+id = "YOUR_KV_NAMESPACE_ID"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cloudnav-db"
+database_id = "YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"

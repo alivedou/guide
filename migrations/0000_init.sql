@@ -70,5 +70,6 @@ CREATE TABLE IF NOT EXISTS announcements (
     status TEXT DEFAULT 'published', -- draft, published, archived
     is_top BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expire_at DATETIME,
     FOREIGN KEY(creator_id) REFERENCES users(id)
 );

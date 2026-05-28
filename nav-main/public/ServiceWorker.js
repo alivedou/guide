@@ -6,8 +6,8 @@
  */
 
 // 缓存版本号
-const CACHE_NAME = 'nav-core-v7';
-const ICON_CACHE_NAME = 'nav-icons-v1';
+const CACHE_NAME = 'nav-core-v8';
+const ICON_CACHE_NAME = 'nav-icons-v2';
 
 // 需要缓存的核心静态资源
 const URLS_TO_CACHE = [

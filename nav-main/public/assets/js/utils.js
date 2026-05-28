@@ -91,6 +91,18 @@ const handleIconError = (img, originalUrl) => {
             const span = document.createElement('span');
             span.className = 'emoji-icon';
             span.innerText = char;
+            
+            // Task 2.3: 增加颜色自愈 - 基于域名生成背景色
+            const hue = Array.from(domain).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+            span.style.background = `hsla(${hue}, 70%, 45%, 0.8)`;
+            span.style.color = '#fff';
+            span.style.borderRadius = '8px';
+            span.style.width = '100%';
+            span.style.height = '100%';
+            span.style.display = 'flex';
+            span.style.alignItems = 'center';
+            span.style.justifyContent = 'center';
+            
             parent.replaceChild(span, img);
         }
     }

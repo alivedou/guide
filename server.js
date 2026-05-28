@@ -42,6 +42,13 @@ try {
             db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
         }
     }
+
+    const annInfo = db.prepare("PRAGMA table_info(announcements)").all();
+    const annCols = annInfo.map(c => c.name);
+    if (annCols.length > 0 && !annCols.includes('expire_at')) {
+        console.log('[DB] Patching: Adding expire_at column to announcements table');
+        db.exec("ALTER TABLE announcements ADD COLUMN expire_at DATETIME");
+    }
 } catch (e) {
     console.warn('[DB] Auto-patch skipped:', e.message);
 }
@@ -155,6 +162,7 @@ const syncUserToKV = (userId) => {
         items: items.map(i => ({
             ...i, 
             catId: i.cat_id, 
+            cat_id: i.cat_id, // 双重保险
             hidden: !!i.hidden
         })),
         settings: settings ? {
@@ -298,6 +306,10 @@ app.post('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
                 db.prepare('INSERT INTO invitation_codes (code, creator_id) VALUES (?, ?)').run(code, req.user.id);
             }
         })();
+
+        db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+          .run(req.user.id, 'BATCH_GENERATE_INVITATIONS', `Generated ${count || 1} codes`, req.ip);
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: '生成邀请码失败', details: e.message });
@@ -308,6 +320,10 @@ app.delete('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
     const { code } = req.body;
     try {
         db.prepare('DELETE FROM invitation_codes WHERE code = ?').run(code);
+
+        db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+          .run(req.user.id, 'DELETE_INVITATION', `Deleted code: ${code}`, req.ip);
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: '删除邀请码失败', details: e.message });
@@ -383,14 +399,33 @@ app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
 });
 
 app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
-    const { userId, status } = req.body;
+    const { userId, status, role, adminPassword } = req.body;
     try {
-        db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, userId);
-        db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-          .run(req.user.id, 'CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, req.ip);
+        // Task 3.1: 二次身份验证
+        if (adminPassword) {
+            const adminUser = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+            const adminHash = crypto.createHash('sha256').update(adminPassword).digest('hex');
+            if (adminUser.password_hash !== adminHash) {
+                return res.status(401).json({ error: '管理员身份验证失败' });
+            }
+        }
+
+        if (status) {
+            db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, userId);
+            db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+              .run(req.user.id, 'CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, req.ip);
+        }
+
+        if (role) {
+            if (req.user.role !== 'admin') return res.status(403).json({ error: '权限不足' });
+            db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, userId);
+            db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+              .run(req.user.id, 'CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, req.ip);
+        }
+
         res.json({ success: true });
     } catch (e) {
-        res.status(500).json({ error: '更新用户状态失败', details: e.message });
+        res.status(500).json({ error: '更新用户失败', details: e.message });
     }
 });
 
@@ -421,8 +456,8 @@ app.post('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
         if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
         fs.writeFileSync(path.join(kvDir, 'site_config.json'), JSON.stringify(config, null, 2));
         
-        db.prepare('INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)')
-          .run(req.user.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config));
+        db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+          .run(req.user.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config), req.ip);
           
         res.json({ success: true });
     } catch (e) {
@@ -433,7 +468,7 @@ app.post('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
 // ====== Task 4.2: 公告系统 (Broadcast) ======
 
 app.get('/api/announcements', (req, res) => {
-    const list = db.prepare('SELECT id, title, content, type, is_top, created_at FROM announcements WHERE status = "published" ORDER BY is_top DESC, created_at DESC LIMIT 5').all();
+    const list = db.prepare('SELECT id, title, content, type, is_top, created_at FROM announcements WHERE status = "published" AND (expire_at IS NULL OR expire_at > CURRENT_TIMESTAMP) ORDER BY is_top DESC, created_at DESC LIMIT 5').all();
     res.json({ success: true, announcements: list });
 });
 
@@ -443,15 +478,23 @@ app.get('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
 });
 
 app.post('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
-    const { title, content, type, is_top } = req.body;
-    db.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top) VALUES (?, ?, ?, ?, ?)')
-      .run(req.user.id, title, content, type, is_top ? 1 : 0);
+    const { title, content, type, is_top, expire_at } = req.body;
+    db.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(req.user.id, title, content, type, is_top ? 1 : 0, expire_at || null);
+    
+    db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+      .run(req.user.id, 'CREATE_ANNOUNCEMENT', `Created announcement: ${title}`, req.ip);
+
     res.json({ success: true });
 });
 
 app.delete('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
     const { id } = req.body;
     db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
+
+    db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+      .run(req.user.id, 'DELETE_ANNOUNCEMENT', `Deleted announcement ID: ${id}`, req.ip);
+
     res.json({ success: true });
 });
 
@@ -520,7 +563,8 @@ app.post('/api/config', authenticate, (req, res) => {
             db.prepare('INSERT INTO categories (id, user_id, name, icon, sort_order, is_video, hidden) VALUES (?, ?, ?, ?, ?, ?, ?)').run(cat.id, userId, cat.name, cat.icon, idx, cat._isVideo ? 1 : 0, cat.hidden ? 1 : 0);
         });
         items.forEach((item, idx) => {
-            db.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(item.id, userId, item.catId, item.title, item.url, item.desc, item.icon, item.bg_color, idx, item.hidden ? 1 : 0);
+            const targetCatId = item.catId || item.cat_id;
+            db.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(item.id, userId, targetCatId, item.title, item.url, item.desc, item.icon, item.bg_color, idx, item.hidden ? 1 : 0);
         });
         if (settings) {
             db.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = ?, bg_url = ?, simple_mode = ?, open_in_new_tab = ?, theme_mode = ? WHERE user_id = ?').run(

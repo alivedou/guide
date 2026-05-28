@@ -32,9 +32,14 @@ export async function onRequestPost(context) {
   }
 
   try {
-    const { title, content, type, is_top } = await request.json();
-    await env.DB.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top) VALUES (?, ?, ?, ?, ?)')
-      .bind(admin.id, title, content, type, is_top ? 1 : 0)
+    const { title, content, type, is_top, expire_at } = await request.json();
+    await env.DB.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(admin.id, title, content, type, is_top ? 1 : 0, expire_at || null)
+      .run();
+
+    // 记录审计日志
+    await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+      .bind(admin.id, 'CREATE_ANNOUNCEMENT', `Created announcement: ${title}`, request.headers.get("cf-connecting-ip") || "unknown")
       .run();
 
     return new Response(JSON.stringify({ success: true }));
@@ -52,6 +57,12 @@ export async function onRequestDelete(context) {
   try {
     const { id } = await request.json();
     await env.DB.prepare('DELETE FROM announcements WHERE id = ?').bind(id).run();
+
+    // 记录审计日志
+    await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+      .bind(admin.id, 'DELETE_ANNOUNCEMENT', `Deleted announcement ID: ${id}`, request.headers.get("cf-connecting-ip") || "unknown")
+      .run();
+
     return new Response(JSON.stringify({ success: true }));
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
