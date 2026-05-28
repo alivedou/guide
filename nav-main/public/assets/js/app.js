@@ -5,14 +5,21 @@
  */
 
 // ==================== 全局状态 ====================
-let appData = { settings: { cardWidth: 85 }, categories: [], items: [] };
-let activeCatId = '';
+let appData = { 
+    settings: { cardWidth: 85, zenMode: false, isolatedView: false }, 
+    categories: [
+        { id: 'temp_init', name: '加载中...', icon: '⌛' }
+    ], 
+    items: [] 
+};
+let activeCatId = 'temp_init';
 let sysToken = localStorage.getItem('nav_token') || '';
 let isAdmin = false;
-let isZenTempExpanded = false;
+let isZenTempExpanded = true;
 let isActuallyZen = false;
 let isRendering = false; // 渲染防抖锁
 let isPageManagementMode = false; // 页面管理模式开关 (Task 3.3)
+let isSidebarPinned = localStorage.getItem('nav_sidebar_pinned') !== 'false'; // 默认开启图钉 (Task 4.5.3)
 let selectedIds = new Set(); // 已选中的 ID 集合
 let sortableInstances = []; // Sortable 实例存储
 let syncTimer = null; // 同步防抖计时器 (Task 2.5.4)
@@ -20,21 +27,29 @@ let syncRetryCount = 0; // 重试计数
 let touchStartY = 0; // 触摸起点 (Task 2.5.1)
 let currentSearchIndex = -1;
 let historyIndex = -1;
+let searchHistory = JSON.parse(localStorage.getItem('search_history') || '[]');
 let themeMode = localStorage.getItem('nav_theme_mode') || 'auto';
 let simpleMode = localStorage.getItem('nav_simple_mode') === 'true';
 let currentEnginePrefix = localStorage.getItem('nav_search_prefix') || 'https://cn.bing.com/search?q=';
 
 // ==================== 1. 初始化入口 ====================
 document.addEventListener('DOMContentLoaded', () => {
-    initSiteConfig();
+    // 1. 优先初始化基础 UI 交互与快捷键 (不依赖云端数据)
     initThemeMode();
     initSidebar();
     initZenMode();
-    init();
     initSearch();
     initAuthUI();
-    initAnnouncements();
     initGlobalEvents();
+
+    // 2. 初始视觉校准 (使用默认配置防止白屏)
+    updateStyles();
+
+    // 3. 异步获取云端配置与公告
+    initSiteConfig();
+    initAnnouncements();
+    init(); // 核心数据加载
+    
     checkSWUpdate();
 });
 
@@ -253,13 +268,110 @@ window.addEventListener('beforeunload', () => {
 });
 
 const updateStyles = () => {
-    const w = appData.settings?.cardWidth || 85;
+    // 1. 处理密度 (Task 4.2)
+    const density = appData.settings?.density || 'standard';
+    document.body.classList.remove('density-compact', 'density-standard', 'density-comfortable');
+    document.body.classList.add(`density-${density}`);
+
+    // 2. 处理侧边栏风格
+    const sidebarStyle = appData.settings?.sidebarStyle || 'classic';
+    document.body.classList.remove('sidebar-style-classic', 'sidebar-style-colorful');
+    document.body.classList.add(`sidebar-style-${sidebarStyle}`);
+
+    // 3. 处理视图模态 (Task 4.5.1 & 4.6.3)
+    const isZen = appData.settings?.zenMode === true;
+    const isolatedView = appData.settings?.isolatedView === true || isZen; // 禅意模式强制开启隔离视图
+    document.body.classList.toggle('view-isolated', isolatedView);
+    document.body.classList.toggle('zen-active', isZen);
+
+    // 4. 处理卡片宽度 (兼容旧配置)
+    const w = appData.settings?.cardWidth || (density === 'compact' ? 70 : (density === 'comfortable' ? 110 : 85));
     document.documentElement.style.setProperty('--card-w', w + 'px');
     document.documentElement.style.setProperty('--card-h', w + 'px');
+
+    // 5. 处理禅意静默态逻辑 (Task 4.6.1)
+    if (isZen && !isZenTempExpanded) {
+        document.body.classList.add('zen-silent');
+    } else {
+        document.body.classList.remove('zen-silent');
+    }
+
     const bg = appData.settings?.bgUrl;
     if (bg) {
         document.body.style.background = bg.startsWith('http') ? `url(${bg}) center/cover fixed` : bg;
     }
+};
+
+// Task 4.2: 视觉实验室控制
+const openVisualLab = () => {
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    
+    if (!modal || !body) return;
+
+    title.innerText = "视觉实验室 (Visual Laboratory)";
+    body.innerHTML = `
+        <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-window-line"></i> 浏览模态</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn ${!appData.settings?.isolatedView ? 'active' : ''}" onclick="setVisualSetting('isolatedView', false)">长页纵览</button>
+                <button class="tab-btn ${appData.settings?.isolatedView ? 'active' : ''}" onclick="setVisualSetting('isolatedView', true)">单视图隔离</button>
+            </div>
+        </div>
+        <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-keyboard-line"></i> 布局密度</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn ${appData.settings?.density === 'compact' ? 'active' : ''}" onclick="setVisualSetting('density', 'compact')">紧凑模式</button>
+                <button class="tab-btn ${(!appData.settings?.density || appData.settings?.density === 'standard') ? 'active' : ''}" onclick="setVisualSetting('density', 'standard')">标准平衡</button>
+                <button class="tab-btn ${appData.settings?.density === 'comfortable' ? 'active' : ''}" onclick="setVisualSetting('density', 'comfortable')">极致透气</button>
+            </div>
+        </div>
+        <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-palette-line"></i> 侧边栏视觉风格</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn ${(!appData.settings?.sidebarStyle || appData.settings?.sidebarStyle === 'classic') ? 'active' : ''}" onclick="setVisualSetting('sidebarStyle', 'classic')">经典毛玻璃</button>
+                <button class="tab-btn ${appData.settings?.sidebarStyle === 'colorful' ? 'active' : ''}" onclick="setVisualSetting('sidebarStyle', 'colorful')">缤纷拟物</button>
+            </div>
+        </div>
+        <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-focus-3-line"></i> 核心体验模态</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn ${appData.settings?.zenMode ? 'active' : ''}" onclick="toggleZenMode()">
+                    <i class="ri-leaf-line"></i> 禅意模式 (Zen): ${appData.settings?.zenMode ? '已开启' : '已关闭'}
+                </button>
+            </div>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示: 使用 Ctrl + B 可快速切换禅意模式</p>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+    confirmBtn.style.display = 'none'; // 即时生效
+};
+
+window.setVisualSetting = (key, value) => {
+    if (!appData.settings) appData.settings = {};
+    appData.settings[key] = value;
+    updateStyles();
+    openVisualLab(); // 刷新弹窗状态
+    syncConfigToCloud();
+};
+
+const toggleZenMode = (force) => {
+    if (!appData.settings) appData.settings = {};
+    const newState = typeof force === 'boolean' ? force : !appData.settings.zenMode;
+    appData.settings.zenMode = newState;
+    
+    // 如果关闭禅意模式，确保侧边栏展开
+    if (!newState) isZenTempExpanded = true;
+    else isZenTempExpanded = false;
+
+    showToast(newState ? "已进入禅意模式 (Ctrl+B)" : "已回到标准模式", newState ? "#2c3e50" : "#3498db");
+    renderNav();
+    updateStyles();
+    if (document.getElementById('edit-modal').style.display === 'flex') openVisualLab();
+    syncConfigToCloud();
 };
 
 const toggleSkeleton = (s) => {
@@ -464,11 +576,16 @@ const initAuthUI = () => {
 
 // ==================== 4. 数据加载 ====================
 const init = async (forceRender = false) => {
+    // 增加一个 3 秒超时保底，防止 API 挂起导致白屏
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Fetch timeout')), 3000));
+    
     try {
         console.log('Fetching config...');
-        const res = await fetch('/api/config', {
+        const fetchPromise = fetch('/api/config', {
             headers: sysToken ? { 'Authorization': sysToken } : {}
         });
+        
+        const res = await Promise.race([fetchPromise, timeoutPromise]);
         
         if (res.ok) {
             const data = await res.json();
@@ -488,19 +605,24 @@ const init = async (forceRender = false) => {
             
             isAdmin = appData.isAdmin;
             localStorage.setItem('nav_app_data', JSON.stringify(appData));
-            
-            // 渲染
-            renderNav();
-            renderTools();
-            updateStyles();
         } else {
-            console.error('Config fetch failed:', res.status);
+            throw new Error(`Server returned ${res.status}`);
         }
-        toggleSkeleton(false);
     } catch (e) { 
-        console.error('Init error:', e);
-        toggleSkeleton(false);
+        console.warn('[Init] Load failed, using cache/default:', e.message);
+        const cached = localStorage.getItem('nav_app_data');
+        if (cached) {
+            try {
+                appData = JSON.parse(cached);
+                showToast("连接服务器超时，已加载本地缓存", "#e67e22");
+            } catch(err) { console.error('Cache parse error'); }
+        }
+    } finally {
+        // 无论如何都要渲染并隐藏骨架屏
+        renderNav();
         renderTools();
+        updateStyles();
+        toggleSkeleton(false);
     }
 };
 
@@ -520,11 +642,21 @@ const renderNav = () => {
     try {
         const sidebarNav = document.getElementById('sidebar-nav');
         const container = document.getElementById('grid-container');
-        if (!sidebarNav || !container) return;
+        if (!sidebarNav || !container) {
+            isRendering = false;
+            return;
+        }
 
-        // 基础数据防御
-        if (!appData || !appData.categories) {
-            console.warn('AppData not ready');
+        // 基础数据防御与空态处理
+        if (!appData || !appData.categories || appData.categories.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state-tip" style="text-align:center; padding: 100px 20px; color: var(--text-dim);">
+                    <i class="ri-wind-line" style="font-size: 48px; opacity: 0.3;"></i>
+                    <p style="margin-top: 15px;">暂无内容，请登录后开始添加</p>
+                    ${!sysToken ? '<button class="tab-btn" style="margin-top:20px;" onclick="document.getElementById(\'auth-overlay\').style.display=\'flex\'">立即登录</button>' : ''}
+                </div>
+            `;
+            isRendering = false;
             return;
         }
 
@@ -547,25 +679,57 @@ const renderNav = () => {
 
         cats.forEach(cat => {
             const navItem = document.createElement('div');
-            navItem.className = `sidebar-nav-item ${activeCatId === cat.id ? 'active' : ''}`;
-            navItem.innerHTML = `<span class="nav-icon">${cat.icon}</span><span class="nav-label">${cat.name}</span>`;
+            navItem.className = `sidebar-nav-item ${activeCatId === cat.id ? 'active' : ''} ${cat.hidden ? 'is-hidden-cat' : ''}`;
+            
+            // 计算书签数量 (Task 4.5.2)
+            const itemCount = appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
+            const countHtml = (isAdmin && isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') 
+                ? `<span class="nav-count">${itemCount}</span>` 
+                : '';
+
+            // 基础内容
+            let navHtml = `<span class="nav-icon" title="${isPageManagementMode ? '拖拽排序' : ''}">${cat.icon}</span><span class="nav-label">${cat.name}${countHtml}</span>`;
+            
+            // Task 4.3: 增加管理快捷按钮
+            if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ' && isAdmin) {
+                navHtml += `
+                    <div class="nav-actions">
+                        <span class="nav-action-btn" title="编辑分类" onclick="event.stopPropagation(); openCategoryEditModal('${cat.id}')">
+                            <i class="ri-settings-4-line"></i>
+                        </span>
+                        <span class="nav-action-btn" title="${cat.hidden ? '取消隐藏' : '隐藏分类'}" onclick="event.stopPropagation(); toggleCategoryVisibility('${cat.id}')">
+                            <i class="${cat.hidden ? 'ri-eye-line' : 'ri-eye-off-line'}"></i>
+                        </span>
+                        <span class="nav-action-btn delete" title="删除分类" onclick="event.stopPropagation(); deleteCategory('${cat.id}')">
+                            <i class="ri-delete-bin-line"></i>
+                        </span>
+                    </div>
+                `;
+            }
+            
+            navItem.innerHTML = navHtml;
             navItem.onclick = () => {
                 activeCatId = cat.id;
-                if (appData.settings?.zenMode) { 
+                const isIsolated = appData.settings?.isolatedView || appData.settings?.zenMode;
+                
+                if (isIsolated) { 
                     isZenTempExpanded = true; 
+                    document.body.classList.remove('zen-silent'); // 点击切换时必然唤醒
                     renderNav(); 
-                    // 切换分类时，由于是隔离渲染，直接滚动到顶部即可
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
                 else { 
                     document.getElementById('section-' + cat.id)?.scrollIntoView({ behavior: 'smooth' }); 
+                    // 非隔离模式下也更新 active 状态（视觉同步）
+                    document.querySelectorAll('.sidebar-nav-item').forEach(el => el.classList.remove('active'));
+                    navItem.classList.add('active');
                 }
             };
             sidebarNav.appendChild(navItem);
 
-            // Zen Mode 核心逻辑：遵循单一视图原则 (Task 2.1 规范化)
-            // 在极简模式展开态，只渲染当前选中的分类，实现视觉隔离
-            if (appData.settings?.zenMode && isZenTempExpanded && cat.id !== activeCatId) return;
+            // 视图隔离核心逻辑 (Task 4.5.1 & 4.6.3)
+            const isIsolatedView = appData.settings?.isolatedView || appData.settings?.zenMode;
+            if (isIsolatedView && cat.id !== activeCatId) return;
 
             const section = document.createElement('div');
             section.className = 'category-section';
@@ -675,14 +839,19 @@ const renderNav = () => {
             }
         }
 
+        // 统一禅意模式状态管理 (Task 4.6.1)
         isActuallyZen = appData.settings?.zenMode && !isZenTempExpanded;
-        document.body.classList.toggle('zen-active', isActuallyZen);
+        if (isActuallyZen && !document.body.classList.contains('zen-silent-woken')) {
+            document.body.classList.add('zen-silent');
+        } else {
+            document.body.classList.remove('zen-silent');
+        }
         
         const zenBtn = document.getElementById('zen-expand-btn');
-        if (zenBtn) zenBtn.style.display = isActuallyZen ? 'flex' : 'none';
+        if (zenBtn) zenBtn.style.display = (appData.settings?.zenMode && !isZenTempExpanded) ? 'flex' : 'none';
 
         // Zen Mode 下强制侧边栏行为 (Task 2.1)
-        if (isActuallyZen || (appData.settings?.zenMode && isZenTempExpanded)) {
+        if (appData.settings?.zenMode) {
             const sidebar = document.getElementById('sidebar');
             if (sidebar && !sidebar.classList.contains('open')) {
                 document.getElementById('sidebar-overlay')?.classList.remove('visible');
@@ -690,7 +859,7 @@ const renderNav = () => {
         }
 
         // Task 1.1: UX Bridge - 游客引导
-        if (!sysToken && isActuallyZen) {
+        if (!sysToken && appData.settings?.zenMode && !isZenTempExpanded) {
             let bridge = document.getElementById('guest-login-bridge');
             if (!bridge) {
                 bridge = document.createElement('div');
@@ -711,87 +880,117 @@ const renderNav = () => {
 
 const renderTools = () => {
     const area = document.getElementById('sidebar-admin-actions');
+    const userArea = document.getElementById('sidebar-user-section');
     const adminBanner = document.getElementById('admin-active-banner');
-    if (!area) return;
+    if (!area || !userArea) return;
     
     // 如果已登录
     if (sysToken) {
         const userDisplayName = appData.username || '已登录用户';
         const roleBadge = isAdmin ? '<span class="admin-badge">ADMIN</span>' : '';
         
-        // Task 1.1: 配额状态感知
+        // 1. 渲染顶部用户信息和登出 (Fixed at Top)
+        userArea.innerHTML = `
+            <div class="sidebar-user-info">
+                <i class="ri-user-smile-line"></i>
+                <span>${userDisplayName} ${roleBadge}</span>
+            </div>
+            <div class="sidebar-nav-item logout-btn" onclick="doLogout()">
+                <span class="nav-icon"><i class="ri-logout-box-r-line"></i></span>
+                <span class="nav-label">退出登录</span>
+            </div>
+        `;
+
+        // 2. 渲染底部管理工具
+        // 配额状态感知
         const isAllFull = appData.categories.length > 0 && appData.categories.every(cat => 
             appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length >= 100
         );
 
-        // 管理员模式视觉高亮切换
-        if (isAdmin && adminBanner) {
-            adminBanner.style.display = 'flex';
+        // 管理员模式视觉高亮切换 (Task 4.3 增强)
+        if (isAdmin && isPageManagementMode) {
+            if (adminBanner) {
+                adminBanner.style.display = 'flex';
+                adminBanner.innerHTML = `
+                    <i class="ri-shield-flash-line"></i>
+                    <span>当前处于页面管理模式 - 分类与书签支持跨分类拖拽和快捷管理</span>
+                    <button class="banner-exit-btn" onclick="togglePageManagement(false)">退出管理</button>
+                `;
+            }
             document.body.classList.add('admin-mode');
-        } else if (adminBanner) {
-            adminBanner.style.display = 'none';
+        } else {
+            if (adminBanner) adminBanner.style.display = 'none';
             document.body.classList.remove('admin-mode');
         }
 
         area.innerHTML = `
             <div class="sidebar-admin-container">
-                <div class="sidebar-nav-label">管理面板</div>
-                
+                <!-- 1. 内容创作 (Content) -->
+                <div class="sidebar-group">
+                    <div class="sidebar-group-title">内容创作</div>
+                    <div class="sidebar-nav-item ${isPageManagementMode ? 'active' : ''}" onclick="togglePageManagement()">
+                        <span class="nav-icon"><i class="ri-layout-masonry-line"></i></span>
+                        <span class="nav-label">页面管理</span>
+                    </div>
+                    
+                    <!-- Task 4.8.1: 管理工具子菜单 -->
+                    ${isPageManagementMode ? `
+                    <div class="admin-tools-submenu" style="padding-left: 15px; margin-top: 5px; border-left: 1px dashed rgba(255,255,255,0.1); margin-left: 20px;">
+                        <div class="sidebar-nav-item ${isAllFull ? 'disabled' : ''}" 
+                             onclick="${isAllFull ? 'showToast(\'书签配额已满\', \'#e74c3c\')' : 'openEditModal(\'\')'}"
+                             style="font-size: 13px; padding: 6px 12px;">
+                            <span class="nav-icon"><i class="ri-add-circle-line"></i></span>
+                            <span class="nav-label">新增网址</span>
+                        </div>
+                        <div class="sidebar-nav-item" onclick="openJsonEditor()" style="font-size: 13px; padding: 6px 12px;">
+                            <span class="nav-icon"><i class="ri-code-s-slash-line"></i></span>
+                            <span class="nav-label">专家模式</span>
+                        </div>
+                        <div class="sidebar-nav-item" onclick="exportConfig()" style="font-size: 13px; padding: 6px 12px;">
+                            <span class="nav-icon"><i class="ri-download-2-line"></i></span>
+                            <span class="nav-label">备份导出</span>
+                        </div>
+                        <div class="sidebar-nav-item" onclick="document.getElementById('import-file').click()" style="font-size: 13px; padding: 6px 12px;">
+                            <span class="nav-icon"><i class="ri-upload-2-line"></i></span>
+                            <span class="nav-label">配置导入</span>
+                        </div>
+                        <div class="sidebar-nav-item" onclick="doResetConfig()" style="font-size: 13px; padding: 6px 12px;">
+                            <span class="nav-icon"><i class="ri-refresh-line"></i></span>
+                            <span class="nav-label">重置模板</span>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+
+                <!-- 2. 系统控制 (Control) -->
                 ${isAdmin ? `
-                <div class="sidebar-nav-item admin-tool-btn" onclick="openAdminHub()">
-                    <span class="nav-icon"><i class="ri-shield-user-line"></i></span>
-                    <span class="nav-label">控制中心</span>
+                <div class="sidebar-group">
+                    <div class="sidebar-group-title">系统控制</div>
+                    <div class="sidebar-nav-item" onclick="openAdminHub()">
+                        <span class="nav-icon"><i class="ri-shield-user-line"></i></span>
+                        <span class="nav-label">控制中心</span>
+                    </div>
                 </div>` : ''}
 
-                <div class="sidebar-nav-item admin-tool-btn ${isPageManagementMode ? 'active' : ''}" onclick="togglePageManagement()">
-                    <span class="nav-icon"><i class="ri-layout-masonry-line"></i></span>
-                    <span class="nav-label">页面管理</span>
-                </div>
-
-                <div class="sidebar-nav-item admin-tool-btn ${isAllFull ? 'disabled' : ''}" 
-                     onclick="${isAllFull ? 'showToast(\'书签配额已满\', \'#e74c3c\')' : 'openEditModal(\'\')'}">
-                    <span class="nav-icon"><i class="ri-add-circle-line"></i></span>
-                    <span class="nav-label">新增网址</span>
-                </div>
-
-                <div class="sidebar-nav-item admin-tool-btn" onclick="openJsonEditor()">
-                    <span class="nav-icon"><i class="ri-code-s-slash-line"></i></span>
-                    <span class="nav-label">专家模式</span>
-                </div>
-
-                <div class="sidebar-nav-item admin-tool-btn" onclick="exportConfig()">
-                    <span class="nav-icon"><i class="ri-download-2-line"></i></span>
-                    <span class="nav-label">备份导出</span>
-                </div>
-
-                <div class="sidebar-nav-item admin-tool-btn" onclick="document.getElementById('import-file').click()">
-                    <span class="nav-icon"><i class="ri-upload-2-line"></i></span>
-                    <span class="nav-label">配置导入</span>
-                </div>
-
-                <div class="sidebar-nav-item admin-tool-btn" onclick="doResetConfig()">
-                    <span class="nav-icon"><i class="ri-refresh-line"></i></span>
-                    <span class="nav-label">重置模板</span>
-                </div>
-
-                <div class="sidebar-nav-item admin-tool-btn logout-btn" onclick="doLogout()">
-                    <span class="nav-icon"><i class="ri-logout-box-r-line"></i></span>
-                    <span class="nav-label">退出系统</span>
-                </div>
-
-                <div class="sidebar-user-info">
-                    <i class="ri-user-smile-line"></i>
-                    <span>${userDisplayName} ${roleBadge}</span>
+                <!-- 3. 视觉实验室 (Visual Laboratory) -->
+                <div class="sidebar-group">
+                    <div class="sidebar-group-title">视觉实验室</div>
+                    <div class="sidebar-nav-item" onclick="openVisualLab()">
+                        <span class="nav-icon"><i class="ri-palette-line"></i></span>
+                        <span class="nav-label">个性化偏好</span>
+                    </div>
                 </div>
             </div>
         `;
     } else {
-        area.innerHTML = `
+        // 未登录状态：顶部显示登录按钮
+        userArea.innerHTML = `
             <div class="sidebar-nav-item" onclick="document.getElementById('auth-overlay').style.display='flex'">
                 <span class="nav-icon"><i class="ri-user-line"></i></span>
                 <span class="nav-label">登录 / 注册</span>
             </div>
         `;
+        area.innerHTML = '';
     }
 };
 
@@ -819,13 +1018,130 @@ const toggleSidebar = (force) => {
 const initSidebar = () => {
     const t = document.getElementById('sidebar-toggle');
     const o = document.getElementById('sidebar-overlay');
+    const pinBtn = document.getElementById('btn-sidebar-pin');
+
     if (t) t.onclick = () => toggleSidebar();
     if (o) o.onclick = () => toggleSidebar(false);
+
+    // Task 4.6.4: 移动端边缘滑动抽屉 (Swipe Engine)
+    let touchStartX = 0;
+    let touchStartTime = 0;
+
+    document.addEventListener('touchstart', (e) => {
+        // 记录起点 X 坐标和时间
+        touchStartX = e.touches[0].clientX;
+        touchStartTime = Date.now();
+    }, { passive: true });
+
+    document.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].clientX;
+        const diffX = touchEndX - touchStartX;
+        const diffTime = Date.now() - touchStartTime;
+
+        // 判定条件：
+        // 1. 从左侧边缘触发 (起始点距离屏幕左侧 < 40px)
+        // 2. 向右滑动距离足够 (距离 > 60px)
+        // 3. 滑动速度较快 (时间 < 300ms)
+        // 4. 侧边栏当前是关闭状态
+        if (touchStartX < 40 && diffX > 60 && diffTime < 300) {
+            const s = document.getElementById('sidebar');
+            if (s && !s.classList.contains('open')) {
+                toggleSidebar(true);
+            }
+        }
+        
+        // 可选：向左滑动关闭侧边栏 (任意位置触发)
+        if (diffX < -60 && diffTime < 300) {
+            const s = document.getElementById('sidebar');
+            if (s && s.classList.contains('open')) {
+                toggleSidebar(false);
+            }
+        }
+    }, { passive: true });
+
+    // 图钉初始化 (Task 4.5.3)
+    document.body.classList.toggle('sidebar-pinned', isSidebarPinned);
+    if (pinBtn) {
+        pinBtn.onclick = () => {
+            isSidebarPinned = !isSidebarPinned;
+            document.body.classList.toggle('sidebar-pinned', isSidebarPinned);
+            localStorage.setItem('nav_sidebar_pinned', isSidebarPinned);
+            
+            // 如果取消固定，自动关闭侧边栏
+            if (!isSidebarPinned) toggleSidebar(false);
+            
+            showToast(isSidebarPinned ? "侧边栏已固定" : "侧边栏已设为悬浮");
+        };
+    }
 };
 
 const initZenMode = () => {
     const btn = document.getElementById('zen-expand-btn');
-    if (btn) btn.onclick = () => { isZenTempExpanded = true; renderNav(); };
+    if (btn) btn.onclick = () => wakeUpNavigation();
+
+    // Task 4.6.1: 智能唤醒监听器
+    let moveDistance = 0;
+    
+    // 将重置逻辑挂载到全局或闭包内，确保 wakeUpNavigation 也能触发它
+    window.resetZenSleepTimer = () => {
+        if (window.zenSleepTimer) clearTimeout(window.zenSleepTimer);
+        if (appData.settings?.zenMode && isZenTempExpanded) {
+            window.zenSleepTimer = setTimeout(() => {
+                // 如果搜索框没有焦点，才自动沉睡
+                if (document.activeElement?.id !== 'sea-input') {
+                    isZenTempExpanded = false;
+                    updateStyles();
+                    renderNav();
+                }
+            }, 60000); // 1分钟无操作自动沉睡
+        }
+    };
+
+    window.addEventListener('mousemove', (e) => {
+        window.resetZenSleepTimer();
+        if (!document.body.classList.contains('zen-silent')) return;
+        moveDistance += Math.abs(e.movementX) + Math.abs(e.movementY);
+        if (moveDistance > 300) wakeUpNavigation(); // 累计移动 300px 唤醒
+    }, { passive: true });
+
+    document.addEventListener('keydown', (e) => {
+        window.resetZenSleepTimer();
+        if (document.body.classList.contains('zen-silent')) {
+            // 按下任意键唤醒（排除功能键）
+            if (e.key.length === 1 || ['Enter', 'Space', 'Backspace'].includes(e.key)) {
+                wakeUpNavigation();
+            }
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        window.resetZenSleepTimer();
+        if (document.body.classList.contains('zen-silent')) {
+            // 排除交互元素
+            if (!e.target.closest('.search-wrapper, .sidebar, .modal')) {
+                wakeUpNavigation();
+            }
+        }
+    });
+};
+
+const wakeUpNavigation = () => {
+    if (!document.body.classList.contains('zen-silent')) return;
+    
+    isZenTempExpanded = true;
+    updateStyles(); // 应用 zen-silent-woken 逻辑前先更新状态
+    document.body.classList.remove('zen-silent');
+    document.body.classList.add('zen-silent-woken');
+    
+    renderNav();
+    
+    // 唤醒后重置计时器
+    if (window.resetZenSleepTimer) window.resetZenSleepTimer();
+    
+    // 自动聚焦搜索框
+    setTimeout(() => {
+        document.getElementById('sea-input')?.focus();
+    }, 100);
 };
 
 const initSearch = () => {
@@ -838,6 +1154,11 @@ const initSearch = () => {
         if (e.key === 'Enter') {
             const val = sea.value.trim();
             if (val) {
+                // Task 4.6.2: 搜索历史持久化
+                searchHistory = [val, ...searchHistory.filter(h => h !== val)].slice(0, 20);
+                localStorage.setItem('search_history', JSON.stringify(searchHistory));
+                historyIndex = -1;
+
                 // 如果有选中的搜索项，优先跳转
                 const activeItem = resultsList.querySelector('.local-result-item.active');
                 if (activeItem) {
@@ -850,9 +1171,24 @@ const initSearch = () => {
         // 键盘上下选择
         if (['ArrowDown', 'ArrowUp'].includes(e.key)) {
             const items = Array.from(resultsList.querySelectorAll('.local-result-item'));
-            if (items.length === 0) return;
-            e.preventDefault();
             
+            // Task 4.6.2: 空输入态下的历史回溯
+            if (items.length === 0 || !sea.value.trim()) {
+                if (searchHistory.length > 0) {
+                    e.preventDefault();
+                    if (e.key === 'ArrowUp') {
+                        historyIndex = Math.min(historyIndex + 1, searchHistory.length - 1);
+                    } else {
+                        historyIndex = Math.max(historyIndex - 1, -1);
+                    }
+                    sea.value = historyIndex === -1 ? '' : searchHistory[historyIndex];
+                    // 触发 input 事件以处理视觉反馈
+                    sea.dispatchEvent(new Event('input'));
+                }
+                return;
+            }
+
+            e.preventDefault();
             let activeIdx = items.findIndex(i => i.classList.contains('active'));
             if (e.key === 'ArrowDown') activeIdx = (activeIdx + 1) % items.length;
             else activeIdx = (activeIdx - 1 + items.length) % items.length;
@@ -862,7 +1198,10 @@ const initSearch = () => {
     };
 
     // 搜索态视觉隔离逻辑 (Task 2.5.2 增强)
-    sea.addEventListener('input', () => {
+    sea.addEventListener('input', (e) => {
+        // 如果不是由脚本触发的（即用户手动输入），则重置历史索引
+        if (e.isTrusted) historyIndex = -1;
+        
         const val = sea.value.trim().toLowerCase();
         const hasText = val.length > 0;
         document.body.classList.toggle('is-searching', hasText);
@@ -920,16 +1259,91 @@ const togglePageManagement = (force) => {
     
     if (isPageManagementMode) {
         selectedIds.clear();
-        showToast("进入页面管理模式：支持跨分类拖拽和批量操作", "#3498db");
+        showToast("进入页面管理模式：支持分类快捷编辑和书签跨分类拖拽", "#3498db");
         initSortable();
     } else {
         destroySortable();
+        selectedIds.clear();
         updateBatchBar();
+        // Task 4.8.2: 深度状态重置 (关闭可能打开的专家模式编辑器)
+        const monacoModal = document.getElementById('monaco-modal');
+        if (monacoModal) monacoModal.style.display = 'none';
         showToast("已退出页面管理模式");
     }
     
     renderTools();
-    renderNav(); // 刷新渲染以更新交互状态
+    renderNav();
+};
+
+// Task 4.3: 分类管理函数
+const openCategoryEditModal = (catId) => {
+    const cat = appData.categories.find(c => c.id === catId);
+    if (!cat) return;
+
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    
+    if (!modal || !body) return;
+
+    title.innerText = "编辑分类";
+    body.innerHTML = `
+        <div class="form-row">
+            <label><i class="ri-font-size"></i> 分类名称</label>
+            <input type="text" id="edit-cat-name" value="${cat.name}" placeholder="如：社交媒体">
+        </div>
+        <div class="form-row">
+            <label><i class="ri-image-line"></i> 分类图标 (Emoji)</label>
+            <input type="text" id="edit-cat-icon" value="${cat.icon}" placeholder="如：🌐">
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+    confirmBtn.style.display = 'block';
+    confirmBtn.onclick = async () => {
+        const newName = document.getElementById('edit-cat-name').value.trim();
+        const newIcon = document.getElementById('edit-cat-icon').value.trim();
+        
+        if (!newName) return showToast("名称不能为空", "#e67e22");
+        
+        cat.name = newName;
+        cat.icon = newIcon || '📂';
+        
+        modal.style.display = 'none';
+        showToast("分类已更新");
+        syncConfigToCloud();
+        renderNav();
+    };
+};
+
+const toggleCategoryVisibility = (catId) => {
+    const cat = appData.categories.find(c => c.id === catId);
+    if (!cat) return;
+    
+    cat.hidden = !cat.hidden;
+    showToast(cat.hidden ? `分类 ${cat.name} 已隐藏` : `分类 ${cat.name} 已取消隐藏`);
+    syncConfigToCloud();
+    renderNav();
+};
+
+const deleteCategory = async (catId) => {
+    const cat = appData.categories.find(c => c.id === catId);
+    if (!cat) return;
+
+    const itemCount = appData.items.filter(i => (i.catId === catId || i.cat_id === catId)).length;
+    const msg = itemCount > 0 
+        ? `该分类下有 ${itemCount} 个书签，删除分类将同时删除这些书签！确定继续吗？` 
+        : `确定要删除分类 "${cat.name}" 吗？`;
+
+    if (!confirm(msg)) return;
+
+    appData.categories = appData.categories.filter(c => c.id !== catId);
+    appData.items = appData.items.filter(i => (i.catId !== catId && i.cat_id !== catId));
+
+    showToast(`分类 ${cat.name} 及其内容已删除`);
+    syncConfigToCloud();
+    renderNav();
 };
 
 const initSortable = () => {
@@ -1070,6 +1484,28 @@ const doBatchDelete = async () => {
     updateBatchBar();
 };
 
+const doBatchToggleHidden = async () => {
+    if (selectedIds.size === 0) return;
+    
+    // 检查第一个选中的项的状态作为切换基准
+    const firstId = Array.from(selectedIds)[0];
+    const firstItem = appData.items.find(i => i.id === firstId);
+    const targetHidden = firstItem ? !firstItem.hidden : true;
+
+    appData.items.forEach(i => {
+        if (selectedIds.has(i.id)) {
+            i.hidden = targetHidden;
+        }
+    });
+
+    selectedIds.clear();
+    showToast(`批量${targetHidden ? '隐藏' : '显示'}成功`);
+    
+    await syncConfigToCloud();
+    renderNav();
+    updateBatchBar();
+};
+
 const openBatchMoveModal = () => {
     if (selectedIds.size === 0) return;
     
@@ -1186,31 +1622,54 @@ const openAdminHub = async () => {
                 </table>
             </div>
             <div id="hub-content-config" class="hub-pane">
-                <div class="form-group">
-                    <label>站点标题</label>
-                    <input type="text" id="admin-site-title" value="${config.siteTitle || ''}">
+                <div class="admin-config-section">
+                    <div class="sidebar-group-title" style="padding-left:0; margin-bottom:10px; opacity:0.8;">🌐 品牌与 SEO 设置</div>
+                    <div class="form-row" style="display:flex; gap:10px;">
+                        <div class="form-group" style="flex:1">
+                            <label>站点标题</label>
+                            <input type="text" id="admin-site-title" value="${config.siteTitle || ''}" placeholder="CloudNav">
+                        </div>
+                        <div class="form-group" style="flex:1">
+                            <label>Favicon URL</label>
+                            <input type="text" id="admin-favicon-url" value="${config.faviconUrl || ''}" placeholder="https://...">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>SEO 关键词</label>
+                        <input type="text" id="admin-site-keywords" value="${config.seoKeywords || ''}" placeholder="关键词, 以逗号分隔">
+                    </div>
+                    <div class="form-group">
+                        <label>SEO 描述</label>
+                        <textarea id="admin-site-desc" rows="2" placeholder="站点描述信息...">${config.seoDescription || ''}</textarea>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Favicon URL</label>
-                    <input type="text" id="admin-favicon-url" value="${config.faviconUrl || ''}">
+
+                <div class="admin-config-section" style="margin-top:20px; border-top:1px solid var(--glass-border); padding-top:15px;">
+                    <div class="sidebar-group-title" style="padding-left:0; margin-bottom:10px; opacity:0.8;">🛡️ 注册与准入策略</div>
+                    <div class="strategy-panel" style="background:rgba(255,255,255,0.05); padding:15px; border-radius:10px;">
+                        <div class="form-group" style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <div style="font-size:14px; color:white;">开放注册</div>
+                                <div style="font-size:11px; color:#888;">允许新用户直接注册账号</div>
+                            </div>
+                            <label class="switch-ui">
+                                <input type="checkbox" id="admin-allow-reg" ${config.allowOpenRegistration !== false ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="form-group" style="display:flex; justify-content:space-between; align-items:center; margin-top:15px;">
+                            <div>
+                                <div style="font-size:14px; color:white;">强制邀请码</div>
+                                <div style="font-size:11px; color:#888;">注册时必须填写有效的邀请码</div>
+                            </div>
+                            <label class="switch-ui">
+                                <input type="checkbox" id="admin-require-invite" ${config.requireInvitation ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>SEO 关键词</label>
-                    <input type="text" id="admin-site-keywords" value="${config.seoKeywords || ''}">
-                </div>
-                <div class="form-group">
-                    <label>SEO 描述</label>
-                    <textarea id="admin-site-desc">${config.seoDescription || ''}</textarea>
-                </div>
-                <div class="form-group" style="display:flex; gap:20px; margin-top:10px;">
-                    <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
-                        <input type="checkbox" id="admin-allow-reg" ${config.allowOpenRegistration !== false ? 'checked' : ''}> 开放注册
-                    </label>
-                    <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
-                        <input type="checkbox" id="admin-require-invite" ${config.requireInvitation ? 'checked' : ''}> 强制邀请码
-                    </label>
-                </div>
-                <button class="tab-btn active" style="width:100%; margin-top:15px;" onclick="saveSiteConfig()">保存全站配置</button>
+                <button class="tab-btn active" style="width:100%; margin-top:20px; font-weight:bold; height:40px;" onclick="saveSiteConfig()">保存全站配置</button>
             </div>
             <div id="hub-content-invites" class="hub-pane">
                 <div style="display:flex; gap:10px; margin-bottom:15px;">
@@ -1561,6 +2020,17 @@ const initGlobalEvents = () => {
         }, { passive: true });
     }
 
+    // 监听全局快捷键 (Task 4.2)
+    // 注意：这里仅处理基础全局快捷键，复杂的场景流转在下面的 document.keydown 中处理
+    window.addEventListener('keydown', (e) => {
+        if (!e.key) return;
+        const key = e.key.toLowerCase();
+        const isCtrl = e.ctrlKey || e.metaKey;
+        
+        // 仅保留最核心的、不依赖场景的快捷键，避免与后续监听冲突
+        // Ctrl+B 的逻辑已整合到下方的 document.keydown 中，此处移除冲突监听
+    });
+
     // 监听文件导入
     const importInput = document.getElementById('import-file');
     if (importInput) {
@@ -1654,9 +2124,11 @@ const initGlobalEvents = () => {
     document.addEventListener('keydown', (e) => {
         const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
         const focusedCard = document.activeElement.closest('.card');
+        const isCtrl = e.ctrlKey || e.metaKey;
+        const key = e.key.toLowerCase();
         
         // 2. 全键盘磁贴流转算法 (Task 2.5.3 - 动态适配)
-        if (!isInput && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        if (!isInput && ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
             const cards = Array.from(document.querySelectorAll('.grid-container .card:not(.hidden-item)'));
             if (cards.length === 0) return;
 
@@ -1693,21 +2165,26 @@ const initGlobalEvents = () => {
             return;
         }
 
-        // 3. Ctrl+B 切换侧边栏 (逃生通道)
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        // 3. Ctrl+B 切换禅意模式/侧边栏 (逃生通道)
+        if (isCtrl && key === 'b') {
             e.preventDefault();
+            // 如果在静默态，Ctrl+B 优先唤醒并显示侧边栏
             if (appData.settings?.zenMode && !isZenTempExpanded) {
                 isZenTempExpanded = true;
                 renderNav();
                 setTimeout(() => toggleSidebar(true), 100);
+            } else if (appData.settings?.zenMode && isZenTempExpanded) {
+                // 如果已唤醒，则切换禅意模式状态
+                toggleZenMode();
             } else {
+                // 标准模式下仅切换侧边栏
                 toggleSidebar();
             }
             return;
         }
 
         // 4. 键入即唤醒 (Task 2.2)
-        if (!isInput && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (!isInput && e.key.length === 1 && !isCtrl && !e.altKey) {
             const sea = document.getElementById('sea-input');
             if (sea) {
                 sea.focus();
@@ -1715,8 +2192,8 @@ const initGlobalEvents = () => {
             }
         }
 
-        // 5. Alt + L 唤起登录
-        if (e.altKey && e.key.toLowerCase() === 'l') {
+        // 5. Ctrl + L 或 Alt + L 唤起登录
+        if ((isCtrl || e.altKey) && key === 'l') {
             e.preventDefault();
             document.getElementById('auth-overlay').style.display = 'flex';
             setTimeout(() => document.getElementById('auth-username')?.focus(), 100);
@@ -1724,7 +2201,7 @@ const initGlobalEvents = () => {
         }
 
         // 6. Ctrl+K 快速聚焦
-        if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+        if (isCtrl && key === 'k') {
             e.preventDefault();
             const sea = document.getElementById('sea-input');
             if (sea) {
@@ -1772,6 +2249,7 @@ const initGlobalEvents = () => {
             // 如果是在展开态，回归极简态
             if (isZenTempExpanded) {
                 isZenTempExpanded = false;
+                document.body.classList.remove('zen-silent-woken'); // 重置唤醒状态 (Task 4.6.1)
                 renderNav();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 return;

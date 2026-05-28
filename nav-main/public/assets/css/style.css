@@ -219,12 +219,498 @@ body.no-blur body.view-style-2 .card.has-bg {
     }
 }
 
+/* 分类管理动作 (Task 4.3) */
+.sidebar-nav-item {
+    position: relative;
+    padding-right: 10px;
+}
+
+.nav-actions {
+    display: none;
+    gap: 4px;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+body.page-manage-active .sidebar-nav-item:hover .nav-actions {
+    display: flex;
+    opacity: 1;
+}
+
+.nav-action-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.nav-action-btn:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.nav-action-btn.delete:hover {
+    background: #e74c3c;
+}
+
+/* 增强的管理状态栏 */
+.admin-active-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
+    background: linear-gradient(90deg, #2c3e50, #2980b9);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    z-index: 5000;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.banner-exit-btn {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    padding: 2px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.2s ease;
+}
+
+.banner-exit-btn:hover {
+    background: #e74c3c;
+    border-color: #e74c3c;
+}
+
+/* 优化批量操作条 */
+.batch-actions-bar {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: rgba(15, 25, 35, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    padding: 12px 25px;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    z-index: 4000;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.batch-actions-bar.visible {
+    transform: translateX(-50%) translateY(0);
+}
+
+.batch-btn {
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    color: white;
+}
+
+/* Switch UI (Task 4.4) */
+.switch-ui {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 22px;
+}
+
+.switch-ui input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(255,255,255,0.1);
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: var(--primary);
+}
+
+input:checked + .slider:before {
+    transform: translateX(22px);
+}
+
+/* 视图切换动画 (Task 4.5.1) */
+.category-section {
+    animation: sectionFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes sectionFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 隔离模式下的布局优化 */
+body.view-isolated .category-section {
+    margin-top: 20px;
+}
+
+body.view-isolated .category-section-title {
+    font-size: 24px;
+    margin-bottom: 30px;
+    text-align: center;
+    border-bottom: none;
+}
+
+/* Task 4.6.3: 禅意隔离态进一步减噪 */
+body.zen-active .category-section-title {
+    opacity: 0.6;
+    font-weight: 300;
+    letter-spacing: 2px;
+    font-size: 20px;
+}
+
+body.zen-active .card {
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+body.zen-active .card:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: var(--glass-border);
+}
+
+body.zen-active.light-theme .card {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+body.zen-active.light-theme .card:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+/* 侧边栏管理态重构 (Task 4.5.2) */
+body.page-manage-active .sidebar-nav-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    margin: 6px 8px;
+    padding: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+body.light-theme.page-manage-active .sidebar-nav-item {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+/* 书签计数器 */
+.nav-count {
+    font-size: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-dim);
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+    font-family: monospace;
+    opacity: 0.7;
+}
+
+body.light-theme .nav-count {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* 拖拽手柄增强 */
+.sidebar-nav-item .nav-icon {
+    cursor: grab;
+    transition: transform 0.2s ease;
+}
+
+body.page-manage-active .sidebar-nav-item .nav-icon:hover {
+    transform: scale(1.2);
+    color: var(--primary);
+}
+
+/* 显隐状态高亮反馈 */
+.is-hidden-cat {
+    opacity: 0.5;
+    filter: grayscale(80%);
+    border-style: dashed !important;
+}
+
+/* 侧边栏图钉/悬浮逻辑 (Task 4.5.3) */
+.sidebar-header {
+    position: relative;
+}
+
+.sidebar-pin-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    opacity: 0.4;
+    transition: all 0.3s ease;
+    padding: 5px;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+}
+
+.sidebar-pin-btn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+body.sidebar-pinned .sidebar-pin-btn {
+    opacity: 1;
+    color: var(--primary);
+    transform: rotate(45deg);
+}
+
+/* 悬浮态 (Unpinned) */
+body:not(.sidebar-pinned) .sidebar {
+    position: fixed;
+    transform: translateX(-100%);
+    box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+}
+
+body:not(.sidebar-pinned) .sidebar.open {
+    transform: translateX(0);
+}
+
+body:not(.sidebar-pinned) .main-content {
+    margin-left: 0;
+}
+
+/* 适配移动端：强制悬浮 */
+@media (max-width: 768px) {
+    .sidebar-pin-btn { display: none; }
+    body.sidebar-pinned .main-content { margin-left: 0; }
+}
+
+/* 管理态安全感知 (Task 4.5.5) */
+body.page-manage-active::after {
+    content: "";
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border: 4px solid var(--primary);
+    pointer-events: none;
+    z-index: 9999;
+    animation: adminPulse 2s infinite ease-in-out;
+}
+
+@keyframes adminPulse {
+    0% { border-color: rgba(57, 157, 255, 0.4); box-shadow: inset 0 0 20px rgba(57, 157, 255, 0.2); }
+    50% { border-color: rgba(57, 157, 255, 0.8); box-shadow: inset 0 0 40px rgba(57, 157, 255, 0.4); }
+    100% { border-color: rgba(57, 157, 255, 0.4); box-shadow: inset 0 0 20px rgba(57, 157, 255, 0.2); }
+}
+
+body.page-manage-active.admin-mode::after {
+    border-color: #e74c3c;
+    animation: adminCriticalPulse 2s infinite ease-in-out;
+}
+
+@keyframes adminCriticalPulse {
+    0% { border-color: rgba(231, 76, 60, 0.4); box-shadow: inset 0 0 20px rgba(231, 76, 60, 0.2); }
+    50% { border-color: rgba(231, 76, 60, 0.8); box-shadow: inset 0 0 40px rgba(231, 76, 60, 0.4); }
+    100% { border-color: rgba(231, 76, 60, 0.4); box-shadow: inset 0 0 20px rgba(231, 76, 60, 0.2); }
+}
+
+/* 禅意静默态 (Task 4.6.1) */
+body.zen-active.zen-silent .grid-container,
+body.zen-active.zen-silent .footer-info,
+body.zen-active.zen-silent .category-section,
+body.zen-active.zen-silent .zen-expand-btn,
+body.zen-active.zen-silent .quick-nav-group,
+body.zen-active.zen-silent .sidebar-toggle,
+body.zen-active.zen-silent .guest-login-bridge {
+    opacity: 0 !important;
+    transform: translateY(40px) !important;
+    pointer-events: none !important;
+    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body.zen-active.zen-silent .sidebar {
+    transform: translateX(-100%) !important;
+    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body.zen-active.zen-silent .search-section {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translate(-50%, -50%) translateY(20vh) !important;
+    transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body.zen-active:not(.zen-silent) .grid-container,
+body.zen-active:not(.zen-silent) .footer-info,
+body.zen-active:not(.zen-silent) .category-section {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* 唤醒瞬间的过渡增强 */
+body.zen-silent-woken .grid-container,
+body.zen-silent-woken .category-section {
+    animation: zenContentRise 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes zenContentRise {
+    from { opacity: 0; transform: translateY(60px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 /* ==================== 全局重置 ==================== */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
     font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ==================== 视觉实验室 (Task 4.2) ==================== */
+/* 密度控制 */
+body.density-compact {
+    --card-w: 70px;
+    --card-h: 70px;
+    --grid-gap: 12px;
+}
+body.density-standard {
+    --card-w: 85px;
+    --card-h: 85px;
+    --grid-gap: 18px;
+}
+body.density-comfortable {
+    --card-w: 110px;
+    --card-h: 110px;
+    --grid-gap: 25px;
+}
+
+/* 网格布局适配变量 */
+.nav-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
+    gap: var(--grid-gap, 18px);
+    padding: 10px 0;
+}
+
+/* 侧边栏风格切换 (Task 4.5.4 增强) */
+body.sidebar-style-colorful .sidebar-nav-item .nav-icon {
+    background: linear-gradient(135deg, var(--primary), #6eb6ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 20px;
+    filter: drop-shadow(0 2px 4px rgba(57, 157, 255, 0.3));
+}
+
+body.sidebar-style-colorful .sidebar-nav-item.active .nav-icon {
+    -webkit-text-fill-color: white;
+}
+
+/* 彩色模式：色块区隔带设计 */
+body.sidebar-style-colorful .sidebar-group {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    padding: 10px 8px;
+    margin: 10px 10px 20px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.sidebar-style-colorful .sidebar-group:nth-child(2) { border-left: 3px solid #ff9f43; } /* 内容创作 */
+body.sidebar-style-colorful .sidebar-group:nth-child(3) { border-left: 3px solid #54a0ff; } /* 系统控制 */
+body.sidebar-style-colorful .sidebar-group:nth-child(4) { border-left: 3px solid #2ecc71; } /* 视觉实验室 */
+body.sidebar-style-colorful .sidebar-group:nth-child(5) { border-left: 3px solid #9b59b6; } /* 底层维护 */
+
+body.sidebar-style-colorful.light-theme .sidebar-group {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+/* 经典模式：极简弱边框设计 */
+body.sidebar-style-classic .sidebar-nav-item {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+body.sidebar-style-classic .sidebar-nav-item.active {
+    background: rgba(57, 157, 255, 0.1);
+    color: var(--primary);
+    box-shadow: none;
+    transform: none;
+    font-weight: 700;
+}
+
+body.sidebar-style-classic .sidebar-nav-item.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 20%;
+    bottom: 20%;
+    width: 3px;
+    background: var(--primary);
+    border-radius: 0 4px 4px 0;
+}
+
+/* 视觉实验室 Tab 样式 */
+.visual-lab-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    background: rgba(0,0,0,0.1);
+    padding: 5px;
+    border-radius: 10px;
+}
+
+.visual-option-group {
+    margin-bottom: 15px;
+}
+
+.visual-option-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    display: block;
+}
+
+.visual-btn-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 /* ==================== 页面主体样式 ==================== */
@@ -306,7 +792,7 @@ body.is-searching .grid-container {
     border-right: 1px solid var(--glass-border);
     display: flex;
     flex-direction: column;
-    z-index: 2500;
+    z-index: 4000; /* 提升层级，确保在禅意模式搜索框之上 */
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
 }
@@ -399,6 +885,34 @@ body.is-searching .grid-container {
     transform: translateX(4px);
 }
 
+/* 侧边栏分组样式 (Task 4.1) */
+.sidebar-group {
+    margin-bottom: 20px;
+    padding: 0 8px;
+}
+
+.sidebar-group-title {
+    padding: 8px 12px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-dim);
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+/* 管理员模式侧边栏视觉区分 */
+body.admin-mode .sidebar {
+    border-left: 4px solid var(--primary);
+    background: linear-gradient(180deg, rgba(30, 45, 65, 0.95) 0%, rgba(15, 15, 20, 0.98) 100%);
+}
+
+body.light-theme.admin-mode .sidebar {
+    border-left-color: var(--primary);
+    background: linear-gradient(180deg, rgba(245, 248, 255, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
 .sidebar-nav-item.active::before {
     content: '';
     position: absolute;
@@ -474,27 +988,32 @@ body.is-searching .grid-container {
     filter: grayscale(1);
 }
 
-.logout-btn {
-    margin-top: 15px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    padding-top: 12px;
-    color: #ff6b6b !important;
-}
-
-.logout-btn:hover {
-    background: rgba(255, 107, 107, 0.08) !important;
+.sidebar-user-section {
+    padding: 12px;
+    border-bottom: 1px solid var(--glass-border);
+    background: rgba(0, 0, 0, 0.05);
+    flex-shrink: 0;
 }
 
 .sidebar-user-info {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 14px;
+    padding: 10px 12px;
     font-size: 13px;
     color: var(--text-dim);
-    background: rgba(0, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.05);
     border-radius: 10px;
-    margin-top: 15px;
+    margin-bottom: 8px;
+}
+
+.sidebar-user-info .ri-user-smile-line {
+    font-size: 18px;
+    color: var(--primary);
+}
+
+.logout-btn {
+    color: #ff6b6b !important;
 }
 
 .sidebar-user-info .admin-badge {
@@ -2285,7 +2804,7 @@ body.zen-active .search-section {
     width: 90%;
     max-width: 720px;
     margin: 0 !important;
-    z-index: 1000;
+    z-index: 3500;
     transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
     animation: zenSearchBreath 4s ease-in-out infinite;
 }
@@ -2746,50 +3265,78 @@ body.light-theme #monaco-container {
     font-weight: bold;
 }
 
+/* ==================== Admin Hub 模块化样式 (Task 4.4) ==================== */
+.admin-hub-tabs {
+    display: flex;
+    gap: 5px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 5px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.hub-tab {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.hub-tab.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 2px 8px rgba(57, 157, 255, 0.3);
+}
+
+.hub-pane {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.hub-pane.active {
+    display: block;
+}
+
+.admin-hub-loading {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 /* ==================== 管理员高亮状态栏 ==================== */
 .admin-active-banner {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
-    height: 32px;
+    height: 36px;
     background: linear-gradient(90deg, #1e3a8a, #3b82f6);
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 15px;
+    z-index: 10000;
     font-size: 13px;
     font-weight: 600;
-    z-index: 10000;
     box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-    pointer-events: none;
     animation: slideDown 0.4s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-@keyframes slideDown {
-    from { transform: translateY(-100%); }
-    to { transform: translateY(0); }
-}
-
-/* 适配顶栏开启后的布局偏移 */
 body.admin-mode {
-    padding-top: 32px;
+    padding-top: 36px;
 }
-
-/* ==================== 管理员高亮状态栏 ==================== */
-.admin-active-banner {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 32px;
-    background: linear-gradient(90deg, #1e3a8a, #3b82f6);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
     font-size: 13px;
     font-weight: 600;
     z-index: 10000;

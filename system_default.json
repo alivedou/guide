@@ -1,7 +1,7 @@
 {
   "settings": {
     "cardWidth": 125,
-    "zenMode": true,
+    "zenMode": false,
     "openInNewTab": true
   },
   "categories": [

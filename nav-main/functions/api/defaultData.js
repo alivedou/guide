@@ -8,7 +8,7 @@
 
 export const defaultData = {
   // 全局设置
-  settings: { cardWidth: 125, zenMode: true, openInNewTab: true },
+  settings: { cardWidth: 125, zenMode: false, openInNewTab: true },
 
   // 分类列表
   categories: [

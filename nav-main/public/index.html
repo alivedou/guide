@@ -58,7 +58,11 @@
             <div class="sidebar-header">
                 <span class="sidebar-logo">🌐</span>
                 <span class="sidebar-title">个人导航</span>
+                <button id="btn-sidebar-pin" class="sidebar-pin-btn" title="固定/取消固定侧边栏">
+                    <i class="ri-pushpin-2-line"></i>
+                </button>
             </div>
+            <div id="sidebar-user-section" class="sidebar-user-section"></div>
             <nav id="sidebar-nav" class="sidebar-nav"></nav>
             <div id="sidebar-footer" class="sidebar-footer">
                 <div class="sidebar-style-switcher">
@@ -198,6 +202,9 @@
         <div class="batch-btns">
             <button class="batch-btn move" onclick="openBatchMoveModal()">
                 <i class="ri-drag-move-fill"></i> 移动分类
+            </button>
+            <button class="batch-btn hide" onclick="doBatchToggleHidden()" style="background: rgba(243, 156, 18, 0.85);">
+                <i class="ri-eye-off-line"></i> 批量显隐
             </button>
             <button class="batch-btn delete" onclick="doBatchDelete()">
                 <i class="ri-delete-bin-line"></i> 批量删除
