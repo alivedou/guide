@@ -15,7 +15,8 @@ export async function onRequestPost(context) {
     const { username, password } = await request.json();
     const passwordHash = await sha256(password);
 
-    const user = await env.DB.prepare('SELECT * FROM users WHERE username = ? AND password_hash = ?')
+    // 查询用户信息及其设置（关联查询确保角色和状态准确）
+    const user = await env.DB.prepare('SELECT id, username, role, status FROM users WHERE username = ? AND password_hash = ?')
       .bind(username, passwordHash)
       .first();
 
@@ -24,19 +25,25 @@ export async function onRequestPost(context) {
     }
 
     if (user.status === 'frozen') {
-      return new Response(JSON.stringify({ error: "账号已被封禁" }), { status: 403 });
+      return new Response(JSON.stringify({ error: "您的账号已被封禁，请联系管理员" }), { status: 403 });
     }
 
-    // 这里为了演示方便使用简单的 token 逻辑
-    // 实际生产环境建议使用 JWT (可以通过 jose 等库实现)
-    const token = btoa(`${user.id}:${Date.now()}`); 
+    // 更新最后登录时间
+    await env.DB.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').bind(user.id).run();
+
+    // 生成 Token (UUID:Timestamp 混淆，实际建议 JWT)
+    const token = btoa(`${user.id}:${Date.now()}:${user.role}`); 
 
     return new Response(JSON.stringify({
       success: true,
       token: token,
-      user: { id: user.id, username: user.username, role: user.role }
+      user: { 
+        id: user.id, 
+        username: user.username, 
+        role: user.role 
+      }
     }), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
-    return new Response(JSON.stringify({ error: "服务器错误", details: e.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: "服务器内部错误", details: e.message }), { status: 500 });
   }
 }

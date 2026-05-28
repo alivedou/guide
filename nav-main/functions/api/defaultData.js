@@ -8,7 +8,7 @@
 
 export const defaultData = {
   // 全局设置
-  settings: { cardWidth: 125 },
+  settings: { cardWidth: 125, zenMode: true, openInNewTab: true },
 
   // 分类列表
   categories: [
@@ -18,47 +18,34 @@ export const defaultData = {
     { id: "D01", name: "AI", icon: "🤖", hidden: false }
   ],
 
-  // 网站条目列表
+  // 网站条目列表 (精选 5x4 矩阵)
   items: [
     // ===== 社交分类 (A01) =====
-    { id: "A001", catId: "A01", title: "知乎", url: "https://www.zhihu.com/", desc: "问答社区", icon: "https://api.iowen.cn/favicon/www.zhihu.com.png", hidden: false },
-    { id: "A002", catId: "A01", title: "豆瓣", url: "https://www.douban.com/", desc: "书影音社区", icon: "https://api.iowen.cn/favicon/www.douban.com.png", hidden: false },
-    { id: "A003", catId: "A01", title: "百度贴吧", url: "https://tieba.baidu.com/", desc: "兴趣社区", icon: "https://api.iowen.cn/favicon/tieba.baidu.com.png", hidden: false },
-    { id: "A004", catId: "A01", title: "新浪微博", url: "https://weibo.com/", desc: "微博客平台", icon: "https://api.iowen.cn/favicon/weibo.com.png", hidden: false },
-    { id: "A005", catId: "A01", title: "虎扑社区", url: "https://www.hupu.com/", desc: "体育社区", icon: "https://api.iowen.cn/favicon/www.hupu.com.png", hidden: false },
-    { id: "A006", catId: "A01", title: "微信网页版", url: "https://wx.qq.com/", desc: "微信网页版", icon: "https://api.iowen.cn/favicon/wx.qq.com.png", hidden: false },
-    { id: "A007", catId: "A01", title: "QQ空间", url: "https://qzone.qq.com/", desc: "QQ社交空间", icon: "https://api.iowen.cn/favicon/qzone.qq.com.png", hidden: false },
-    { id: "A008", catId: "A01", title: "煎蛋网", url: "https://jandan.net/", desc: "趣图段子", icon: "https://api.iowen.cn/favicon/jandan.net.png", hidden: false },
+    { id: "A001", catId: "A01", title: "微博", url: "https://weibo.com/", desc: "随时随地发现新鲜事", icon: "https://favicon.qqsuu.cn/weibo.com", hidden: false },
+    { id: "A002", catId: "A01", title: "豆瓣", url: "https://www.douban.com/", desc: "我们的精神角落", icon: "https://favicon.qqsuu.cn/douban.com", hidden: false },
+    { id: "A003", catId: "A01", title: "知乎", url: "https://www.zhihu.com/", desc: "有问题，就会有答案", icon: "https://favicon.qqsuu.cn/zhihu.com", hidden: false },
+    { id: "A004", catId: "A01", title: "百度贴吧", url: "https://tieba.baidu.com/", desc: "全球领先的中文社区", icon: "https://favicon.qqsuu.cn/tieba.baidu.com", hidden: false },
+    { id: "A005", catId: "A01", title: "小红书", url: "https://www.xiaohongshu.com/", desc: "标记我的生活", icon: "https://favicon.qqsuu.cn/xiaohongshu.com", hidden: false },
 
     // ===== 视频分类 (B01) =====
-    { id: "B001", catId: "B01", title: "腾讯视频", url: "https://v.qq.com/", desc: "视频平台", icon: "https://api.iowen.cn/favicon/v.qq.com.png", hidden: false },
-    { id: "B002", catId: "B01", title: "优酷网", url: "https://www.youku.com/", desc: "视频平台", icon: "https://api.iowen.cn/favicon/www.youku.com.png", hidden: false },
-    { id: "B003", catId: "B01", title: "芒果TV", url: "https://www.mgtv.com/", desc: "湖南卫视", icon: "https://api.iowen.cn/favicon/www.mgtv.com.png", hidden: false },
-    { id: "B004", catId: "B01", title: "搜狐视频", url: "https://tv.sohu.com/", desc: "视频平台", icon: "https://api.iowen.cn/favicon/tv.sohu.com.png", hidden: false },
-    { id: "B005", catId: "B01", title: "斗鱼TV", url: "https://www.douyu.com/", desc: "游戏直播", icon: "https://api.iowen.cn/favicon/www.douyu.com.png", hidden: false },
-    { id: "B006", catId: "B01", title: "哔哩哔哩", url: "https://www.bilibili.com/", desc: "弹幕视频", icon: "https://api.iowen.cn/favicon/www.bilibili.com.png", hidden: false },
-    { id: "B007", catId: "B01", title: "虎牙直播", url: "https://www.huya.com/", desc: "游戏直播", icon: "https://api.iowen.cn/favicon/www.huya.com.png", hidden: false },
-    { id: "B008", catId: "B01", title: "爱奇艺", url: "https://www.iqiyi.com/", desc: "视频平台", icon: "https://api.iowen.cn/favicon/www.iqiyi.com.png", hidden: false },
-    { id: "B009", catId: "B01", title: "ACfun", url: "https://www.acfun.cn/", desc: "弹幕视频", icon: "https://api.iowen.cn/favicon/www.acfun.cn.png", hidden: false },
+    { id: "B001", catId: "B01", title: "哔哩哔哩", url: "https://www.bilibili.com/", desc: "(゜-゜)つロ 干杯~", icon: "https://favicon.qqsuu.cn/bilibili.com", hidden: false },
+    { id: "B002", catId: "B01", title: "抖音", url: "https://www.douyin.com/", desc: "记录美好生活", icon: "https://favicon.qqsuu.cn/douyin.com", hidden: false },
+    { id: "B003", catId: "B01", title: "腾讯视频", url: "https://v.qq.com/", desc: "不负好时光", icon: "https://favicon.qqsuu.cn/v.qq.com", hidden: false },
+    { id: "B004", catId: "B01", title: "爱奇艺", url: "https://www.iqiyi.com/", desc: "悦享品质", icon: "https://favicon.qqsuu.cn/iqiyi.com", hidden: false },
+    { id: "B005", catId: "B01", title: "芒果TV", url: "https://www.mgtv.com/", desc: "天生青春", icon: "https://favicon.qqsuu.cn/mgtv.com", hidden: false },
 
     // ===== 新闻分类 (C01) =====
-    { id: "C001", catId: "C01", title: "新浪新闻", url: "https://news.sina.com.cn/", desc: "综合新闻", icon: "https://api.iowen.cn/favicon/news.sina.com.cn.png", hidden: false },
-    { id: "C002", catId: "C01", title: "腾讯新闻", url: "https://news.qq.com/", desc: "综合新闻", icon: "https://api.iowen.cn/favicon/news.qq.com.png", hidden: false },
-    { id: "C003", catId: "C01", title: "凤凰军事", url: "https://news.ifeng.com/mil/", desc: "军事新闻", icon: "https://api.iowen.cn/favicon/news.ifeng.com.png", hidden: false },
-    { id: "C004", catId: "C01", title: "网易新闻", url: "https://news.163.com/", desc: "综合新闻", icon: "https://api.iowen.cn/favicon/news.163.com.png", hidden: false },
-    { id: "C005", catId: "C01", title: "环球网", url: "https://www.huanqiu.com/", desc: "国际新闻", icon: "https://api.iowen.cn/favicon/www.huanqiu.com.png", hidden: false },
-    { id: "C006", catId: "C01", title: "参考消息", url: "http://www.cankaoxiaoxi.com/", desc: "参考消息", icon: "https://api.iowen.cn/favicon/www.cankaoxiaoxi.com.png", hidden: false },
-    { id: "C007", catId: "C01", title: "博海拾贝", url: "https://www.bohaishibei.com/", desc: "资讯聚合", icon: "https://api.iowen.cn/favicon/bohaishibei.com.png", hidden: false },
+    { id: "C001", catId: "C01", title: "今日头条", url: "https://www.toutiao.com/", desc: "信息创造价值", icon: "https://favicon.qqsuu.cn/toutiao.com", hidden: false },
+    { id: "C002", catId: "C01", title: "澎湃新闻", url: "https://www.thepaper.cn/", desc: "专注时政与思想", icon: "https://favicon.qqsuu.cn/thepaper.cn", hidden: false },
+    { id: "C003", catId: "C01", title: "腾讯新闻", url: "https://news.qq.com/", desc: "事实派", icon: "https://favicon.qqsuu.cn/news.qq.com", hidden: false },
+    { id: "C004", catId: "C01", title: "网易新闻", url: "https://news.163.com/", desc: "各有态度", icon: "https://favicon.qqsuu.cn/news.163.com", hidden: false },
+    { id: "C005", catId: "C01", title: "新浪新闻", url: "https://news.sina.com.cn/", desc: "最新最全", icon: "https://favicon.qqsuu.cn/news.sina.com.cn", hidden: false },
 
     // ===== AI分类 (D01) =====
-    { id: "D001", catId: "D01", title: "ChatGPT", url: "https://chat.openai.com/", desc: "OpenAI助手", icon: "https://img.icons8.com/ios/100/FFFFFF/chatgpt.png", hidden: false },
-    { id: "D002", catId: "D01", title: "Grok", url: "https://grok.com/", desc: "X平台AI", icon: "https://api.iowen.cn/favicon/grok.com.png", hidden: false },
-    { id: "D003", catId: "D01", title: "阿里千问", url: "https://chat.qwen.ai/", desc: "阿里AI助手", icon: "https://api.iowen.cn/favicon/chat.qwen.ai.png", hidden: false },
-    { id: "D004", catId: "D01", title: "DeepSeek", url: "https://chat.deepseek.com/", desc: "深度求索AI", icon: "https://api.iowen.cn/favicon/chat.deepseek.com.png", hidden: false },
-    { id: "D005", catId: "D01", title: "豆包", url: "https://www.doubao.com/chat/", desc: "字节AI助手", icon: "https://api.iowen.cn/favicon/www.doubao.com.png", hidden: false },
-    { id: "D006", catId: "D01", title: "Kimi", url: "https://www.kimi.com/", desc: "月之暗面AI", icon: "https://api.iowen.cn/favicon/www.kimi.com.png", hidden: false },
-    { id: "D007", catId: "D01", title: "元宝", url: "https://yuanbao.tencent.com/", desc: "腾讯AI助手", icon: "https://api.iowen.cn/favicon/yuanbao.tencent.com.png", hidden: false },
-    { id: "D008", catId: "D01", title: "即梦AI", url: "https://jimeng.jianying.com/", desc: "字节AI绘画", icon: "https://api.iowen.cn/favicon/jimeng.jianying.com.png", hidden: false },
-    { id: "D009", catId: "D01", title: "Gemini", url: "https://gemini.google.com/", desc: "谷歌AI助手", icon: "https://www.gstatic.com/lamda/images/gemini_sparkle_aurora_33f86dc0c0257da337c63.svg", hidden: false }
+    { id: "D001", catId: "D01", title: "文心一言", url: "https://yiyan.baidu.com/", desc: "百度 AI 助手", icon: "https://favicon.qqsuu.cn/yiyan.baidu.com", hidden: false },
+    { id: "D002", catId: "D01", title: "通义千问", url: "https://tongyi.aliyun.com/", desc: "阿里 AI 助手", icon: "https://favicon.qqsuu.cn/tongyi.aliyun.com", hidden: false },
+    { id: "D003", catId: "D01", title: "Kimi", url: "https://www.kimi.com/", desc: "超长上下文 AI", icon: "https://favicon.qqsuu.cn/kimi.com", hidden: false },
+    { id: "D004", catId: "D01", title: "豆包", url: "https://www.doubao.com/", desc: "字节 AI 助手", icon: "https://favicon.qqsuu.cn/doubao.com", hidden: false },
+    { id: "D005", catId: "D01", title: "DeepSeek", url: "https://www.deepseek.com/", desc: "深度求索 AI", icon: "https://favicon.qqsuu.cn/deepseek.com", hidden: false }
   ]
 };

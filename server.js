@@ -25,19 +25,45 @@ app.use(express.json({ limit: '10mb' }));
 // ====== 核心业务逻辑 (4.6 数据持久化) ======
 
 const syncUserToKV = (userId) => {
-    const categories = db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY sort_order ASC').all(userId);
-    const items = db.prepare('SELECT * FROM items WHERE user_id = ? ORDER BY sort_order ASC').all(userId);
+    console.log(`[KV] Syncing data for user: ${userId}`);
+    const categories = db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY sort_order ASC, name ASC').all(userId);
+    const items = db.prepare('SELECT * FROM items WHERE user_id = ? ORDER BY sort_order ASC, title ASC').all(userId);
     const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId);
     
     const userData = {
-        categories: categories.map(c => ({...c, _isVideo: !!c.is_video, hidden: !!c.hidden})),
-        items: items.map(i => ({...i, hidden: !!i.hidden})),
-        settings: settings || defaultData.settings
+        categories: categories.map(c => ({
+            ...c, 
+            id: c.id, 
+            _isVideo: !!c.is_video, 
+            hidden: !!c.hidden
+        })),
+        items: items.map(i => ({
+            ...i, 
+            catId: i.cat_id, 
+            hidden: !!i.hidden
+        })),
+        settings: settings ? {
+            cardWidth: settings.card_width,
+            zenMode: !!settings.zen_mode,
+            showFrequent: !!settings.show_f_requent, // 容错处理
+            bgUrl: settings.bg_url,
+            simpleMode: !!settings.simple_mode,
+            openInNewTab: !!settings.open_in_new_tab,
+            themeMode: settings.theme_mode
+        } : defaultData.settings
     };
     
+    // 强制修正 settings 中的 showFrequent 拼写 (容错)
+    if (settings && settings.show_frequent !== undefined) {
+        userData.settings.showFrequent = !!settings.show_frequent;
+    }
+
     const kvDir = path.join(__dirname, 'local_kv');
     if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
-    fs.writeFileSync(path.join(kvDir, `user_${userId}.json`), JSON.stringify(userData, null, 2));
+    
+    const filePath = path.join(kvDir, `user_${userId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(userData, null, 2));
+    console.log(`[KV] Successfully wrote ${categories.length} cats and ${items.length} items to ${filePath}`);
     return userData;
 };
 
@@ -74,11 +100,10 @@ app.post('/api/auth/register', (req, res) => {
         db.transaction(() => {
             db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)').run(uuid, username, passwordHash, role);
             
-            // 初始化设置
-            db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(uuid);
+            // 初始化设置 (显式设定 zen_mode 为 1，确保新用户立即获得沉浸体验)
+            db.prepare('INSERT INTO user_settings (user_id, zen_mode) VALUES (?, 1)').run(uuid);
             
             // 为新用户注入默认模板 (需求 4.4 / 4.6)
-            // 注意：必须生成唯一的 ID 避免冲突
             for (const cat of defaultData.categories) {
                 const newCatId = crypto.randomUUID();
                 db.prepare('INSERT INTO categories (id, user_id, name, icon, hidden) VALUES (?, ?, ?, ?, ?)').run(newCatId, uuid, cat.name, cat.icon, cat.hidden ? 1 : 0);
@@ -117,9 +142,28 @@ app.get('/api/config', authenticate, (req, res) => {
     const userId = req.user.id;
     const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
     let data;
-    if (userId === 'guest') data = JSON.parse(JSON.stringify(defaultData));
-    else if (fs.existsSync(kvPath)) data = JSON.parse(fs.readFileSync(kvPath, 'utf-8'));
-    else data = syncUserToKV(userId);
+    
+    if (userId === 'guest') {
+        data = JSON.parse(JSON.stringify(defaultData));
+    } else if (fs.existsSync(kvPath)) {
+        data = JSON.parse(fs.readFileSync(kvPath, 'utf-8'));
+        // 实时数据归一化：确保字段名始终符合前端预期 (Task 2.1 容错)
+        if (data.items) {
+            data.items = data.items.map(i => ({
+                ...i,
+                catId: i.catId || i.cat_id
+            }));
+        }
+        if (data.categories) {
+            data.categories = data.categories.map(c => ({
+                ...c,
+                id: c.id,
+                _isVideo: c._isVideo ?? !!c.is_video
+            }));
+        }
+    } else {
+        data = syncUserToKV(userId);
+    }
 
     if (userId === 'guest') {
         data.categories = data.categories.filter(c => !c.hidden);
@@ -152,6 +196,50 @@ app.post('/api/config', authenticate, (req, res) => {
     })();
     syncUserToKV(userId);
     res.json({ success: true });
+});
+
+app.delete('/api/config', authenticate, (req, res) => {
+    const userId = req.user.id;
+    if (userId === 'guest') return res.status(401).end();
+
+    console.log(`[Config] Resetting data for user: ${userId}`);
+    try {
+        db.transaction(() => {
+            // 1. 清理该用户的所有旧数据
+            db.prepare('DELETE FROM categories WHERE user_id = ?').run(userId);
+            db.prepare('DELETE FROM items WHERE user_id = ?').run(userId);
+            
+            // 2. 重置用户设置到默认状态 (确保 Zen Mode 等生效)
+            db.prepare('UPDATE user_settings SET card_width = 125, zen_mode = 1, show_frequent = 1, bg_url = NULL, simple_mode = 0, open_in_new_tab = 1, theme_mode = \'auto\' WHERE user_id = ?').run(userId);
+            
+            // 3. 重新注入最新的 defaultData 模板 (精选的 20 个站点)
+            for (const cat of defaultData.categories) {
+                const newCatId = crypto.randomUUID();
+                db.prepare('INSERT INTO categories (id, user_id, name, icon, hidden) VALUES (?, ?, ?, ?, ?)').run(newCatId, userId, cat.name, cat.icon, cat.hidden ? 1 : 0);
+                
+                const catItems = defaultData.items.filter(i => i.catId === cat.id);
+                for (const item of catItems) {
+                    const newItemId = crypto.randomUUID();
+                    db.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(newItemId, userId, newCatId, item.title, item.url, item.desc, item.icon, item.hidden ? 1 : 0);
+                }
+            }
+        })();
+
+        // 3. 强制物理删除旧缓存文件，确保下一次 GET 请求触发新鲜同步 (Task 2.1 强一致性)
+        const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
+        if (fs.existsSync(kvPath)) {
+            fs.unlinkSync(kvPath);
+        }
+
+        // 4. 立即执行一次同步
+        syncUserToKV(userId);
+        
+        console.log(`[Config] Reset success and cache cleared for user: ${userId}`);
+        res.json({ success: true, message: "已恢复默认配置" });
+    } catch (e) {
+        console.error('[Config] Reset Error:', e.message);
+        res.status(500).json({ error: 'Reset failed', details: e.message });
+    }
 });
 
 app.use(express.static(path.join(__dirname, 'nav-main/public')));

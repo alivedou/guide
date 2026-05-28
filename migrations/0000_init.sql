@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE TABLE IF NOT EXISTS user_settings (
     user_id TEXT PRIMARY KEY,
     card_width INTEGER DEFAULT 85,
-    zen_mode BOOLEAN DEFAULT 0,
+    zen_mode BOOLEAN DEFAULT 1,
     show_frequent BOOLEAN DEFAULT 1,
     bg_url TEXT,
     simple_mode BOOLEAN DEFAULT 0,

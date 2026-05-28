@@ -396,40 +396,50 @@ body::before {
 
 /* 移动端侧边栏切换按钮 */
 .sidebar-toggle {
-    display: none;
     position: fixed;
-    top: 12px;
-    left: 12px;
-    z-index: 2510;
-    width: 42px;
-    height: 42px;
+    top: 20px;
+    left: 20px;
+    z-index: 1500; /* 高于大部分元素但低于 Modal */
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    width: 45px;
+    height: 45px;
     border-radius: 12px;
-    background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
-    color: white;
-    font-size: 20px;
-    cursor: pointer;
+    display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    cursor: pointer;
+    border: 1px solid var(--glass-border);
+    color: var(--text);
+    transition: all 0.3s ease;
 }
 
 .sidebar-toggle:hover {
-    background: var(--primary);
+    background: var(--glass-hover);
+    transform: scale(1.05);
 }
 
-.sidebar-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 2400;
+/* 极简模式下的游客引导 (UX Bridge) */
+.guest-login-bridge {
+    margin-top: 15px;
+    text-align: center;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: color 0.3s;
+    text-decoration: underline;
+    text-underline-offset: 4px;
 }
 
-.sidebar-overlay.visible {
-    display: block;
+.guest-login-bridge:hover {
+    color: var(--primary);
+}
+
+.zen-active .sidebar-toggle {
+    opacity: 0.6; /* 极简模式下降低干扰 */
+}
+.zen-active .sidebar-toggle:hover {
+    opacity: 1;
 }
 
 /* ==================== 主内容区域 ==================== */
@@ -440,6 +450,8 @@ body::before {
     padding: 20px 20px 40px;
     display: flex;
     flex-direction: column;
+    transition: margin-left 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+    will-change: margin-left;
 }
 
 #main-content {
@@ -659,7 +671,15 @@ body::before {
     height: 85%;
     border-radius: 8px;
     object-fit: contain;
-    transition: all 0.3s ease;
+    transition: all 0.3s ease, opacity 0.3s ease;
+    /* 初始透明，配合 loading="lazy" 减少闪烁感 */
+    opacity: 1; 
+}
+
+/* 优化 Zen Mode 切换时主区域的位移动画 */
+.main-content {
+    transition: margin-left 0.6s cubic-bezier(0.165, 0.84, 0.44, 1), transform 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+    will-change: margin-left, transform;
 }
 
 .card .emoji-icon {
@@ -2002,6 +2022,16 @@ body.light-theme .quick-nav-btn:hover {
 }
 
 /* ==================== 极简沉浸沉浸模式 (Zen Mode) ==================== */
+.sidebar,
+.sidebar-toggle,
+.grid-container,
+.category-section-title,
+.footer-info,
+.quick-nav-group {
+    transition: transform 0.6s cubic-bezier(0.165, 0.84, 0.44, 1), 
+                opacity 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
 body.zen-active .sidebar,
 body.zen-active .sidebar-toggle,
 body.zen-active .grid-container,
@@ -2438,4 +2468,29 @@ body.light-theme .search-cat-btn:hover {
 
 .auth-form input {
     width: 100% !important;
+}
+
+/* 侧边栏切换按钮常驻逻辑 (Task 1.1 加固) */
+.sidebar-toggle {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 1500; /* 高于大部分元素但低于 Modal */
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    width: 45px;
+    height: 45px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid var(--glass-border);
+    color: var(--text);
+    transition: all 0.3s ease;
+}
+
+.sidebar-toggle:hover {
+    background: var(--glass-hover);
+    transform: scale(1.05);
 }
