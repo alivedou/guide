@@ -11,8 +11,10 @@
     "build": "echo 'Build successfully'"
   },
   "dependencies": {
+    "better-sqlite3": "^12.10.0",
     "dotenv": "^17.4.2",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
     "wrangler": "^3.57.1"

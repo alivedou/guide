@@ -33,6 +33,26 @@ async function sha256(text) {
 export async function onRequest(context) {
   const { request, env } = context;
 
+  // 解析鉴权 (支持 Bearer Token)
+  const authHeader = request.headers.get("Authorization");
+  let userId = "guest";
+  let userRole = "guest";
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    try {
+      const token = authHeader.split(" ")[1];
+      const decoded = atob(token);
+      userId = decoded.split(":")[0];
+      // 生产环境应从数据库校验用户有效性与角色
+      const user = await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(userId).first();
+      if (user) userRole = user.role;
+    } catch (e) {
+      userId = "guest";
+    }
+  }
+
+  const kvKey = userId === "guest" ? "config" : `user_config:${userId}`;
+
   if (!env.nav) {
     return new Response(JSON.stringify({
       error: "KV_BINDING_MISSING",
@@ -46,54 +66,48 @@ export async function onRequest(context) {
   };
 
   try {
-    // ==========================================
-    // 核心安全优化：动态识别明文与哈希
-    // ==========================================
-    let expectedToken = (env.TOKEN || "").trim();
-    // SHA-256 哈希值的固定长度是 64。
-    // 如果长度不是 64，说明你在 Cloudflare 后台填的是“明文密码”。
-    // 我们就在后端内部安全地将其转为哈希值，用来与前端发来的哈希值比对。
-    if (expectedToken.length !== 64) {
-      expectedToken = await sha256(expectedToken);
-    }
+    const isAdmin = (userRole === "admin" || userRole === "super_user");
 
     // 1. 处理恢复默认配置 (DELETE)
     if (request.method === "DELETE") {
-      const auth = request.headers.get("Authorization");
-      if (auth !== expectedToken) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
-      }
+      if (userId === "guest") return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
       const resetData = getFreshDefaultData();
-      await env.nav.put("config", JSON.stringify(resetData));
+      await env.nav.put(kvKey, JSON.stringify(resetData));
       return new Response(JSON.stringify({ success: true, message: "已重置为默认配置" }), { headers });
     }
 
     // 2. 处理保存数据 (POST)
     if (request.method === "POST") {
-      const auth = request.headers.get("Authorization");
-      if (auth !== expectedToken) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
-      }
+      if (userId === "guest") return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
       const newData = await request.json();
+
+      // 4.6 资源配额限制
+      if (newData.categories.length > 20) {
+        return new Response(JSON.stringify({ error: "Quota exceeded", message: "分类不能超过 20 个" }), { status: 403, headers });
+      }
+
       newData.lastUpdated = formatCNTime(new Date());
-      await env.nav.put("config", JSON.stringify(newData));
+      await env.nav.put(kvKey, JSON.stringify(newData));
       return new Response(JSON.stringify({ success: true }), { headers });
     }
 
     // 3. 处理获取数据 (GET)
     if (request.method === "GET") {
-      let dataStr = await env.nav.get("config");
+      let dataStr = await env.nav.get(kvKey);
       let dataObj = JSON.parse(dataStr || JSON.stringify(getFreshDefaultData()));
 
-      const url = new URL(request.url);
-      const auth = request.headers.get("Authorization") || url.searchParams.get("token");
-      // 使用转换后的哈希值进行验证
-      const isAdmin = (auth === expectedToken);
-
-      if (!isAdmin) {
+      if (userId === "guest") {
         dataObj.categories = dataObj.categories.filter(c => !c.hidden);
         dataObj.items = dataObj.items.filter(i => !i.hidden);
       }
+
+      return new Response(JSON.stringify({
+        ...dataObj,
+        isAdmin,
+        user: userId,
+        lastUpdated: dataObj.lastUpdated || formatCNTime(new Date())
+      }), { headers });
+    }
 
       let bgUrl = "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=1920"; 
 

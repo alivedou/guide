@@ -2430,3 +2430,12 @@ body.light-theme .search-cat-btn:hover {
     color: white !important;
     box-shadow: 0 6px 15px rgba(57, 157, 255, 0.3);
 }
+
+.auth-tab.active {
+    color: var(--primary) !important;
+    border-bottom: 2px solid var(--primary);
+}
+
+.auth-form input {
+    width: 100% !important;
+}

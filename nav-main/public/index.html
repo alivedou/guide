@@ -138,13 +138,20 @@
     <!-- 隐藏的文件输入框（用于导入配置） -->
     <input type="file" id="import-file" accept=".json" style="display:none">
 
-    <!-- 登录验证弹窗 -->
+    <!-- 登录/注册验证弹窗 -->
     <div id="auth-overlay" class="modal">
         <div class="modal-content" style="text-align:center">
             <button id="btn-close-auth" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#777; cursor:pointer; font-size:24px">×</button>
-            <h3>管理验证</h3>
-            <input type="password" id="auth-input" placeholder="请输入Token" autocomplete="new-password" style="text-align:center; margin: 20px 0">
-            <button id="btn-login" class="tab-btn active" style="width:100%">进入后台</button>
+            <div id="auth-title-group" style="display:flex; justify-content:center; gap:20px; margin-bottom:20px;">
+                <h3 id="tab-login" class="auth-tab active" style="cursor:pointer; margin:0; padding-bottom:5px;">登录</h3>
+                <h3 id="tab-register" class="auth-tab" style="cursor:pointer; margin:0; padding-bottom:5px; color:#777;">注册</h3>
+            </div>
+            <div class="auth-form">
+                <input type="text" id="auth-username" placeholder="用户名" style="text-align:center; margin-bottom: 12px;">
+                <input type="password" id="auth-password" placeholder="密码" style="text-align:center; margin-bottom: 20px;">
+                <button id="btn-auth-submit" class="tab-btn active" style="width:100%">确认</button>
+            </div>
+            <p id="auth-switch-tip" style="font-size:12px; color:#888; margin-top:15px;">还没有账号？点击上方“注册”开始</p>
         </div>
     </div>
 
