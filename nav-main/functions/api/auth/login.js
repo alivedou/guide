@@ -1,3 +1,5 @@
+import * as jose from 'jose';
+
 /**
  * 登录接口 (D1)
  */
@@ -31,8 +33,16 @@ export async function onRequestPost(context) {
     // 更新最后登录时间
     await env.DB.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').bind(user.id).run();
 
-    // 生成 Token (UUID:Timestamp 混淆，实际建议 JWT)
-    const token = btoa(`${user.id}:${Date.now()}:${user.role}`); 
+    // 生成 Token (Task 2.6.1: 迁移至 JWT)
+    const secret = new TextEncoder().encode(env.JWT_SECRET || 'cloudnav-secret-2026');
+    const token = await new jose.SignJWT({ 
+        id: user.id, 
+        username: user.username, 
+        role: user.role 
+    })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .sign(secret);
 
     return new Response(JSON.stringify({
       success: true,

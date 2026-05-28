@@ -4,9 +4,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
-import jwt from 'jsonwebtoken';
+import * as jose from 'jose';
 import Database from 'better-sqlite3';
 import { defaultData } from './nav-main/functions/api/defaultData.js';
+import { parse } from 'node-html-parser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,8 +20,80 @@ db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0000_init.sql'), 'utf-8
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'cloudnav-secret-2026';
+const secret = new TextEncoder().encode(JWT_SECRET);
+
+// ====== 鉴权中间件 ======
+const authenticate = async (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) { req.user = { role: 'guest', id: 'guest' }; return next(); }
+    
+    try {
+        const { payload } = await jose.jwtVerify(token, secret);
+        req.user = payload;
+        next();
+    } catch (err) {
+        console.error('[Auth] Token verification failed:', err.message);
+        return res.status(403).json({ error: 'Invalid token' });
+    }
+};
 
 app.use(express.json({ limit: '10mb' }));
+
+// ====== Task 3.2: Magic Wand Backend (Metadata Fetcher) ======
+app.get('/api/proxy/fetch-metadata', authenticate, async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) return res.status(400).json({ error: 'URL is required' });
+
+    try {
+        console.log(`[MagicWand] Fetching metadata for: ${targetUrl}`);
+        const response = await fetch(targetUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+            signal: AbortSignal.timeout(5000) // 5s timeout
+        });
+
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const html = await response.text();
+        const root = parse(html);
+        
+        // 提取标题
+        let title = root.querySelector('title')?.text || 
+                    root.querySelector('meta[property="og:title"]')?.getAttribute('content') || 
+                    '';
+        
+        // 提取描述
+        let desc = root.querySelector('meta[name="description"]')?.getAttribute('content') || 
+                   root.querySelector('meta[property="og:description"]')?.getAttribute('content') || 
+                   '';
+        
+        // 提取图标
+        let icon = root.querySelector('link[rel~="icon"]')?.getAttribute('href') || 
+                   root.querySelector('link[rel~="apple-touch-icon"]')?.getAttribute('href') || 
+                   '/favicon.ico';
+
+        // 图标地址转换 (相对路径 -> 绝对路径)
+        try {
+            const baseUrl = new URL(targetUrl);
+            const iconUrl = new URL(icon, baseUrl.origin);
+            icon = iconUrl.href;
+        } catch (e) {
+            console.warn('[MagicWand] Icon URL resolving failed', e);
+        }
+
+        res.json({
+            success: true,
+            data: {
+                title: title.trim(),
+                desc: desc.trim(),
+                icon: icon
+            }
+        });
+    } catch (err) {
+        console.error('[MagicWand] Error:', err.message);
+        res.status(500).json({ error: 'Failed to fetch metadata: ' + err.message });
+    }
+});
 
 // ====== 核心业务逻辑 (4.6 数据持久化) ======
 
@@ -65,18 +138,6 @@ const syncUserToKV = (userId) => {
     fs.writeFileSync(filePath, JSON.stringify(userData, null, 2));
     console.log(`[KV] Successfully wrote ${categories.length} cats and ${items.length} items to ${filePath}`);
     return userData;
-};
-
-// ====== 鉴权中间件 ======
-const authenticate = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) { req.user = { role: 'guest', id: 'guest' }; return next(); }
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.status(403).json({ error: 'Invalid token' });
-        req.user = user;
-        next();
-    });
 };
 
 // ====== 4.3 认证 API ======
@@ -127,12 +188,17 @@ app.post('/api/auth/register', (req, res) => {
     }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     const hash = crypto.createHash('sha256').update(password).digest('hex');
     const user = db.prepare('SELECT * FROM users WHERE username = ? AND password_hash = ?').get(username, hash);
     if (!user) return res.status(401).json({ error: 'Auth failed' });
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET);
+    
+    const token = await new jose.SignJWT({ id: user.id, username: user.username, role: user.role })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .sign(secret);
+        
     res.json({ success: true, token, user: { username: user.username, role: user.role } });
 });
 

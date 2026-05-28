@@ -12,6 +12,9 @@ let isAdmin = false;
 let isZenTempExpanded = false;
 let isActuallyZen = false;
 let isRendering = false; // 渲染防抖锁
+let isPageManagementMode = false; // 页面管理模式开关 (Task 3.3)
+let selectedIds = new Set(); // 已选中的 ID 集合
+let sortableInstances = []; // Sortable 实例存储
 let syncTimer = null; // 同步防抖计时器 (Task 2.5.4)
 let syncRetryCount = 0; // 重试计数
 let touchStartY = 0; // 触摸起点 (Task 2.5.1)
@@ -327,6 +330,9 @@ const initAuthUI = () => {
             authOverlay.style.display = 'none';
         }
     });
+    // 绑定编辑框关闭和确认按钮
+    document.getElementById('btn-close-edit').onclick = () => document.getElementById('edit-modal').style.display = 'none';
+    document.getElementById('btn-confirm-edit').onclick = saveItem;
 };
 
 // ==================== 4. 数据加载 ====================
@@ -375,7 +381,7 @@ const init = async (forceRender = false) => {
 const buildCardHtml = (i) => {
     const target = appData.settings?.openInNewTab ? '_blank' : '_self';
     const icon = i.icon && i.icon.startsWith('http') 
-        ? `<img src="${i.icon}" loading="lazy" onerror="this.onerror=null;this.src='/favicon.ico'">` 
+        ? `<img src="${i.icon}" loading="lazy" data-retry-index="0" onerror="utils.handleIconError(this, '${i.url}')">` 
         : `<span class="emoji-icon">${i.icon || '🔗'}</span>`;
     return `<a href="${i.url}" target="${target}"><div class="icon-wrapper">${icon}</div><h3>${i.title}</h3></a>`;
 };
@@ -452,15 +458,42 @@ const renderNav = () => {
                 // 为磁贴增加 Tab 索引与唯一 ID，方便键盘流转 (Task 2.5.3)
                 card.setAttribute('tabindex', '0');
                 card.setAttribute('data-id', item.id);
-                card.innerHTML = buildCardHtml(item);
                 
-                card.onclick = () => recordClick(item.id);
+                let html = buildCardHtml(item);
+                
+                // Admin 编辑入口 (Task 3.2)
+                if (isAdmin) {
+                    html += `<div class="card-admin-btns">
+                        <button class="card-edit-btn" onclick="event.stopPropagation(); openEditModal('${item.id}')" title="编辑"><i class="ri-edit-line"></i></button>
+                    </div>`;
+                }
+                
+                card.innerHTML = html;
+                
+                // 处理点击逻辑 (Task 3.3 页面管理适配)
+                card.onclick = (e) => {
+                    if (isPageManagementMode) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const id = card.getAttribute('data-id');
+                        if (selectedIds.has(id)) selectedIds.delete(id);
+                        else selectedIds.add(id);
+                        card.classList.toggle('selected', selectedIds.has(id));
+                        updateBatchBar();
+                    } else {
+                        recordClick(item.id);
+                    }
+                };
                 
                 // 键盘激活支持
                 card.onkeydown = (e) => {
                     if (e.key === 'Enter') {
-                        recordClick(item.id);
-                        window.open(item.url, appData.settings?.openInNewTab ? '_blank' : '_self');
+                        if (isPageManagementMode) {
+                            card.click();
+                        } else {
+                            recordClick(item.id);
+                            window.open(item.url, appData.settings?.openInNewTab ? '_blank' : '_self');
+                        }
                     }
                 };
                 
@@ -520,6 +553,8 @@ const renderTools = () => {
                     ${roleBadge}
                 </div>
                 <div class="user-actions">
+                    <button class="icon-btn ${isPageManagementMode ? 'active' : ''}" onclick="togglePageManagement()" title="页面管理"><i class="ri-layout-masonry-line"></i></button>
+                    <button class="icon-btn" onclick="openEditModal('')" title="添加新书签"><i class="ri-add-circle-line"></i></button>
                     <button class="icon-btn" onclick="showToast('偏好设置即将上线')" title="设置"><i class="ri-settings-3-line"></i></button>
                     <button class="icon-btn" onclick="doResetConfig()" title="恢复默认配置"><i class="ri-refresh-line"></i></button>
                     <button class="icon-btn" onclick="doLogout()" title="退出登录"><i class="ri-logout-box-r-line"></i></button>
@@ -611,7 +646,7 @@ const initSearch = () => {
             if (matches.length > 0) {
                 resultsList.innerHTML = matches.map((m, idx) => `
                     <div class="local-result-item ${idx === 0 ? 'active' : ''}" onclick="recordClick('${m.id}'); window.open('${m.url}', '${appData.settings?.openInNewTab ? '_blank' : '_self'}')">
-                        <span class="result-icon">${m.icon?.startsWith('http') ? `<img src="${m.icon}">` : (m.icon || '🔗')}</span>
+                        <span class="result-icon">${m.icon?.startsWith('http') ? `<img src="${m.icon}" data-retry-index="0" onerror="utils.handleIconError(this, '${m.url}')">` : (m.icon || '🔗')}</span>
                         <div class="result-info">
                             <div class="result-title">${m.title}</div>
                             <div class="result-url">${m.url}</div>
@@ -642,6 +677,163 @@ const initSearch = () => {
             dropdown.style.display = 'none';
         }
     });
+};
+
+// ==================== 9. Task 3.3: 页面管理模式 (Page Management) ====================
+
+const togglePageManagement = (force) => {
+    if (!isAdmin) return showToast("仅管理员可进入页面管理模式", "#e67e22");
+
+    isPageManagementMode = typeof force === 'boolean' ? force : !isPageManagementMode;
+    document.body.classList.toggle('page-manage-active', isPageManagementMode);
+    
+    if (isPageManagementMode) {
+        selectedIds.clear();
+        showToast("进入页面管理模式：支持跨分类拖拽和批量操作", "#3498db");
+        initSortable();
+    } else {
+        destroySortable();
+        updateBatchBar();
+        showToast("已退出页面管理模式");
+    }
+    
+    renderTools();
+    renderNav(); // 刷新渲染以更新交互状态
+};
+
+const initSortable = () => {
+    destroySortable(); // 清理旧实例
+    const grids = document.querySelectorAll('.nav-grid');
+    
+    grids.forEach(grid => {
+        const catId = grid.closest('.category-section').id.replace('section-', '');
+        if (catId === 'VIRTUAL_FREQ') return; // 常去网站不支持排序
+
+        const sortable = new Sortable(grid, {
+            group: 'shared-bookmarks', // 允许跨分类拖拽
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            dragClass: 'sortable-drag',
+            handle: '.icon-wrapper', // 拖拽手柄
+            onEnd: (evt) => {
+                handleSortEnd(evt);
+            }
+        });
+        sortableInstances.push(sortable);
+    });
+};
+
+const destroySortable = () => {
+    sortableInstances.forEach(s => s.destroy());
+    sortableInstances = [];
+};
+
+const handleSortEnd = (evt) => {
+    const fromCatId = evt.from.closest('.category-section').id.replace('section-', '');
+    const toCatId = evt.to.closest('.category-section').id.replace('section-', '');
+    const itemId = evt.item.getAttribute('data-id');
+
+    console.log(`[Sort] Moved ${itemId} from ${fromCatId} to ${toCatId}`);
+
+    // 更新本地内存中的数据状态
+    const item = appData.items.find(i => i.id === itemId);
+    if (item) {
+        item.catId = toCatId;
+        item.cat_id = toCatId;
+    }
+
+    // 重新校准全量 items 的排序权重 (简单的基于当前 DOM 顺序)
+    const newItemsOrder = [];
+    document.querySelectorAll('.nav-grid .card').forEach(card => {
+        const id = card.getAttribute('data-id');
+        const found = appData.items.find(i => i.id === id);
+        if (found) newItemsOrder.push(found);
+    });
+
+    // 补全那些不在当前 DOM 中的 items (如果有的话)
+    appData.items.forEach(i => {
+        if (!newItemsOrder.find(ni => ni.id === i.id)) newItemsOrder.push(i);
+    });
+
+    appData.items = newItemsOrder;
+
+    // 触发防抖云端同步
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(syncConfigToCloud, 2000);
+};
+
+const updateBatchBar = () => {
+    const bar = document.getElementById('batch-actions-bar');
+    const countEl = document.getElementById('batch-count');
+    if (!bar || !countEl) return;
+
+    if (isPageManagementMode && selectedIds.size > 0) {
+        countEl.innerText = selectedIds.size;
+        bar.classList.add('visible');
+    } else {
+        bar.classList.remove('visible');
+    }
+};
+
+const syncConfigToCloud = async () => {
+    if (!sysToken) return;
+    console.log('[Sync] Saving changes to cloud...');
+    try {
+        const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 
+                'Authorization': sysToken,
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify(appData)
+        });
+        if (res.ok) showToast("更改已自动保存到云端");
+    } catch (e) {
+        showToast("自动保存失败", "#e74c3c");
+    }
+};
+
+const doBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`确定要删除选中的 ${selectedIds.size} 个书签吗？`)) return;
+
+    appData.items = appData.items.filter(i => !selectedIds.has(i.id));
+    selectedIds.clear();
+    showToast("批量删除成功");
+    
+    await syncConfigToCloud();
+    renderNav();
+    updateBatchBar();
+};
+
+const openBatchMoveModal = () => {
+    if (selectedIds.size === 0) return;
+    
+    // 复用编辑弹窗的分类选择逻辑
+    const catOptions = appData.categories.map(c => 
+        `<option value="${c.id}">${c.name}</option>`
+    ).join('');
+
+    const targetCatId = prompt("请输入要移动到的分类 ID (可通过侧边栏查看或输入分类全名):");
+    if (!targetCatId) return;
+
+    // 简单的模糊匹配或精确匹配
+    const targetCat = appData.categories.find(c => c.id === targetCatId || c.name === targetCatId);
+    if (!targetCat) return showToast("找不到目标分类", "#e67e22");
+
+    appData.items.forEach(i => {
+        if (selectedIds.has(i.id)) {
+            i.catId = targetCat.id;
+            i.cat_id = targetCat.id;
+        }
+    });
+
+    selectedIds.clear();
+    showToast(`成功移动至 ${targetCat.name}`);
+    
+    syncConfigToCloud();
+    renderNav();
+    updateBatchBar();
 };
 
 const initGlobalEvents = () => {
@@ -799,4 +991,153 @@ const initGlobalEvents = () => {
             }
         }
     });
+};
+
+// ==================== 7. Task 3.2: 魔法棒与编辑逻辑 ====================
+
+const openEditModal = (id) => {
+    const item = appData.items.find(i => i.id === id) || { id: '', title: '', url: '', icon: '', desc: '', cat_id: activeCatId };
+    const modal = document.getElementById('edit-modal');
+    const body = document.getElementById('edit-form-body');
+    if (!modal || !body) return;
+
+    modal.setAttribute('data-editing-id', id);
+    document.getElementById('edit-title').innerText = id ? '编辑书签' : '添加新书签';
+
+    body.innerHTML = `
+        <div class="form-row">
+            <label><i class="ri-link"></i> 网址</label>
+            <div style="display:flex; gap:8px; width:100%">
+                <input type="text" id="edit-url" value="${item.url}" placeholder="https://...">
+                <button id="btn-magic-wand" class="icon-btn-action" title="魔法棒自动抓取" onclick="triggerMagicWand()">
+                    <i class="ri-magic-line"></i>
+                </button>
+            </div>
+        </div>
+        <div class="form-row">
+            <label><i class="ri-font-size"></i> 标题</label>
+            <input type="text" id="edit-title-input" value="${item.title}" placeholder="网站名称">
+        </div>
+        <div class="form-row">
+            <label><i class="ri-image-line"></i> 图标</label>
+            <div style="display:flex; gap:8px; width:100%; align-items:center;">
+                <input type="text" id="edit-icon" value="${item.icon}" placeholder="Emoji 或 图片 URL">
+                <div id="edit-icon-preview" class="preview-container">
+                    ${item.icon?.startsWith('http') ? `<img src="${item.icon}">` : `<span>${item.icon || '🔗'}</span>`}
+                </div>
+            </div>
+        </div>
+        <div class="form-row">
+            <label><i class="ri-text-snippet"></i> 描述</label>
+            <textarea id="edit-desc" rows="2" placeholder="可选描述" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#fff; padding:8px;">${item.desc || ''}</textarea>
+        </div>
+        <div class="form-row">
+            <label><i class="ri-folders-line"></i> 分类</label>
+            <select id="edit-cat">
+                ${appData.categories.map(c => `<option value="${c.id}" ${c.id === (item.cat_id || item.catId) ? 'selected' : ''}>${c.name}</option>`).join('')}
+            </select>
+        </div>
+        <div class="form-row">
+            <label><i class="ri-eye-off-line"></i> 隐藏</label>
+            <input type="checkbox" id="edit-hidden" ${item.hidden ? 'checked' : ''}>
+        </div>
+    `;
+
+    // 实时图标预览
+    document.getElementById('edit-icon').oninput = (e) => {
+        const val = e.target.value.trim();
+        const preview = document.getElementById('edit-icon-preview');
+        preview.innerHTML = val.startsWith('http') ? `<img src="${val}">` : `<span>${val || '🔗'}</span>`;
+    };
+
+    modal.style.display = 'flex';
+};
+
+const triggerMagicWand = async () => {
+    const url = document.getElementById('edit-url').value.trim();
+    if (!url) return showToast("请先输入网址", "#e67e22");
+    if (!url.startsWith('http')) return showToast("请输入完整的 http(s) 网址", "#e67e22");
+
+    const btn = document.getElementById('btn-magic-wand');
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`/api/proxy/fetch-metadata?url=${encodeURIComponent(url)}`, {
+            headers: { 'Authorization': sysToken }
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            const { title, desc, icon } = result.data;
+            const titleInput = document.getElementById('edit-title-input');
+            const descInput = document.getElementById('edit-desc');
+            const iconInput = document.getElementById('edit-icon');
+
+            if (!titleInput.value) titleInput.value = title;
+            if (!descInput.value) descInput.value = desc;
+            if (!iconInput.value) {
+                iconInput.value = icon;
+                iconInput.dispatchEvent(new Event('input'));
+            }
+            showToast("魔法填充成功！");
+        } else {
+            showToast(result.error || "抓取失败", "#e74c3c");
+        }
+    } catch (e) {
+        showToast("请求服务失败", "#e74c3c");
+    } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+};
+
+const saveItem = async () => {
+    const modal = document.getElementById('edit-modal');
+    const id = modal.getAttribute('data-editing-id');
+    
+    const payload = {
+        id: id || 'item_' + Date.now(),
+        url: document.getElementById('edit-url').value.trim(),
+        title: document.getElementById('edit-title-input').value.trim(),
+        icon: document.getElementById('edit-icon').value.trim(),
+        desc: document.getElementById('edit-desc').value.trim(),
+        cat_id: document.getElementById('edit-cat').value,
+        hidden: document.getElementById('edit-hidden').checked
+    };
+
+    if (!payload.url || !payload.title) return showToast("网址和标题不能为空", "#e67e22");
+
+    showLoader('正在保存...');
+    try {
+        // 先克隆一份数据避免直接修改全局状态导致渲染不一致
+        const newItems = [...appData.items];
+        if (id) {
+            const idx = newItems.findIndex(i => i.id === id);
+            newItems[idx] = { ...newItems[idx], ...payload };
+        } else {
+            newItems.push(payload);
+        }
+
+        const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 
+                'Authorization': sysToken,
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify({ ...appData, items: newItems })
+        });
+
+        if (res.ok) {
+            showToast("保存成功");
+            modal.style.display = 'none';
+            await init(true); // 重新加载数据
+        } else {
+            showToast("保存失败", "#e74c3c");
+        }
+    } catch (e) {
+        showToast("请求失败", "#e74c3c");
+    } finally {
+        hideLoader();
+    }
 };

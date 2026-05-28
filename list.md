@@ -22,10 +22,15 @@
 - [x] **Task 2.5.3: 全键盘磁贴流转** (实现焦点环脉冲/网格列数实时计算/视距锁定)
 - [x] **Task 2.5.4: 点击统计云端同步** (实现 Beacon 离场同步/指数退避重试机制)
 
+## 🏗️ Phase 2.6: 工程化加固与 Edge 适配
+- [x] **Task 2.6.1: 鉴权环境 Edge 化** (从 `jsonwebtoken` 迁移至 `jose`，实现 Cloudflare Workers 100% 原生兼容)
+- [x] **Task 2.6.2: 预览脚本增强** (完善 `package.json` 脚本，补齐 D1 数据库本地绑定预览功能)
+- [x] **Task 2.6.3: 代码规范初始化** (引入 ESLint & Prettier，建立工业级代码质量约束)
+
 ## 🛠️ Phase 3: 自动化管理与图标自愈 (4.2/4.4)
-- [ ] **Task 3.1: 6 级图标自愈引擎** (实现 handleIconError 自动降级重试流)
-- [ ] **Task 3.2: 魔法棒 (Magic Wand) 异步抓取** (多源并发图标抓取与比选)
-- [ ] **Task 3.3: 批量操作与拖拽重排** (SortableJS 集成与底部批处理工具栏)
+- [x] **Task 3.1: 6 级图标自愈引擎** (级联降级策略：原站 -> iowen -> QQ -> Google -> DuckDuckGo -> 文字兜底)
+- [x] **Task 3.2: 魔法棒 (Magic Wand) 自动化采集** (后端 HTMLRewriter 抓取 metadata，实现标题/描述/图标一键填入)
+- [ ] **Task 3.3: 页面管理 (Page Management) 深度集成** (实现 SortableJS 跨分类拖拽排版 + 底部多选批量管理工具栏)
 
 ## 🛡️ Phase 4: 全站管控中心 (4.3)
 - [ ] **Task 4.1: 管理员 Dashboard 与审计** (用户列表查询、封禁、操作日志)

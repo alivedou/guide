@@ -48,10 +48,59 @@ const FALLBACK_EMOJIS = ['🌍', '🌟', '🚀', '💡', '🔥', '✨', '🎈', 
  */
 const getRandomEmoji = () => FALLBACK_EMOJIS[Math.floor(Math.random() * FALLBACK_EMOJIS.length)];
 
+/**
+ * 6 级图标自愈引擎 (Task 3.1)
+ * @param {HTMLImageElement} img - 触发错误的图片元素
+ * @param {string} originalUrl - 原始链接 (用于提取域名)
+ */
+const handleIconError = (img, originalUrl) => {
+    // 防止死循环：如果已经是 span 了就不处理（通常不会发生，因为这是 img 的 onerror）
+    if (!img || img.tagName !== 'IMG') return;
+
+    // 获取当前尝试次数
+    let retryIndex = parseInt(img.getAttribute('data-retry-index') || '0');
+    retryIndex++;
+    img.setAttribute('data-retry-index', retryIndex);
+
+    // 提取域名 (用于各种 Favicon API)
+    let domain = '';
+    try {
+        const url = new URL(originalUrl.startsWith('http') ? originalUrl : `https://${originalUrl}`);
+        domain = url.hostname;
+    } catch (e) {
+        domain = originalUrl.split('/')[0];
+    }
+
+    const apis = [
+        null, // 0: 原始 URL (已失败)
+        `https://api.iowen.cn/favicon/${domain}.png`,
+        `https://favicon.qqsuu.cn/v1?url=${domain}`,
+        `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
+        `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+    ];
+
+    if (retryIndex < apis.length) {
+        console.warn(`[IconHeal] Level ${retryIndex} failover for ${domain}`);
+        img.src = apis[retryIndex];
+    } else {
+        // Level 6: 终极兜底 - 替换为文字/Emoji 磁贴
+        console.error(`[IconHeal] All fallbacks failed for ${domain}, using text placeholder.`);
+        const parent = img.parentElement;
+        if (parent) {
+            const char = domain.charAt(0).toUpperCase() || '🔗';
+            const span = document.createElement('span');
+            span.className = 'emoji-icon';
+            span.innerText = char;
+            parent.replaceChild(span, img);
+        }
+    }
+};
+
 // 导出工具函数（全局挂载）
 window.utils = {
     debounce,
     escapeHTML,
     getRandomEmoji,
-    FALLBACK_EMOJIS
+    FALLBACK_EMOJIS,
+    handleIconError
 };

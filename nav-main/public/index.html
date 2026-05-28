@@ -182,6 +182,25 @@
         </div>
     </div>
 
+    <!-- 批量管理工具栏 (Task 3.3) -->
+    <div id="batch-actions-bar" class="batch-actions-bar">
+        <div class="batch-info">
+            <i class="ri-checkbox-multiple-line"></i>
+            <span>已选中 <b id="batch-count">0</b> 项</span>
+        </div>
+        <div class="batch-btns">
+            <button class="batch-btn move" onclick="openBatchMoveModal()">
+                <i class="ri-drag-move-fill"></i> 移动分类
+            </button>
+            <button class="batch-btn delete" onclick="doBatchDelete()">
+                <i class="ri-delete-bin-line"></i> 批量删除
+            </button>
+            <button class="batch-btn cancel" onclick="togglePageManagement(false)">
+                <i class="ri-close-line"></i> 退出管理
+            </button>
+        </div>
+    </div>
+
     <!-- Monaco Editor 弹窗 -->
     <div id="monaco-modal" class="modal">
         <div class="monaco-modal-content">

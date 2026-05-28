@@ -6,6 +6,7 @@
  * ==========================================
  */
 
+import * as jose from 'jose';
 import { defaultData } from './defaultData.js';
 
 const CONFIG = {
@@ -30,7 +31,7 @@ async function sha256(text) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ====== 鉴权提取函数 ======
+// ====== 鉴权提取函数 (Task 2.6.1: 使用 jose 验证 JWT) ======
 async function getAuthContext(request, env) {
   const authHeader = request.headers.get("Authorization");
   let userId = "guest";
@@ -40,8 +41,10 @@ async function getAuthContext(request, env) {
   if (authHeader && authHeader.startsWith("Bearer ")) {
     try {
       const token = authHeader.split(" ")[1];
-      const decoded = atob(token);
-      userId = decoded.split(":")[0];
+      const secret = new TextEncoder().encode(env.JWT_SECRET || 'cloudnav-secret-2026');
+      
+      const { payload } = await jose.jwtVerify(token, secret);
+      userId = payload.id;
       
       const user = await env.DB.prepare('SELECT username, role, status FROM users WHERE id = ?').bind(userId).first();
       if (user && user.status !== 'frozen') {
@@ -51,6 +54,7 @@ async function getAuthContext(request, env) {
         userId = "guest";
       }
     } catch (e) {
+      console.error('[Auth] JWT Verification failed:', e.message);
       userId = "guest";
     }
   }

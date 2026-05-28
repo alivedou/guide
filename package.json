@@ -7,16 +7,23 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "preview": "wrangler pages dev ./nav-main/public --kv=nav --compatibility-date=2024-05-28",
+    "lint": "eslint . --fix",
+    "format": "prettier --write .",
+    "preview": "wrangler pages dev ./nav-main/public --kv=nav --d1=DB --compatibility-date=2024-05-28",
+    "deploy": "wrangler pages deploy ./nav-main/public",
     "build": "echo 'Build successfully'"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
     "dotenv": "^17.4.2",
     "express": "^4.21.2",
-    "jsonwebtoken": "^9.0.3"
+    "jose": "^6.2.3",
+    "node-html-parser": "^7.1.0"
   },
   "devDependencies": {
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
     "wrangler": "^3.57.1"
   }
 }

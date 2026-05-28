@@ -1175,6 +1175,54 @@ body.light-theme .footer-info {
     display: flex;
 }
 
+/* ==================== Task 3.3: 页面管理模式增强 ==================== */
+body.page-manage-active .card {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+body.page-manage-active .card .icon-wrapper {
+    cursor: grab;
+    position: relative;
+}
+
+body.page-manage-active .card .icon-wrapper:active {
+    cursor: grabbing;
+}
+
+body.page-manage-active .card .icon-wrapper::after {
+    content: '⠿';
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 14px;
+    color: var(--primary);
+    opacity: 0.8;
+    pointer-events: none;
+}
+
+body.page-manage-active .card-admin-btns {
+    display: none !important;
+}
+
+.batch-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+}
+
+.batch-btns {
+    display: flex;
+    gap: 10px;
+}
+
+.batch-btn.cancel {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text);
+}
+
 .batch-actions-bar span {
     color: rgba(255, 255, 255, 0.8);
     font-size: 13px;
@@ -2335,4 +2383,71 @@ body.light-theme .search-dropdown {
 body.light-theme .local-result-item:hover,
 body.light-theme .local-result-item.active {
     background: rgba(0, 0, 0, 0.05);
+}
+
+/* ==================== Task 3.2: 魔法棒与管理按钮 ==================== */
+.card-admin-btns {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: none;
+    gap: 4px;
+    z-index: 10;
+}
+
+.card:hover .card-admin-btns {
+    display: flex;
+}
+
+.card-edit-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.card-edit-btn:hover {
+    background: var(--primary);
+    transform: scale(1.1);
+}
+
+.icon-btn-action {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.icon-btn-action:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.icon-btn-action.loading i {
+    animation: spin 1s linear infinite;
+}
+
+#edit-icon-preview {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.light-theme .icon-btn-action {
+    background: rgba(0, 0, 0, 0.05);
+    color: #3d4f5f;
 }
