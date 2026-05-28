@@ -18,30 +18,89 @@ export async function onRequestPost(context) {
   }
 
   try {
-    const { username, password } = await request.json();
+    const { username, password, inviteCode } = await request.json();
     if (!username || !password) {
       return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400 });
     }
 
+    // 0. 获取全局注册策略
+    const configStr = await env.nav.get("system:site_config");
+    const config = configStr ? JSON.parse(configStr) : { allowOpenRegistration: true, requireInvitation: false };
+
     const passwordHash = await sha256(password);
     const uuid = crypto.randomUUID();
 
-    // 1. 检查是否为首位用户，若是则提升为 Admin
+    // 1. 检查是否为首位用户
     const userCount = await env.DB.prepare('SELECT COUNT(*) as count FROM users').first('count');
-    const role = userCount === 0 ? 'admin' : 'user';
+    const isFirstUser = (userCount === 0);
+    const role = isFirstUser ? 'admin' : 'user';
 
-    // 2. 事务级写入 D1 (用户表 + 初始设置表)
-    await env.DB.batch([
-      env.DB.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)')
-        .bind(uuid, username, passwordHash, role),
-      env.DB.prepare('INSERT INTO user_settings (user_id) VALUES (?)')
-        .bind(uuid)
-    ]);
+    // 2. 策略拦截 (非首位用户才拦截)
+    if (!isFirstUser) {
+      if (config.requireInvitation) {
+        if (!inviteCode) return new Response(JSON.stringify({ error: "请提供邀请码" }), { status: 403 });
+        
+        const invite = await env.DB.prepare('SELECT status FROM invitation_codes WHERE code = ? AND status = "unused"').bind(inviteCode).first();
+        if (!invite) return new Response(JSON.stringify({ error: "无效或已被使用的邀请码" }), { status: 403 });
+      } else if (!config.allowOpenRegistration) {
+        return new Response(JSON.stringify({ error: "系统当前暂停注册，请联系管理员" }), { status: 403 });
+      }
+    }
 
-    // 3. 初始化 KV 数据 (作为快速缓存)
+    // 3. 事务级写入 D1
+    const queries = [
+      env.DB.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)').bind(uuid, username, passwordHash, role),
+      env.DB.prepare('INSERT INTO user_settings (user_id) VALUES (?)').bind(uuid)
+    ];
+
+    if (!isFirstUser && inviteCode) {
+      queries.push(env.DB.prepare('UPDATE invitation_codes SET status = "used", used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ?').bind(uuid, inviteCode));
+    }
+
+    await env.DB.batch(queries);
+
+    // 4. 初始化数据 (D1 初始积木 + KV 缓存)
+    const templateStr = await env.nav.get("system:onboarding_template");
+    const onboardingData = templateStr ? JSON.parse(templateStr) : defaultData;
+
+    const initQueries = [];
+    const categories = onboardingData.categories || [];
+    const items = onboardingData.items || [];
+    const settings = onboardingData.settings || {};
+
+    // 写入 D1 用户设置
+    initQueries.push(env.DB.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, open_in_new_tab = ? WHERE user_id = ?')
+      .bind(settings.cardWidth || 125, settings.zenMode ? 1 : 0, settings.openInNewTab ? 1 : 0, uuid));
+
+    for (const cat of categories) {
+      const newCatId = crypto.randomUUID();
+      initQueries.push(env.DB.prepare('INSERT INTO categories (id, user_id, name, icon, hidden) VALUES (?, ?, ?, ?, ?)')
+        .bind(newCatId, uuid, cat.name, cat.icon, cat.hidden ? 1 : 0));
+      
+      const catItems = items.filter(i => (i.catId || i.cat_id) === cat.id);
+      for (const item of catItems) {
+        const newItemId = crypto.randomUUID();
+        initQueries.push(env.DB.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(newItemId, uuid, newCatId, item.title, item.url, item.desc, item.icon, item.hidden ? 1 : 0));
+      }
+    }
+
+    if (initQueries.length > 0) await env.DB.batch(initQueries);
+
+    // 5. 初始化 KV 缓存 (压缩存储)
     if (env.nav) {
-      const initialData = { ...defaultData, user: uuid, isAdmin: (role === 'admin') };
-      await env.nav.put(`user_config:${uuid}`, JSON.stringify(initialData));
+      const initialKV = { 
+        categories: categories.map(c => ({ ...c, id: c.id })), // 保持结构一致
+        items: items.map(i => ({ ...i, catId: i.catId || i.cat_id })),
+        settings: { 
+          cardWidth: settings.cardWidth || 125, 
+          zenMode: !!settings.zenMode, 
+          openInNewTab: !!settings.openInNewTab 
+        },
+        user: uuid, 
+        isAdmin: (role === 'admin') 
+      };
+      await env.nav.put(`user_config:${uuid}`, JSON.stringify(initialKV));
     }
 
     return new Response(JSON.stringify({ 

@@ -40,3 +40,6 @@ Desktop.ini
 # Project specific
 kv_mock.json
 local_kv/
+local_d1.db
+*.db-journal
+

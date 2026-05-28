@@ -9,8 +9,10 @@
     "start": "node server.js",
     "lint": "eslint . --fix",
     "format": "prettier --write .",
-    "preview": "wrangler pages dev ./nav-main/public --kv=nav --d1=DB --compatibility-date=2024-05-28",
+    "preview": "wrangler pages dev ./nav-main/public --functions nav-main/functions --kv=nav --d1=DB --compatibility-date=2024-05-28",
     "deploy": "wrangler pages deploy ./nav-main/public",
+    "db:init": "wrangler d1 execute DB --local --file=./migrations/0000_init.sql && wrangler d1 execute DB --local --file=./migrations/0001_invitations.sql",
+    "clean": "rm -rf local_kv local_d1.db kv_mock.json",
     "build": "echo 'Build successfully'"
   },
   "dependencies": {

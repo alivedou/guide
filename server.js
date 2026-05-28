@@ -6,7 +6,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import * as jose from 'jose';
 import Database from 'better-sqlite3';
-import { defaultData } from './nav-main/functions/api/defaultData.js';
+import { defaultData, MINIMAL_SAFE_DATA } from './nav-main/functions/api/defaultData.js';
 import { parse } from 'node-html-parser';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,7 +15,36 @@ const __dirname = path.dirname(__filename);
 // ====== 初始化本地数据库 (模拟 D1) ======
 const dbPath = path.join(__dirname, 'local_d1.db');
 const db = new Database(dbPath);
-db.exec(fs.readFileSync(path.join(__dirname, 'migrations/0000_init.sql'), 'utf-8'));
+
+// 自动执行所有迁移文件 (Task 5.5.2)
+const migrationsDir = path.join(__dirname, 'migrations');
+if (fs.existsSync(migrationsDir)) {
+    const files = fs.readdirSync(migrationsDir).sort();
+    files.forEach(file => {
+        if (file.endsWith('.sql')) {
+            console.log(`[DB] Executing migration: ${file}`);
+            db.exec(fs.readFileSync(path.join(migrationsDir, file), 'utf-8'));
+        }
+    });
+}
+
+// ====== Task 5.5.4: 数据库自动热迁移 (修复字段缺失) ======
+try {
+    const tableInfo = db.prepare("PRAGMA table_info(users)").all();
+    const columns = tableInfo.map(c => c.name);
+    if (columns.length > 0) {
+        if (!columns.includes('status')) {
+            console.log('[DB] Patching: Adding status column to users table');
+            db.exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+        }
+        if (!columns.includes('role')) {
+            console.log('[DB] Patching: Adding role column to users table');
+            db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
+        }
+    }
+} catch (e) {
+    console.warn('[DB] Auto-patch skipped:', e.message);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -41,6 +70,14 @@ const authenticate = async (req, res, next) => {
         const status = err.code === 'ERR_JWT_EXPIRED' ? 401 : 403;
         return res.status(status).json({ error: 'Invalid or expired token', code: err.code });
     }
+};
+
+// ====== 管理员权限拦截器 (Task 5.5.2.1) ======
+const adminOnly = (req, res, next) => {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_user') {
+        return res.status(403).json({ error: '权限不足，仅限管理员操作', code: 'FORBIDDEN' });
+    }
+    next();
 };
 
 app.use(express.json({ limit: '10mb' }));
@@ -145,37 +182,83 @@ const syncUserToKV = (userId) => {
     return userData;
 };
 
+/**
+ * Task 6.1: 智能引导系统 (Onboarding)
+ * 动态加载初始化数据模板
+ */
+const getOnboardingData = () => {
+    const templatePath = path.join(__dirname, 'system_default.json');
+    try {
+        if (fs.existsSync(templatePath)) {
+            console.log('[Onboarding] Loading template from system_default.json');
+            return JSON.parse(fs.readFileSync(templatePath, 'utf-8'));
+        }
+    } catch (e) {
+        console.error('[Onboarding] Failed to read system_default.json:', e.message);
+    }
+    
+    // 阶梯式回退：内置数据 -> 最小兜底数据
+    if (defaultData && defaultData.categories && defaultData.categories.length > 0) {
+        console.log('[Onboarding] Falling back to defaultData.js');
+        return defaultData;
+    }
+    
+    console.warn('[Onboarding] CRITICAL: Using MINIMAL_SAFE_DATA fallback');
+    return MINIMAL_SAFE_DATA;
+};
+
 // ====== 4.3 认证 API ======
 
 app.post('/api/auth/register', (req, res) => {
     console.log('[Auth] Register request:', req.body.username);
-    const { username, password } = req.body;
+    const { username, password, inviteCode } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Missing username or password' });
+
+    // 0. 模拟获取策略
+    const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+    let config = { allowOpenRegistration: true, requireInvitation: false };
+    if (fs.existsSync(configPath)) config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
     const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
     const uuid = crypto.randomUUID();
 
     try {
-        // Task 1.3: 自动提升逻辑
         const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-        const role = userCount === 0 ? 'admin' : 'user';
+        const isFirstUser = userCount === 0;
+        const role = isFirstUser ? 'admin' : 'user';
+
+        // 策略拦截
+        if (!isFirstUser) {
+            if (config.requireInvitation) {
+                if (!inviteCode) return res.status(403).json({ error: '请提供邀请码' });
+                const invite = db.prepare('SELECT status FROM invitation_codes WHERE code = ? AND status = "unused"').get(inviteCode);
+                if (!invite) return res.status(403).json({ error: '无效或已被使用的邀请码' });
+            } else if (!config.allowOpenRegistration) {
+                return res.status(403).json({ error: '系统当前暂停注册，请联系管理员' });
+            }
+        }
         
         console.log(`[Auth] Creating user ${username} with role: ${role}`);
 
-        // Task 1.2: D1 事务处理
+        const onboardingData = getOnboardingData();
+
         db.transaction(() => {
             db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)').run(uuid, username, passwordHash, role);
             
-            // 初始化设置 (显式设定 zen_mode 为 1，确保新用户立即获得沉浸体验)
-            db.prepare('INSERT INTO user_settings (user_id, zen_mode) VALUES (?, 1)').run(uuid);
+            // 使用模板设置
+            const s = onboardingData.settings || {};
+            db.prepare('INSERT INTO user_settings (user_id, card_width, zen_mode, open_in_new_tab) VALUES (?, ?, ?, ?)').run(
+                uuid, s.cardWidth || 125, s.zenMode ? 1 : 0, s.openInNewTab ? 1 : 0
+            );
             
-            // 为新用户注入默认模板 (需求 4.4 / 4.6)
-            for (const cat of defaultData.categories) {
+            if (!isFirstUser && inviteCode) {
+                db.prepare('UPDATE invitation_codes SET status = "used", used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ?').run(uuid, inviteCode);
+            }
+
+            for (const cat of onboardingData.categories) {
                 const newCatId = crypto.randomUUID();
                 db.prepare('INSERT INTO categories (id, user_id, name, icon, hidden) VALUES (?, ?, ?, ?, ?)').run(newCatId, uuid, cat.name, cat.icon, cat.hidden ? 1 : 0);
-                
-                // 查找该分类下的所有项目并关联到新分类 ID
-                const catItems = defaultData.items.filter(i => i.catId === cat.id);
+                const catItems = onboardingData.items.filter(i => (i.catId || i.cat_id) === cat.id);
                 for (const item of catItems) {
                     const newItemId = crypto.randomUUID();
                     db.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(newItemId, uuid, newCatId, item.title, item.url, item.desc, item.icon, item.hidden ? 1 : 0);
@@ -183,42 +266,89 @@ app.post('/api/auth/register', (req, res) => {
             }
         })();
         
-        // Task 1.2: 预热缓存 (Sync to local_kv)
         syncUserToKV(uuid);
-        console.log('[Auth] Register success for:', username);
         res.json({ success: true, role });
     } catch (e) { 
-        console.error('[Auth] Register Error:', e.message);
         res.status(400).json({ error: 'Username already exists or database error' }); 
+    }
+});
+
+// ====== Task 4.4: 邀请码管理 API ======
+
+app.get('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
+    try {
+        const list = db.prepare(`
+            SELECT ic.*, u2.username as used_by_name 
+            FROM invitation_codes ic
+            LEFT JOIN users u2 ON ic.used_by = u2.id
+            ORDER BY ic.created_at DESC
+        `).all();
+        res.json({ success: true, invitations: list });
+    } catch (e) {
+        res.status(500).json({ error: '获取邀请码失败', details: e.message });
+    }
+});
+
+app.post('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
+    const { count } = req.body;
+    try {
+        db.transaction(() => {
+            for (let i = 0; i < (count || 1); i++) {
+                const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+                db.prepare('INSERT INTO invitation_codes (code, creator_id) VALUES (?, ?)').run(code, req.user.id);
+            }
+        })();
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: '生成邀请码失败', details: e.message });
+    }
+});
+
+app.delete('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
+    const { code } = req.body;
+    try {
+        db.prepare('DELETE FROM invitation_codes WHERE code = ?').run(code);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: '删除邀请码失败', details: e.message });
     }
 });
 
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     const ip = req.ip;
+    console.log(`[Auth] Login attempt for user: ${username} from IP: ${ip}`);
 
     // 防爆破检查
     const attempt = loginAttempts.get(ip) || { count: 0, lockUntil: 0 };
     if (attempt.lockUntil > Date.now()) {
         const waitMin = Math.ceil((attempt.lockUntil - Date.now()) / 60000);
+        console.warn(`[Auth] IP ${ip} is currently locked out`);
         return res.status(429).json({ error: `登录尝试过多，请在 ${waitMin} 分钟后再试` });
     }
 
     const hash = crypto.createHash('sha256').update(password).digest('hex');
-    const user = db.prepare('SELECT * FROM users WHERE username = ? AND password_hash = ?').get(username, hash);
+    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
     
     if (!user) {
-        attempt.count++;
-        if (attempt.count >= 5) {
-            attempt.lockUntil = Date.now() + 10 * 60 * 1000; // 锁定 10 分钟 (Task 4.3)
-            console.log(`[Security] IP ${ip} locked for 10 mins due to failures`);
-        }
-        loginAttempts.set(ip, attempt);
-        return res.status(401).json({ error: '用户名或密码错误' });
+        console.warn(`[Auth] User not found: ${username}`);
+        return recordLoginFailure(ip, res);
+    }
+
+    if (user.password_hash !== hash) {
+        console.warn(`[Auth] Password mismatch for user: ${username}`);
+        return recordLoginFailure(ip, res);
+    }
+
+    // Task 5.5.2: 检查账号状态 (冻结逻辑)
+    if (user.status === 'frozen') {
+        console.warn(`[Auth] Account frozen: ${username}`);
+        return res.status(403).json({ error: '账号已被冻结，请联系管理员', code: 'ACCOUNT_FROZEN' });
     }
     
     // 登录成功，重置尝试次数
     loginAttempts.delete(ip);
+    console.log(`[Auth] Login successful: ${username} (${user.role})`);
     
     const token = await new jose.SignJWT({ id: user.id, username: user.username, role: user.role })
         .setProtectedHeader({ alg: 'HS256' })
@@ -229,50 +359,75 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ success: true, token, user: { username: user.username, role: user.role } });
 });
 
+// 辅助函数：记录登录失败
+function recordLoginFailure(ip, res) {
+    const attempt = loginAttempts.get(ip) || { count: 0, lockUntil: 0 };
+    attempt.count++;
+    if (attempt.count >= 5) {
+        attempt.lockUntil = Date.now() + 10 * 60 * 1000;
+        console.log(`[Security] IP ${ip} locked for 10 mins due to failures`);
+    }
+    loginAttempts.set(ip, attempt);
+    return res.status(401).json({ error: '用户名或密码错误' });
+}
+
 // ====== Task 4.1: 管理员管控枢纽 (Admin Hub) ======
 
-app.get('/api/admin/users', authenticate, (req, res) => {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-    const users = db.prepare('SELECT id, username, role, status, last_login, created_at FROM users ORDER BY created_at DESC').all();
-    res.json({ success: true, users });
-});
-
-app.patch('/api/admin/users', authenticate, (req, res) => {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
-    const { userId, status } = req.body;
-    db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, userId);
-    
-    db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .run(req.user.id, 'CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, req.ip);
-      
-    res.json({ success: true });
-});
-
-app.get('/api/admin/site-config', (req, res) => {
-    const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
-    if (fs.existsSync(configPath)) {
-        res.json(JSON.parse(fs.readFileSync(configPath, 'utf-8')));
-    } else {
-        res.json({
-            siteTitle: "CloudNav 导航",
-            faviconUrl: "/favicon.ico",
-            seoKeywords: "导航, 自定义, 云端存储",
-            seoDescription: "极致简洁的个人自定义导航网站"
-        });
+app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
+    try {
+        const users = db.prepare('SELECT id, username, role, status, last_login, created_at FROM users ORDER BY created_at DESC').all();
+        res.json({ success: true, users });
+    } catch (e) {
+        res.status(500).json({ error: '获取用户列表失败', details: e.message });
     }
 });
 
-app.post('/api/admin/site-config', authenticate, (req, res) => {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
+    const { userId, status } = req.body;
+    try {
+        db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, userId);
+        db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+          .run(req.user.id, 'CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, req.ip);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: '更新用户状态失败', details: e.message });
+    }
+});
+
+app.get('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
+    const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+    try {
+        if (fs.existsSync(configPath)) {
+            res.json(JSON.parse(fs.readFileSync(configPath, 'utf-8')));
+        } else {
+            res.json({
+                siteTitle: "CloudNav 导航",
+                faviconUrl: "/favicon.ico",
+                seoKeywords: "导航, 自定义, 云端存储",
+                seoDescription: "极致简洁的个人自定义导航网站",
+                allowOpenRegistration: true,
+                requireInvitation: false
+            });
+        }
+    } catch (e) {
+        res.status(500).json({ error: '获取站点配置失败', details: e.message });
+    }
+});
+
+app.post('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
     const config = req.body;
-    const kvDir = path.join(__dirname, 'local_kv');
-    if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
-    fs.writeFileSync(path.join(kvDir, 'site_config.json'), JSON.stringify(config, null, 2));
-    
-    db.prepare('INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)')
-      .run(req.user.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config));
-      
-    res.json({ success: true });
+    try {
+        const kvDir = path.join(__dirname, 'local_kv');
+        if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
+        fs.writeFileSync(path.join(kvDir, 'site_config.json'), JSON.stringify(config, null, 2));
+        
+        db.prepare('INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)')
+          .run(req.user.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config));
+          
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: '保存站点配置失败', details: e.message });
+    }
 });
 
 // ====== Task 4.2: 公告系统 (Broadcast) ======
@@ -282,22 +437,19 @@ app.get('/api/announcements', (req, res) => {
     res.json({ success: true, announcements: list });
 });
 
-app.get('/api/admin/announcements', authenticate, (req, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'super_user') return res.status(403).json({ error: 'Forbidden' });
+app.get('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
     const list = db.prepare('SELECT * FROM announcements ORDER BY is_top DESC, created_at DESC').all();
     res.json({ success: true, announcements: list });
 });
 
-app.post('/api/admin/announcements', authenticate, (req, res) => {
-    if (req.user.role !== 'admin' && req.user.role !== 'super_user') return res.status(403).json({ error: 'Forbidden' });
+app.post('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
     const { title, content, type, is_top } = req.body;
     db.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top) VALUES (?, ?, ?, ?, ?)')
       .run(req.user.id, title, content, type, is_top ? 1 : 0);
     res.json({ success: true });
 });
 
-app.delete('/api/admin/announcements', authenticate, (req, res) => {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+app.delete('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
     const { id } = req.body;
     db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
     res.json({ success: true });
@@ -393,21 +545,26 @@ app.delete('/api/config', authenticate, (req, res) => {
     if (userId === 'guest') return res.status(401).end();
 
     console.log(`[Config] Resetting data for user: ${userId}`);
+    const onboardingData = getOnboardingData();
+
     try {
         db.transaction(() => {
             // 1. 清理该用户的所有旧数据
             db.prepare('DELETE FROM categories WHERE user_id = ?').run(userId);
             db.prepare('DELETE FROM items WHERE user_id = ?').run(userId);
             
-            // 2. 重置用户设置到默认状态 (确保 Zen Mode 等生效)
-            db.prepare('UPDATE user_settings SET card_width = 125, zen_mode = 1, show_frequent = 1, bg_url = NULL, simple_mode = 0, open_in_new_tab = 1, theme_mode = \'auto\' WHERE user_id = ?').run(userId);
+            // 2. 重置用户设置到模板状态
+            const s = onboardingData.settings || {};
+            db.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = 1, bg_url = NULL, simple_mode = 0, open_in_new_tab = ?, theme_mode = \'auto\' WHERE user_id = ?').run(
+                s.cardWidth || 125, s.zenMode ? 1 : 0, s.openInNewTab ? 1 : 0, userId
+            );
             
-            // 3. 重新注入最新的 defaultData 模板 (精选的 20 个站点)
-            for (const cat of defaultData.categories) {
+            // 3. 重新注入最新的模板
+            for (const cat of onboardingData.categories) {
                 const newCatId = crypto.randomUUID();
                 db.prepare('INSERT INTO categories (id, user_id, name, icon, hidden) VALUES (?, ?, ?, ?, ?)').run(newCatId, userId, cat.name, cat.icon, cat.hidden ? 1 : 0);
                 
-                const catItems = defaultData.items.filter(i => i.catId === cat.id);
+                const catItems = onboardingData.items.filter(i => (i.catId || i.cat_id) === cat.id);
                 for (const item of catItems) {
                     const newItemId = crypto.randomUUID();
                     db.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(newItemId, userId, newCatId, item.title, item.url, item.desc, item.icon, item.hidden ? 1 : 0);

@@ -7,7 +7,7 @@
  */
 
 import * as jose from 'jose';
-import { defaultData } from './defaultData.js';
+import { defaultData, MINIMAL_SAFE_DATA } from './defaultData.js';
 
 const CONFIG = {
   bingApi: "https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1"
@@ -131,32 +131,44 @@ export async function onRequestPost(context) {
   const kvKey = `user_config:${userId}`;
   try {
     const newData = await request.json();
+    const { categories, items, settings } = newData;
     
-    // Task 4.3: 资源配额校验 (Quota Guard)
-    if (newData.categories && newData.categories.length > 20) {
-      return new Response(JSON.stringify({ 
-        error: "分类数量已达到上限 (20)", 
-        code: "ERR_QUOTA_EXCEEDED" 
-      }), { status: 403 });
+    // Task 4.3: 资源配额校验
+    if (categories && categories.length > 20) {
+      return new Response(JSON.stringify({ error: "分类数量已达到上限 (20)", code: "ERR_QUOTA_EXCEEDED" }), { status: 403 });
     }
 
-    // 统计每个分类下的书签数量
-    if (newData.items) {
-      const catCounts = {};
-      for (const item of newData.items) {
-        const cId = item.catId || item.cat_id;
-        catCounts[cId] = (catCounts[cId] || 0) + 1;
-        if (catCounts[cId] > 100) {
-          return new Response(JSON.stringify({ 
-            error: "单个分类下的书签不能超过 100 个", 
-            code: "ERR_QUOTA_EXCEEDED" 
-          }), { status: 403 });
-        }
-      }
+    // 1. D1 事务持久化 (Task 6.3)
+    const queries = [
+      env.DB.prepare('DELETE FROM categories WHERE user_id = ?').bind(userId),
+      env.DB.prepare('DELETE FROM items WHERE user_id = ?').bind(userId)
+    ];
+
+    if (categories) {
+      categories.forEach((cat, idx) => {
+        queries.push(env.DB.prepare('INSERT INTO categories (id, user_id, name, icon, sort_order, is_video, hidden) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .bind(cat.id, userId, cat.name, cat.icon, idx, cat._isVideo ? 1 : 0, cat.hidden ? 1 : 0));
+      });
     }
 
+    if (items) {
+      items.forEach((item, idx) => {
+        queries.push(env.DB.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(item.id, userId, item.catId || item.cat_id, item.title, item.url, item.desc, item.icon, item.bg_color || '', idx, item.hidden ? 1 : 0));
+      });
+    }
+
+    if (settings) {
+      queries.push(env.DB.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = ?, bg_url = ?, simple_mode = ?, open_in_new_tab = ?, theme_mode = ? WHERE user_id = ?')
+        .bind(settings.cardWidth, settings.zenMode ? 1 : 0, settings.showFrequent ? 1 : 0, settings.bgUrl || null, settings.simpleMode ? 1 : 0, settings.openInNewTab ? 1 : 0, settings.themeMode || 'auto', userId));
+    }
+
+    await env.DB.batch(queries);
+
+    // 2. 更新 KV 缓存 (压缩存储)
     newData.lastUpdated = formatCNTime(new Date());
     await env.nav.put(kvKey, JSON.stringify(newData));
+    
     return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
     return new Response(JSON.stringify({ error: "POST_ERROR", message: err.toString() }), { status: 500 });
@@ -177,8 +189,49 @@ export async function onRequestDelete(context) {
   const userId = auth.userId;
   const kvKey = `user_config:${userId}`;
   try {
-    const resetData = getFreshDefaultData();
+    // 1. 阶梯式模板加载逻辑 (Task 6.1.1)
+    let onboardingData = null;
+    try {
+      const templateStr = await env.nav.get("system:onboarding_template");
+      if (templateStr) onboardingData = JSON.parse(templateStr);
+    } catch (e) { console.error('[Reset] Template load failed', e); }
+
+    if (!onboardingData || !onboardingData.categories) {
+      console.log('[Reset] Using defaultData fallback');
+      onboardingData = defaultData;
+    }
+    
+    if (!onboardingData || !onboardingData.categories) {
+      console.warn('[Reset] CRITICAL: Using MINIMAL_SAFE_DATA');
+      onboardingData = MINIMAL_SAFE_DATA;
+    }
+    
+    // 2. D1 事务级重置
+    const queries = [
+      env.DB.prepare('DELETE FROM categories WHERE user_id = ?').bind(userId),
+      env.DB.prepare('DELETE FROM items WHERE user_id = ?').bind(userId),
+      env.DB.prepare('UPDATE user_settings SET card_width = 125, zen_mode = 1, show_frequent = 1, bg_url = NULL, simple_mode = 0, open_in_new_tab = 1, theme_mode = \'auto\' WHERE user_id = ?').bind(userId)
+    ];
+
+    for (const cat of onboardingData.categories) {
+      const newCatId = crypto.randomUUID();
+      queries.push(env.DB.prepare('INSERT INTO categories (id, user_id, name, icon, hidden) VALUES (?, ?, ?, ?, ?)')
+        .bind(newCatId, userId, cat.name, cat.icon, cat.hidden ? 1 : 0));
+      
+      const catItems = (onboardingData.items || []).filter(i => (i.catId || i.cat_id) === cat.id);
+      for (const item of catItems) {
+        const newItemId = crypto.randomUUID();
+        queries.push(env.DB.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(newItemId, userId, newCatId, item.title, item.url, item.desc, item.icon, item.hidden ? 1 : 0));
+      }
+    }
+
+    await env.DB.batch(queries);
+
+    // 3. 同步 KV 缓存
+    const resetData = { ...onboardingData, lastUpdated: formatCNTime(new Date()) };
     await env.nav.put(kvKey, JSON.stringify(resetData));
+    
     return new Response(JSON.stringify({ success: true, message: "已重置为默认配置" }), {
       headers: { "Content-Type": "application/json" }
     });

@@ -30,6 +30,12 @@
     <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
+    <!-- 管理员高亮状态栏 -->
+    <div id="admin-active-banner" class="admin-active-banner" style="display: none;">
+        <i class="ri-shield-flash-line"></i>
+        <span>当前处于管理员模式 - 所有修改将同步至全局</span>
+    </div>
+
     <!-- Toast 提示 -->
     <div id="toast">操作成功</div>
     
@@ -148,7 +154,8 @@
             </div>
             <div class="auth-form">
                 <input type="text" id="auth-username" placeholder="用户名" style="text-align:center; margin-bottom: 12px;">
-                <input type="password" id="auth-password" placeholder="密码" style="text-align:center; margin-bottom: 20px;">
+                <input type="password" id="auth-password" placeholder="密码" style="text-align:center; margin-bottom: 12px;">
+                <input type="text" id="auth-invite-code" placeholder="邀请码 (必填/选填，视系统策略而定)" style="text-align:center; margin-bottom: 20px;">
                 <button id="btn-auth-submit" class="tab-btn active" style="width:100%">确认</button>
             </div>
             <p id="auth-switch-tip" style="font-size:12px; color:#888; margin-top:15px;">还没有账号？点击上方“注册”开始</p>

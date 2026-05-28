@@ -49,3 +49,31 @@ export const defaultData = {
     { id: "D005", catId: "D01", title: "DeepSeek", url: "https://www.deepseek.com/", desc: "深度求索 AI", icon: "https://favicon.qqsuu.cn/deepseek.com", hidden: false }
   ]
 };
+
+/**
+ * Task 6.1.1: 工业级底层兜底配置 (Hard-bottom Fallback)
+ * 当外部模板和内置 defaultData 都损坏时的最终防线
+ */
+export const MINIMAL_SAFE_DATA = {
+  settings: { cardWidth: 125, zenMode: true, openInNewTab: true, themeMode: "auto" },
+  categories: [
+    { id: "f-cat-1", name: "常用搜索", icon: "🔍", hidden: false },
+    { id: "f-cat-2", name: "影音视频", icon: "🎬", hidden: false },
+    { id: "f-cat-3", name: "社交资讯", icon: "📱", hidden: false },
+    { id: "f-cat-4", name: "实用工具", icon: "🛠️", hidden: false }
+  ],
+  items: [
+    { id: "f-i-1", catId: "f-cat-1", title: "百度", url: "https://www.baidu.com/", desc: "百度一下，你就知道", icon: "https://favicon.qqsuu.cn/www.baidu.com", hidden: false },
+    { id: "f-i-2", catId: "f-cat-1", title: "知乎", url: "https://www.zhihu.com/", desc: "有问题，就会有答案", icon: "https://favicon.qqsuu.cn/www.zhihu.com", hidden: false },
+    { id: "f-i-3", catId: "f-cat-1", title: "GitHub", url: "https://github.com/", desc: "全球开发者社区", icon: "https://favicon.qqsuu.cn/github.com", hidden: false },
+    { id: "f-i-4", catId: "f-cat-2", title: "哔哩哔哩", url: "https://www.bilibili.com/", desc: "干杯~", icon: "https://favicon.qqsuu.cn/www.bilibili.com", hidden: false },
+    { id: "f-i-5", catId: "f-cat-2", title: "腾讯视频", url: "https://v.qq.com/", desc: "不负好时光", icon: "https://favicon.qqsuu.cn/v.qq.com", hidden: false },
+    { id: "f-i-6", catId: "f-cat-2", title: "抖音", url: "https://www.douyin.com/", desc: "记录美好生活", icon: "https://favicon.qqsuu.cn/www.douyin.com", hidden: false },
+    { id: "f-i-7", catId: "f-cat-3", title: "微博", url: "https://weibo.com/", desc: "发现新鲜事", icon: "https://favicon.qqsuu.cn/weibo.com", hidden: false },
+    { id: "f-i-8", catId: "f-cat-3", title: "豆瓣", url: "https://www.douban.com/", desc: "我们的精神角落", icon: "https://favicon.qqsuu.cn/www.douban.com", hidden: false },
+    { id: "f-i-9", catId: "f-cat-3", title: "小红书", url: "https://www.xiaohongshu.com/", desc: "标记我的生活", icon: "https://favicon.qqsuu.cn/www.xiaohongshu.com", hidden: false },
+    { id: "f-i-10", catId: "f-cat-4", title: "高德地图", url: "https://www.amap.com/", desc: "高德在手，天下我有", icon: "https://favicon.qqsuu.cn/www.amap.com", hidden: false },
+    { id: "f-i-11", catId: "f-cat-4", title: "百度翻译", url: "https://fanyi.baidu.com/", desc: "200种语言互译", icon: "https://favicon.qqsuu.cn/fanyi.baidu.com", hidden: false },
+    { id: "f-i-12", catId: "f-cat-4", title: "网易云音乐", url: "https://music.163.com/", desc: "传递音乐力量", icon: "https://favicon.qqsuu.cn/music.163.com", hidden: false }
+  ]
+};

@@ -12,23 +12,42 @@ async function sha256(text) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  const ip = request.headers.get("cf-connecting-ip") || "unknown";
+  const lockKey = `login_fail:${ip}`;
 
   try {
+    // 0. 检查熔断状态 (Task 6.4)
+    const failData = await env.nav.get(lockKey, { type: "json" });
+    if (failData && failData.count >= 5 && Date.now() < failData.lockUntil) {
+      const waitMin = Math.ceil((failData.lockUntil - Date.now()) / 60000);
+      return new Response(JSON.stringify({ error: `登录尝试过多，请在 ${waitMin} 分钟后再试` }), { status: 429 });
+    }
+
     const { username, password } = await request.json();
     const passwordHash = await sha256(password);
 
-    // 查询用户信息及其设置（关联查询确保角色和状态准确）
+    // 查询用户信息
     const user = await env.DB.prepare('SELECT id, username, role, status FROM users WHERE username = ? AND password_hash = ?')
       .bind(username, passwordHash)
       .first();
 
     if (!user) {
+      // 记录失败次数
+      const count = (failData?.count || 0) + 1;
+      const newFailData = { 
+        count, 
+        lockUntil: count >= 5 ? Date.now() + 10 * 60 * 1000 : 0 
+      };
+      await env.nav.put(lockKey, JSON.stringify(newFailData), { expirationTtl: 3600 });
       return new Response(JSON.stringify({ error: "用户名或密码错误" }), { status: 401 });
     }
 
     if (user.status === 'frozen') {
       return new Response(JSON.stringify({ error: "您的账号已被封禁，请联系管理员" }), { status: 403 });
     }
+
+    // 登录成功，清除失败记录
+    await env.nav.delete(lockKey);
 
     // 更新最后登录时间
     await env.DB.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').bind(user.id).run();

@@ -279,8 +279,10 @@ const doLogin = async () => {
 const doRegister = async () => {
     const userEl = document.getElementById('auth-username');
     const passEl = document.getElementById('auth-password');
+    const inviteEl = document.getElementById('auth-invite-code');
     const u = userEl.value.trim();
     const p = passEl.value.trim();
+    const i = inviteEl?.value.trim() || '';
 
     if (!u || !p) {
         showToast("请填写完整信息", "#e67e22");
@@ -292,7 +294,7 @@ const doRegister = async () => {
         const res = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: u, password: p })
+            body: JSON.stringify({ username: u, password: p, inviteCode: i })
         });
         
         const data = await res.json();
@@ -304,9 +306,10 @@ const doRegister = async () => {
                 const loginTab = document.getElementById('tab-login');
                 if (loginTab) loginTab.click();
                 passEl.value = ''; // 清空密码框
+                if (inviteEl) inviteEl.value = '';
             }, 1000);
         } else {
-            showToast(data.error || "注册失败，请换个用户名试试", "#e74c3c");
+            showToast(data.error || "注册失败", "#e74c3c");
         }
     } catch (err) {
         console.error('Register API Error:', err);
@@ -508,7 +511,7 @@ const renderNav = () => {
             cats.unshift({ id: 'VIRTUAL_FREQ', name: '常去网站', icon: '⭐' });
         }
 
-        // 导航视界定义：自动校正过期的或无效的 activeCatId (Task 2.1 深度自愈)
+        // 导航视界定义：自动校正过期的或无效 of activeCatId (Task 2.1 深度自愈)
         const isValidActiveCat = cats.some(c => c.id === activeCatId);
         if (cats.length > 0 && (!activeCatId || !isValidActiveCat)) {
             activeCatId = cats[0].id;
@@ -523,8 +526,8 @@ const renderNav = () => {
                 if (appData.settings?.zenMode) { 
                     isZenTempExpanded = true; 
                     renderNav(); 
-                    // 切换分类时自动回到视界顶部
-                    window.scrollTo({ top: 350, behavior: 'smooth' });
+                    // 切换分类时，由于是隔离渲染，直接滚动到顶部即可
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
                 else { 
                     document.getElementById('section-' + cat.id)?.scrollIntoView({ behavior: 'smooth' }); 
@@ -533,6 +536,7 @@ const renderNav = () => {
             sidebarNav.appendChild(navItem);
 
             // Zen Mode 核心逻辑：遵循单一视图原则 (Task 2.1 规范化)
+            // 在极简模式展开态，只渲染当前选中的分类，实现视觉隔离
             if (appData.settings?.zenMode && isZenTempExpanded && cat.id !== activeCatId) return;
 
             const section = document.createElement('div');
@@ -635,6 +639,7 @@ const renderNav = () => {
 
 const renderTools = () => {
     const area = document.getElementById('sidebar-admin-actions');
+    const adminBanner = document.getElementById('admin-active-banner');
     if (!area) return;
     
     // 如果已登录
@@ -642,6 +647,15 @@ const renderTools = () => {
         const userDisplayName = appData.username || '已登录用户';
         const roleBadge = isAdmin ? '<span class="admin-badge">ADMIN</span>' : '';
         
+        // 管理员模式视觉高亮切换
+        if (isAdmin && adminBanner) {
+            adminBanner.style.display = 'flex';
+            document.body.classList.add('admin-mode');
+        } else if (adminBanner) {
+            adminBanner.style.display = 'none';
+            document.body.classList.remove('admin-mode');
+        }
+
         area.innerHTML = `
             <div class="sidebar-user-card">
                 <div class="user-info">
@@ -652,7 +666,9 @@ const renderTools = () => {
                     ${isAdmin ? `<button class="icon-btn" onclick="openAdminHub()" title="管理后台"><i class="ri-shield-user-line"></i></button>` : ''}
                     <button class="icon-btn ${isPageManagementMode ? 'active' : ''}" onclick="togglePageManagement()" title="页面管理"><i class="ri-layout-masonry-line"></i></button>
                     <button class="icon-btn" onclick="openEditModal('')" title="添加新书签"><i class="ri-add-circle-line"></i></button>
-                    <button class="icon-btn" onclick="showToast('偏好设置即将上线')" title="设置"><i class="ri-settings-3-line"></i></button>
+                    <button class="icon-btn" onclick="openJsonEditor()" title="JSON 专家模式"><i class="ri-code-s-slash-line"></i></button>
+                    <button class="icon-btn" onclick="exportConfig()" title="导出配置"><i class="ri-download-2-line"></i></button>
+                    <button class="icon-btn" onclick="document.getElementById('import-file').click()" title="导入配置"><i class="ri-upload-2-line"></i></button>
                     <button class="icon-btn" onclick="doResetConfig()" title="恢复默认配置"><i class="ri-refresh-line"></i></button>
                     <button class="icon-btn" onclick="doLogout()" title="退出登录"><i class="ri-logout-box-r-line"></i></button>
                 </div>
@@ -671,6 +687,12 @@ const renderTools = () => {
 const initThemeMode = () => {
     document.body.classList.toggle('dark-theme', themeMode === 'dark');
     document.body.classList.toggle('light-theme', themeMode === 'light');
+    
+    // 同步 PWA 状态栏颜色 (Task 5.1)
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+        meta.content = themeMode === 'dark' ? '#111111' : '#f0f3f8';
+    }
 };
 
 const toggleSidebar = (force) => {
@@ -999,18 +1021,21 @@ const openAdminHub = async () => {
     confirmBtn.style.display = 'none'; // 后台采用即时操作
 
     try {
-        const [usersRes, configRes] = await Promise.all([
+        const [usersRes, configRes, inviteRes] = await Promise.all([
             fetch('/api/admin/users', { headers: { 'Authorization': sysToken } }),
-            fetch('/api/admin/site-config')
+            fetch('/api/admin/site-config'),
+            fetch('/api/admin/invitations', { headers: { 'Authorization': sysToken } })
         ]);
         
         const { users } = await usersRes.json();
         const config = await configRes.json();
+        const { invitations } = await inviteRes.json();
 
         body.innerHTML = `
             <div class="admin-hub-tabs">
                 <button class="hub-tab active" onclick="switchHubTab('users')">用户管理</button>
                 <button class="hub-tab" onclick="switchHubTab('config')">全站设置</button>
+                <button class="hub-tab" onclick="switchHubTab('invites')">邀请管理</button>
             </div>
             <div id="hub-content-users" class="hub-pane active">
                 <table class="admin-table">
@@ -1042,7 +1067,39 @@ const openAdminHub = async () => {
                     <label>SEO 描述</label>
                     <textarea id="admin-site-desc">${config.seoDescription || ''}</textarea>
                 </div>
-                <button class="tab-btn active" style="width:100%" onclick="saveSiteConfig()">保存全站配置</button>
+                <div class="form-group" style="display:flex; gap:20px; margin-top:10px;">
+                    <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+                        <input type="checkbox" id="admin-allow-reg" ${config.allowOpenRegistration !== false ? 'checked' : ''}> 开放注册
+                    </label>
+                    <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+                        <input type="checkbox" id="admin-require-invite" ${config.requireInvitation ? 'checked' : ''}> 强制邀请码
+                    </label>
+                </div>
+                <button class="tab-btn active" style="width:100%; margin-top:15px;" onclick="saveSiteConfig()">保存全站配置</button>
+            </div>
+            <div id="hub-content-invites" class="hub-pane">
+                <div style="display:flex; gap:10px; margin-bottom:15px;">
+                    <button class="tab-btn active" onclick="generateInvites(1)">生成 1 个</button>
+                    <button class="tab-btn active" onclick="generateInvites(5)">生成 5 个</button>
+                    <button class="tab-btn" onclick="copyUnusedInvites()">复制未使用</button>
+                </div>
+                <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--glass-border); border-radius: 8px;">
+                    <table class="admin-table">
+                        <thead><tr><th>邀请码</th><th>状态</th><th>使用者</th><th>操作</th></tr></thead>
+                        <tbody>
+                            ${invitations.map(i => `
+                                <tr>
+                                    <td style="font-family: monospace;">${i.code}</td>
+                                    <td><span class="status-badge ${i.status}">${i.status}</span></td>
+                                    <td>${i.used_by_name || '-'}</td>
+                                    <td>
+                                        ${i.status === 'unused' ? `<button class="action-link" onclick="deleteInvite('${i.code}')">删除</button>` : '-'}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         `;
     } catch (e) {
@@ -1051,8 +1108,50 @@ const openAdminHub = async () => {
 };
 
 window.switchHubTab = (tab) => {
-    document.querySelectorAll('.hub-tab').forEach(t => t.classList.toggle('active', t.innerText.includes(tab === 'users' ? '用户' : '全站')));
+    document.querySelectorAll('.hub-tab').forEach(t => t.classList.toggle('active', t.innerText.includes(
+        tab === 'users' ? '用户' : (tab === 'config' ? '全站' : '邀请')
+    )));
     document.querySelectorAll('.hub-pane').forEach(p => p.classList.toggle('active', p.id === `hub-content-${tab}`));
+};
+
+window.generateInvites = async (count) => {
+    try {
+        const res = await fetch('/api/admin/invitations', {
+            method: 'POST',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ count })
+        });
+        if (res.ok) {
+            showToast(`成功生成 ${count} 个邀请码`);
+            openAdminHub();
+        }
+    } catch (e) { showToast("生成失败", "#e74c3c"); }
+};
+
+window.deleteInvite = async (code) => {
+    if (!confirm("确定要删除此邀请码吗？")) return;
+    try {
+        const res = await fetch('/api/admin/invitations', {
+            method: 'DELETE',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+        });
+        if (res.ok) {
+            showToast("删除成功");
+            openAdminHub();
+        }
+    } catch (e) { showToast("删除失败", "#e74c3c"); }
+};
+
+window.copyUnusedInvites = () => {
+    const cells = document.querySelectorAll('#hub-content-invites td[style*="monospace"]');
+    const unused = [];
+    cells.forEach(cell => {
+        const status = cell.nextElementSibling.innerText;
+        if (status === 'unused') unused.push(cell.innerText);
+    });
+    if (unused.length === 0) return showToast("没有可用的邀请码", "#e67e22");
+    navigator.clipboard.writeText(unused.join('\n')).then(() => showToast("已复制到剪贴板"));
 };
 
 window.toggleUserStatus = async (userId, currentStatus) => {
@@ -1076,6 +1175,8 @@ window.saveSiteConfig = async () => {
     const config = {
         siteTitle: document.getElementById('admin-site-title').value,
         seoDescription: document.getElementById('admin-site-desc').value,
+        allowOpenRegistration: document.getElementById('admin-allow-reg').checked,
+        requireInvitation: document.getElementById('admin-require-invite').checked,
         faviconUrl: "/favicon.ico"
     };
 
@@ -1092,7 +1193,135 @@ window.saveSiteConfig = async () => {
     } catch (e) { showToast("保存失败", "#e74c3c"); }
 };
 
+// ==================== 11. Task 3.5: JSON 专家模式 & 导入导出 ====================
+
+let monacoEditor = null;
+
+const openJsonEditor = () => {
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    
+    if (!modal || !body) return;
+
+    title.innerText = "JSON 专家模式 (专家级定制)";
+    body.innerHTML = '<div id="monaco-container" style="height: 400px; border-radius: 8px; overflow: hidden; border: 1px solid var(--glass-border);"></div>';
+    modal.style.display = 'flex';
+    confirmBtn.style.display = 'block';
+    confirmBtn.innerText = "应用并同步到云端";
+
+    // 异步初始化 Monaco
+    if (typeof require !== 'undefined') {
+        require.config({ paths: { 'vs': 'https://lib.baomitu.com/monaco-editor/0.45.0/min/vs' }});
+        require(['vs/editor/editor.main'], function() {
+            if (monacoEditor) monacoEditor.dispose();
+            monacoEditor = monaco.editor.create(document.getElementById('monaco-container'), {
+                value: JSON.stringify(appData, null, 4),
+                language: 'json',
+                theme: themeMode === 'dark' ? 'vs-dark' : 'vs',
+                automaticLayout: true,
+                minimap: { enabled: false },
+                fontSize: 13
+            });
+        });
+    } else {
+        body.innerHTML = '<div class="error-text">Monaco Editor 脚本加载失败，请检查网络。</div>';
+    }
+
+    confirmBtn.onclick = async () => {
+        if (!monacoEditor) return;
+        try {
+            const raw = monacoEditor.getValue();
+            const parsed = JSON.parse(raw);
+            
+            // 简单结构校验
+            if (!parsed.categories || !parsed.items) throw new Error("缺少核心字段 (categories/items)");
+            
+            appData = parsed;
+            showLoader('正在同步专家配置...');
+            await syncConfigToCloud();
+            renderNav();
+            modal.style.display = 'none';
+        } catch (e) {
+            showToast(`JSON 格式错误: ${e.message}`, "#e74c3c");
+        } finally {
+            hideLoader();
+        }
+    };
+};
+
+const exportConfig = () => {
+    const date = new Date();
+    const filename = `CloudNav_Config_${date.getMonth() + 1}${date.getDate()}.json`;
+    const dataStr = JSON.stringify(appData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("配置文件导出成功");
+};
+
 const initGlobalEvents = () => {
+    // 快捷导航按钮逻辑 (Task 4.2)
+    const fabToTop = document.getElementById('scroll-to-top');
+    const fabToBottom = document.getElementById('scroll-to-bottom');
+    const fabGroup = document.getElementById('quick-nav-group');
+    let fabTimer = null;
+
+    if (fabToTop && fabToBottom && fabGroup) {
+        fabToTop.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+        fabToBottom.onclick = () => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            // 滚动超过 300px 显示
+            fabGroup.classList.toggle('visible', scrollTop > 300);
+            
+            // 闲置淡出逻辑
+            fabGroup.classList.add('active');
+            clearTimeout(fabTimer);
+            fabTimer = setTimeout(() => fabGroup.classList.remove('active'), 2000);
+        }, { passive: true });
+    }
+
+    // 监听文件导入
+    const importInput = document.getElementById('import-file');
+    if (importInput) {
+        importInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const parsed = JSON.parse(event.target.result);
+                    if (!parsed.categories || !parsed.items) throw new Error("非法的 CloudNav 配置格式");
+                    
+                    if (!confirm("导入将覆盖当前所有配置，确定继续吗？")) return;
+                    
+                    appData = parsed;
+                    showLoader('正在导入并同步...');
+                    await syncConfigToCloud();
+                    renderNav();
+                    showToast("导入成功");
+                } catch (err) {
+                    showToast(`导入失败: ${err.message}`, "#e74c3c");
+                } finally {
+                    hideLoader();
+                    importInput.value = ''; // 清空以支持重复导入
+                }
+            };
+            reader.readAsText(file);
+        };
+    }
+
     // 1. 全场景沉浸唤醒监听 (Task 2.5.1 - 增强版)
     window.addEventListener('wheel', (e) => {
         if (isActuallyZen && e.deltaY > 10) {
@@ -1101,16 +1330,37 @@ const initGlobalEvents = () => {
         }
     }, { passive: true });
 
-    // 移动端手势唤醒
+    // 移动端手势唤醒 (Task 5.2: Gesture Engine)
+    let touchStartX = 0;
     window.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
     }, { passive: true });
 
     window.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].clientX;
         const touchEndY = e.changedTouches[0].clientY;
-        if (isActuallyZen && touchStartY - touchEndY > 50) { // 上滑 50px
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = touchEndY - touchStartY;
+
+        // 1. Zen Mode 上滑唤醒 (已有逻辑增强)
+        if (isActuallyZen && touchStartY - touchEndY > 50 && Math.abs(deltaX) < 30) {
             isZenTempExpanded = true;
             renderNav();
+        }
+
+        // 2. 侧边栏侧滑逻辑 (Mobile Layout Only)
+        if (window.innerWidth < 768) {
+            const sidebar = document.getElementById('sidebar');
+            const isOpen = sidebar?.classList.contains('open');
+
+            if (!isOpen && touchStartX < 30 && deltaX > 60) {
+                // 从边缘向右滑 -> 唤起
+                toggleSidebar(true);
+            } else if (isOpen && deltaX < -60) {
+                // 开启状态下向左滑 -> 隐藏
+                toggleSidebar(false);
+            }
         }
     }, { passive: true });
 
@@ -1222,9 +1472,11 @@ const initGlobalEvents = () => {
         // 8. Escape 一键复位
         if (e.key === 'Escape') { 
             const sea = document.getElementById('sea-input');
+            const dropdown = document.getElementById('sea-dropdown');
             if (sea) {
                 sea.value = '';
                 sea.blur();
+                if (dropdown) dropdown.style.display = 'none';
                 document.body.classList.remove('is-searching'); // 退出搜索态
             }
 
@@ -1239,10 +1491,17 @@ const initGlobalEvents = () => {
 
             if (anyModalOpen) return;
 
+            // 如果侧边栏打开，优先关闭
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar && sidebar.classList.contains('open')) {
+                toggleSidebar(false);
+                return;
+            }
+
+            // 极简模式下的复位逻辑
             if (isZenTempExpanded) { 
                 isZenTempExpanded = false; 
                 renderNav(); 
-                toggleSidebar(false);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }
         }

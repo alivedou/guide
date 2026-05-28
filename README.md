@@ -1,158 +1,143 @@
-# 🚀 高度自定义高颜值导航网站 deployment & 指南
+# 🚀 高度自定义高颜值导航网站
+
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Cloudflare](https://img.shields.io/badge/Platform-Cloudflare-orange.svg)](https://www.cloudflare.com/)
+[![Framework](https://img.shields.io/badge/Stack-VanillaJS%20%7C%20Serverless-success.svg)]()
 
 这是一个具有超强自适应性、高辨识度视觉设计、支持实时自定义编辑的极致导航网站。本项目支持 **Cloudflare Pages + Workers KV** 无服务器极速部署，同时也自带本地 Node.js 离线开发模拟服务，为您实现“线上线下、一键全通”的无缝体验。 
-本项目是在`880824`同志的`cloudflare-nav`[项目地址](https://github.com/880824/cloudflare-nav) 基础上改的，在日常使用根据我的痛点，增加了以下功能：
 
-- **增加搜索框**，搜索框可选内置三个搜索引擎可用于搜索本站内容和外部网站
-- **极简沉浸模式**，只有你体会后才会觉得他的好。
-- **增加了返回顶部和底部按钮功能**， 避免后续添加网站过多，滑动太费劲。
-- **增加跳转设置**可设置选择跳转方式（从本页直接跳转，或者新开一页跳转）。
-- **导航交互系统 v2.5**：统一了搜索框位置（首个分类下方），并在侧边栏新增了“内置搜索”锚点，支持一键直达与自动聚焦。优化了 `IntersectionObserver` 算法，解决了跳转时的“乱跳”问题。
-- **全效图标自愈系统 v2.5**：实现了更稳健的 6 级降级逻辑，并增加了中国大陆网络优化。加载失败时自动尝试：站点原生 favicon.ico -> Iowen API -> QQSuu API -> Google API (2.5s 超时) -> DuckDuckGo API (2.2s 超时) -> 域名首字母矢量占位图。彻底解决 GFW 环境下图标加载挂起导致的“透明”或“破碎”视觉问题。
-- **图标魔棒工具**：修复了添加无图标网站时费力对比的痛点，编辑器内一键抓取并自动选择最优可用图标。
-- **交互逻辑优化**：全局快捷搜索能力（页面加载自动聚焦搜索框、全局输入任意字符自动唤起搜索框）；侧边栏在移动端/平板点击操作后自动收起，防止遮挡弹窗；本地搜索支持键盘方向键与 Enter 快捷导航；偏好设置增加网格尺寸预设按钮。
-
-**本项目地址** [guide](https://github.com/alivedou/guide)
+> [!TIP]
+> 本项目是在 `880824` 同志的 `cloudflare-nav` [项目地址](https://github.com/880824/cloudflare-nav) 基础上开发的，针对日常使用痛点进行了深度优化。
 
 ---
-## 🎨 核心亮点与能力
+
+## 🏗️ 系统架构
+
+```mermaid
+graph TD
+    User((用户)) --> CF_Pages[Cloudflare Pages]
+    CF_Pages --> Functions[Pages Functions / API]
+    Functions --> KV[(Workers KV: 配置/缓存)]
+    Functions --> D1[(Cloudflare D1: 用户数据)]
+    Local[本地开发环境] --> NodeServer[Node.js Express]
+    NodeServer --> LocalKV[local_kv.json]
+```
+
+---
+
+## ✨ 核心亮点与能力
 
 *   **极简主义视觉设计**：支持卡片宽度实时无极微调、两种视觉主线风格（经典毛玻璃/高颜值缤纷模式）、毛玻璃/卡片背景开关以及自定义高分辨率背景（内置必应每日壁纸缓存自适应获取）。
 *   **极致自适应适配**：针对手机端、Pad、超宽显示器深度自适应适配，包括移动端独立行表单、搜索引擎 Tab 自适应折行，以及更小的卡片圆角和紧凑间距，极致触觉体验。
 *   **无需数据库的持久化**：生产环境对接 Cloudflare Workers KV 空间，本地开发模式采用精简本地 JSON 模拟 KV 写入，逻辑无缝匹配。
+
+### 🛠️ 相比原版增加的功能：
+- **增加搜索框**：搜索框可选内置三个搜索引擎可用于搜索本站内容和外部网站。
+- **极简沉浸模式**：深度优化的沉浸式体验。
+- **返回顶部/底部**：增加悬浮按钮，避免长页面滑动疲劳。
+- **自定义跳转**：支持设置链接在当前页或新页面打开。
+- **导航交互 v2.5**：统一搜索框位置，新增“内置搜索”锚点，优化滚动算法。
+- **图标自愈 v2.5**：稳健的 6 级降级逻辑，解决 GFW 环境下图标显示问题。
+- **图标魔棒工具**：编辑器内一键抓取并自动选择最优可用图标。
+- **交互逻辑优化**：全局快捷搜索、侧边栏智能收起、搜索历史回溯。
+
+**本项目地址**：[guide](https://github.com/alivedou/guide)
+
 ---
 
 ## ☁️ 部署至 Cloudflare Pages 详细步骤
 
-部署本项目需要两个免费的账号：`github`账号和`Cloudflare`账号。
+部署本项目需要 `GitHub` 和 `Cloudflare` 账号。
+
 | 平台 | 注册地址 | 登录地址 |
 | :--- | :--- | :--- |
-| **Cloudflare** | [https://dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up) | [https://dash.cloudflare.com/login](https://dash.cloudflare.com/login) |
-| **GitHub** | [https://github.com/signup](https://github.com/signup) | [https://github.com/login](https://github.com/login) |
-
-注册好后，需要先**fork**到你自己的仓库（`推荐项`），或者选择项目zip包上传到你的仓库。
-- **项目地址** [项目地址](https://github.com/alivedou/nav/tree/dev)
-- 然后就是在Cloudflare 进行部署操作。 [https://dash.cloudflare.com/login](https://dash.cloudflare.com/login) 
-
-请按照以下步骤，三分钟完成部署：
-
----
+| **Cloudflare** | [注册](https://dash.cloudflare.com/sign-up) | [登录](https://dash.cloudflare.com/login) |
+| **GitHub** | [注册](https://github.com/signup) | [登录](https://github.com/login) |
 
 ### 第一步：创建 Cloudflare Workers KV 空间
 1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)。
-2. 在左侧菜单栏中依次点击 **存储和数据库** -> **Workers KV** 。
-3. 点击右上角的 **“创建命名空间” (Create a Namespace)**。
-4. 将命名空间命名为 **guide**或者其他你好记的名字，并点击保存。
-
----
+2. 菜单：**存储和数据库** -> **Workers KV** 。
+3. 点击 **“创建命名空间”**，命名为 **guide** (或其他自定义名称)。
 
 ### 第二步：部署 Cloudflare Pages 项目
+1. 将本项目 **fork** 到您的 GitHub 仓库。
+   - **项目源码**：[项目地址](https://github.com/alivedou/nav/tree/dev)
+2. 在 Cloudflare 点击 **Workers 和 Pages** -> **创建项目** -> **Pages** 标签页。
+3. 点击 **“连接到 Git”** 并授权选择您的导航项目仓库。
+4. **构建设置** (非常重要)：
+   *   **项目名称**：`guide` (或自定义)
+   *   **生产分支**：`main`
+   *   **框架预设**：`None`
+   *   **构建命令**：**留空**
+   *   **构建输出目录**：**`public`**
+   *   **根目录**：**`nav-main`**
+5. 点击 **“保存并部署”**。
 
-1. 需要将本项目的所有文件fork到您的私有或公开 GitHub 仓库。
-2. 在 Cloudflare 控制台左侧点击 **Workers 和 Pages** -> **创建项目 (Create Application)** -> 切换到 **Pages (页面)** 标签页。
-3. 点击 **“连接到 Git” (Connect to Git)** 并授权指定您的导航项目仓库。
-4. 进入构建设置 (Build settings)，进行如下填写（**非常重要，需完美定位目录**）：
-   *   **项目名称**：小白默认填`guide`或者其他你好记忆的名字。
-   *   **生产分支**： 选择`main`。
-   *   **框架预设 (Framework preset)**：选择 `None`或者说空着不填。
-   *   **构建命令 (Build command)**：**留空 (不填)** 即可。
-   *   **构建输出目录 (Build output directory)**：填入 **`public`**（*即指向 `nav-main/public` 的输出静态资源*）。
-   *   **根目录(高级) (Root directory)**：填入 **`nav-main`** （*因为静态主程序和 Pages Functions 函数文件都存放于该目录下*）。
-5. 点击 **“保存并部署” (Save and Deploy)**。
-
-![部署步骤示例](https://img.163898.xyz/api/cfile/AgACAgUAAyEGAATift0tAAMLahUgpKzow_Zi_uo0JrtPOyw5zogAAjEQaxtx3ahUQNQHE39gjWsBAAMCAAN3AAM7BA)
----
-
-### 第三步：在 Cloudflare 中绑定 KV 和设置管理员密码
-部署完成后，还需要将创建的 KV 存储与管理员环境变量绑定分配给 Pages 项目：
-
-1. 进入你刚刚创建的 Pages 项目页面，点击顶部的 **“设置” (Settings)**。
-2. 在左边栏中点击 **“函数” (Functions)**。
-3. 往下滚动到 **“KV 命名空间绑定” (KV namespace bindings)**。
-4. 点击 **“添加绑定” (Add binding)**，有两处环境需要添加（**开发 Production** 与 **预览 Preview**）：
-   *   **变量名称 (Variable name)** 必须填写：**`nav`**
-   *   **KV 命名空间 (KV namespace)** 选择：第一步中创建的默认的**`nav`**或者你自己创建的自定义kv空间名字。
-5. 紧随其后配置管理员主密码：
-   *   在 **设置 (Settings)** -> **环境变量 (Environment Variables)** 下。
-   *   点击 **“添加变量” (Add variable)**。
-   *   **变量名 (Variable name)** 填入：**`TOKEN`**
-   *   **值 (Value)** 填入：输入你想设置的管理员密码（支持**明文密码**，如 `123456`，或者该密码对应的 **SHA-256 哈希值**。若留空，则只需空着点回车即可免费进入自定义模式）。
-6. **重要**：如果您更新了设置，请到 **“部署” (Deployments)** 页面下，点击所有部署下面最近的一个部署，
-点他右边的`...` 后， 再点击 **"重新部署" (Redeploy)**，以便让这些全局变量和 KV 绑定在云服务进程中生效！
+### 第三步：绑定 KV 和设置管理员密码
+1. 进入 Pages 项目页面，点击 **“设置” (Settings)** -> **“函数” (Functions)**。
+2. **KV 命名空间绑定** (需同时添加 Production 和 Preview)：
+   *   **变量名称**：**`nav`**
+   *   **KV 命名空间**：选择第一步创建的空间。
+3. **配置管理员密码**：
+   *   在 **设置 (Settings)** -> **环境变量** 下点击 **“添加变量”**。
+   *   **变量名**：**`TOKEN`**
+   *   **值**：你的管理员密码 (支持明文或 SHA-256 哈希)。
+4. **⚠️ 重要**：保存后请前往 **“部署” (Deployments)** 页面，点击最近部署右侧的 `...` 选择 **"重新部署" (Redeploy)**！
 
 ---
 
 ## 💻 本地开发与预览
 
-如果您希望在本地调试、离线开发，我们提供了两种模式：
-
 ### 1. 准备工作
-在项目根目录下执行命令安装依赖：
 ```bash
 npm install
 ```
 
 ### 2. 运行模式
 
-#### 🚀 极速模拟模式 (Node.js)
-这种方式使用 `server.js` 运行，速度极快，使用本地 `kv_mock.json` 模拟数据库。支持**代码热重载**（修改代码后自动重启）。
-```bash
-npm run dev
-```
+| 模式 | 命令 | 说明 |
+| :--- | :--- | :--- |
+| **数据重置** | `npm run clean` | 【慎用】清空本地所有测试数据 (KV & D1) |
+| **快速开发** | `npm run dev` | 使用 Node.js 运行，支持热重载，效率最高 |
+| **环境预览** | `npm run preview` | 模拟真实的 Pages 运行环境 (Wrangler) |
+| **初始化 DB** | `npm run db:init` | 初始化本地 D1 数据库结构 |
+| **代码规范** | `npm run format` / `lint` | 自动格式化代码及质量检查 |
 
-#### 🔍 真实环境预览 (Wrangler)
-这种方式使用 Cloudflare 官方工具 `wrangler` 模拟真实的 Pages 运行环境，适合在正式发布前进行最终测试。
-```bash
-npm run preview
-```
-
-### 3. 设置管理员密码（可选）
-复制项目根目录下的 `.env.example` 并重命名为 `.env`，在其中定义 `TOKEN` 变量。
-   ```
-   程序将默认在本地的 **`http://localhost:3000`** 端口上启动，并生成并读取本地 `kv_mock.json` 配置文件。您可以完美实现本地个性化配置、导入导出、测试及更新。
+### 3. 设置管理员密码（本地）
+复制根目录下的 `.env.example` 并重命名为 `.env`，定义 `TOKEN` 变量。程序默认在 `http://localhost:3000` 启动，并读取 `kv_mock.json`。
 
 ---
 
 ## 📂 项目结构预览
 
 ```text
-├── README.md               # 您当前阅读的项目部署手册
+├── README.md               # 项目部署手册
 ├── .env.example            # 环境变量配置样本
-├── server.js               # 本地极其强大的 Web/Express API KV 模拟持久化后端
-├── kv_mock.json            # 本地离线环境保存的 JSON 数据仓库（启动后自动产生）
+├── server.js               # 本地 Web/Express API KV 模拟后端
+├── kv_mock.json            # 本地保存的 JSON 数据仓库
 └── nav-main/               # 部署云端的主体核心子目录
     ├── functions/          # Cloudflare Pages Serverless 核心逻辑
     │   └── api/
-    │       ├── config.js   # 动态鉴权、防泄露、精简化过滤、自动必应壁纸注入逻辑板
+    │       ├── config.js   # 动态鉴权、防泄露、必应壁纸注入逻辑
     │       └── defaultData.js # 默认初始网站和设置库
-    └── public/             # 纯前端高颜值界面资产
+    └── public/             # 纯前端界面资产
         ├── assets/
-        │   ├── css/style.css # 高定制、支持触屏与流体弹性排版的样式引擎
-        │   └── js/app.js     # 负责流畅拖拽排序、设置无级调整、哈希登录的主业务逻辑
-        └── index.html      # 精致的静态主页面
+        │   ├── css/style.css # 高定制样式引擎
+        │   └── js/app.js     # 业务主逻辑
+        └── index.html      # 静态主页面
 ```
 
-**PS：**
-1. 有条件的小伙伴还可以选择添加自定义域名，相关教程请自行浏览器搜索或询问AI以下内容：
-```bash
-怎么给cloudflare 部署的 pages 添加自定义域名？
-```
-2. 搭配浏览器插件使用（推荐）
-如果配合浏览器插件一起使用，体验会更好。
-下面以 Edge 浏览器为例，其他浏览器操作也差不多。
+---
 
-- 打开 Edge 浏览器，点击右上角“三个点” → 扩展 → 获取 Microsoft Edge 扩展。
-- 在搜索框输入 custom new tab。
-- 找到作者是 maltejur 的扩展并安装。
-- 安装完成后，再点击右上角“三个点” → 扩展 → 管理扩展。
-- 找到刚安装的扩展，把右侧开关打开（显示绿色就是已启用）。
-- 启用后，浏览器顶部会出现一个“扩展”图标，点击它。
-- 选择刚才安装的插件。
-- 在插件设置里输入你的导航页网址（自定义域名）。
-- 点击 Save（保存），再打开对应启用按钮。
+## 🔌 浏览器插件配合使用（推荐）
+
+搭配浏览器插件体验更佳（以 Edge 为例）：
+
+1. 在扩展商店搜索并安装 `custom new tab` (作者: `maltejur`)。
+2. 安装后在扩展管理中启用。
+3. 在插件设置里输入你的导航页网址（自定义域名）。
+4. 点击 **Save** 并保存，开启对应按钮。
+
 ![部署示例](https://img.163898.xyz/api/rfile/guide1.png)
-完成后：
-浏览器启动页会变成你的导航页。
-新建标签页时，也会自动打开你的导航页。
 
-快去享受属于你自己的云端无服务器高度自定义导航站吧！🚀
+完成后，浏览器启动页和新建标签页都将自动打开你的私有导航站！🚀
