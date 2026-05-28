@@ -13,6 +13,8 @@ let isZenTempExpanded = false;
 let isActuallyZen = false;
 let isRendering = false; // 渲染防抖锁
 let syncTimer = null; // 同步防抖计时器 (Task 2.5.4)
+let syncRetryCount = 0; // 重试计数
+let touchStartY = 0; // 触摸起点 (Task 2.5.1)
 let currentSearchIndex = -1;
 let historyIndex = -1;
 let themeMode = localStorage.getItem('nav_theme_mode') || 'auto';
@@ -82,18 +84,17 @@ const recordClick = (id) => {
     syncTimer = setTimeout(syncClicksToCloud, 5000); // 停止操作 5 秒后上报
 };
 
-// 云端同步点击数据 (Task 2.5.4)
+// 云端同步点击数据 (Task 2.5.4 - 增强版)
 const syncClicksToCloud = async () => {
-    if (!sysToken || isAdmin) return; // 游客或管理员模式不强制上报
+    if (!sysToken || isAdmin) return; 
     
-    console.log('[Sync] Syncing clicks to cloud...');
     const clicks = localStorage.getItem('nav_clicks_history');
     if (!clicks) return;
 
+    const payload = { ...appData, clicks_history: JSON.parse(clicks) };
+
     try {
-        // 将点击数据注入 settings 或单独字段，这里复用 POST /api/config 流程
-        const payload = { ...appData, clicks_history: JSON.parse(clicks) };
-        await fetch('/api/config', {
+        const res = await fetch('/api/config', {
             method: 'POST',
             headers: { 
                 'Authorization': sysToken,
@@ -101,10 +102,33 @@ const syncClicksToCloud = async () => {
             },
             body: JSON.stringify(payload)
         });
+
+        if (res.ok) {
+            console.log('[Sync] Cloud sync successful');
+            syncRetryCount = 0;
+        } else {
+            throw new Error('Sync failed');
+        }
     } catch (e) {
-        console.warn('Click sync failed', e);
+        syncRetryCount++;
+        const delay = Math.min(Math.pow(2, syncRetryCount) * 1000, 60000); // 指数退避
+        console.warn(`[Sync] Retrying in ${delay/1000}s...`, e);
+        clearTimeout(syncTimer);
+        syncTimer = setTimeout(syncClicksToCloud, delay);
     }
 };
+
+// 页面关闭前的紧急同步
+window.addEventListener('beforeunload', () => {
+    if (!sysToken || isAdmin) return;
+    const clicks = localStorage.getItem('nav_clicks_history');
+    if (clicks) {
+        const payload = JSON.stringify({ ...appData, clicks_history: JSON.parse(clicks) });
+        // 使用 Beacon API 确保请求在页面关闭后仍能发出
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon('/api/config', blob);
+    }
+});
 
 const updateStyles = () => {
     const w = appData.settings?.cardWidth || 85;
@@ -540,19 +564,68 @@ const initZenMode = () => {
 
 const initSearch = () => {
     const sea = document.getElementById('sea-input');
-    if (!sea) return;
+    const dropdown = document.getElementById('sea-dropdown');
+    const resultsList = document.getElementById('local-results-list');
+    if (!sea || !dropdown || !resultsList) return;
 
     sea.onkeydown = (e) => {
         if (e.key === 'Enter') {
             const val = sea.value.trim();
-            if (val) window.open(currentEnginePrefix + encodeURIComponent(val), '_blank');
+            if (val) {
+                // 如果有选中的搜索项，优先跳转
+                const activeItem = resultsList.querySelector('.local-result-item.active');
+                if (activeItem) {
+                    activeItem.click();
+                } else {
+                    window.open(currentEnginePrefix + encodeURIComponent(val), '_blank');
+                }
+            }
+        }
+        // 键盘上下选择
+        if (['ArrowDown', 'ArrowUp'].includes(e.key)) {
+            const items = Array.from(resultsList.querySelectorAll('.local-result-item'));
+            if (items.length === 0) return;
+            e.preventDefault();
+            
+            let activeIdx = items.findIndex(i => i.classList.contains('active'));
+            if (e.key === 'ArrowDown') activeIdx = (activeIdx + 1) % items.length;
+            else activeIdx = (activeIdx - 1 + items.length) % items.length;
+            
+            items.forEach((item, idx) => item.classList.toggle('active', idx === activeIdx));
         }
     };
 
-    // 搜索态视觉隔离逻辑 (Task 2.5.2)
+    // 搜索态视觉隔离逻辑 (Task 2.5.2 增强)
     sea.addEventListener('input', () => {
-        const hasText = sea.value.trim().length > 0;
+        const val = sea.value.trim().toLowerCase();
+        const hasText = val.length > 0;
         document.body.classList.toggle('is-searching', hasText);
+        
+        if (hasText) {
+            // 执行站内模糊搜索
+            const matches = appData.items.filter(i => 
+                (i.title.toLowerCase().includes(val) || (i.desc && i.desc.toLowerCase().includes(val))) &&
+                (isAdmin || !i.hidden)
+            ).slice(0, 8); // 最多显示 8 个结果
+
+            if (matches.length > 0) {
+                resultsList.innerHTML = matches.map((m, idx) => `
+                    <div class="local-result-item ${idx === 0 ? 'active' : ''}" onclick="recordClick('${m.id}'); window.open('${m.url}', '${appData.settings?.openInNewTab ? '_blank' : '_self'}')">
+                        <span class="result-icon">${m.icon?.startsWith('http') ? `<img src="${m.icon}">` : (m.icon || '🔗')}</span>
+                        <div class="result-info">
+                            <div class="result-title">${m.title}</div>
+                            <div class="result-url">${m.url}</div>
+                        </div>
+                    </div>
+                `).join('');
+                dropdown.style.display = 'block';
+            } else {
+                resultsList.innerHTML = `<div class="search-empty-tip">未找到匹配项，按回车通过云端搜索...</div>`;
+                dropdown.style.display = 'block';
+            }
+        } else {
+            dropdown.style.display = 'none';
+        }
     });
 
     // Zen Mode 唤醒逻辑 (Task 2.1 & 2.5.1)
@@ -562,10 +635,17 @@ const initSearch = () => {
             renderNav();
         }
     });
+
+    // 点击外部关闭搜索下拉
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-wrapper')) {
+            dropdown.style.display = 'none';
+        }
+    });
 };
 
 const initGlobalEvents = () => {
-    // 全场景沉浸唤醒监听 (Task 2.5.1)
+    // 1. 全场景沉浸唤醒监听 (Task 2.5.1 - 增强版)
     window.addEventListener('wheel', (e) => {
         if (isActuallyZen && e.deltaY > 10) {
             isZenTempExpanded = true;
@@ -573,10 +653,23 @@ const initGlobalEvents = () => {
         }
     }, { passive: true });
 
+    // 移动端手势唤醒
+    window.addEventListener('touchstart', (e) => {
+        touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    window.addEventListener('touchend', (e) => {
+        const touchEndY = e.changedTouches[0].clientY;
+        if (isActuallyZen && touchStartY - touchEndY > 50) { // 上滑 50px
+            isZenTempExpanded = true;
+            renderNav();
+        }
+    }, { passive: true });
+
     document.addEventListener('click', (e) => {
         if (isActuallyZen) {
-            // 如果点击的是背景而非具体的交互元素，则唤醒
-            if (e.target.classList.contains('main-content') || e.target.id === 'search-section') {
+            // 排除交互元素，仅背景触发 (Task 2.5.1 优化)
+            if (!e.target.closest('.card, .sidebar, .modal, .sidebar-toggle, .search-wrapper')) {
                 isZenTempExpanded = true;
                 renderNav();
             }
@@ -587,7 +680,7 @@ const initGlobalEvents = () => {
         const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
         const focusedCard = document.activeElement.closest('.card');
         
-        // 1. 全键盘磁贴流转算法 (Task 2.5.3)
+        // 2. 全键盘磁贴流转算法 (Task 2.5.3 - 动态适配)
         if (!isInput && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             const cards = Array.from(document.querySelectorAll('.grid-container .card:not(.hidden-item)'));
             if (cards.length === 0) return;
@@ -602,9 +695,13 @@ const initGlobalEvents = () => {
             const currentIndex = cards.indexOf(focusedCard);
             let nextIndex = currentIndex;
 
-            // 获取网格列数 (动态计算)
+            // 获取网格列数 (根据实际渲染样式动态计算)
             const grid = focusedCard.closest('.nav-grid');
-            const columns = grid ? window.getComputedStyle(grid).gridTemplateColumns.split(' ').length : 1;
+            let columns = 1;
+            if (grid) {
+                const computed = window.getComputedStyle(grid).gridTemplateColumns;
+                columns = computed.split(' ').length;
+            }
 
             switch (e.key) {
                 case 'ArrowRight': nextIndex = Math.min(currentIndex + 1, cards.length - 1); break;
@@ -615,13 +712,13 @@ const initGlobalEvents = () => {
 
             if (cards[nextIndex]) {
                 cards[nextIndex].focus();
-                // 确保聚焦磁贴在视界中心
+                // 确保聚焦磁贴在视界中心 (Task 2.5.3 优化)
                 cards[nextIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
             return;
         }
 
-        // 2. Ctrl+B 切换侧边栏 (逃生通道)
+        // 3. Ctrl+B 切换侧边栏 (逃生通道)
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
             e.preventDefault();
             if (appData.settings?.zenMode && !isZenTempExpanded) {
@@ -634,7 +731,7 @@ const initGlobalEvents = () => {
             return;
         }
 
-        // 3. 键入即唤醒 (Task 2.2)
+        // 4. 键入即唤醒 (Task 2.2)
         if (!isInput && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             const sea = document.getElementById('sea-input');
             if (sea) {
@@ -643,7 +740,7 @@ const initGlobalEvents = () => {
             }
         }
 
-        // 4. Alt + L 唤起登录
+        // 5. Alt + L 唤起登录
         if (e.altKey && e.key.toLowerCase() === 'l') {
             e.preventDefault();
             document.getElementById('auth-overlay').style.display = 'flex';
@@ -651,7 +748,7 @@ const initGlobalEvents = () => {
             return;
         }
 
-        // 5. Ctrl+K 快速聚焦
+        // 6. Ctrl+K 快速聚焦
         if (e.ctrlKey && e.key.toLowerCase() === 'k') {
             e.preventDefault();
             const sea = document.getElementById('sea-input');
@@ -662,7 +759,7 @@ const initGlobalEvents = () => {
             return;
         }
 
-        // 6. 页面滚动快捷键 (Task 4.2)
+        // 7. 页面滚动快捷键 (Task 4.2)
         if (!isInput) {
             if (e.key === 'Home') {
                 e.preventDefault();
@@ -674,7 +771,7 @@ const initGlobalEvents = () => {
             }
         }
 
-        // 7. Escape 一键复位
+        // 8. Escape 一键复位
         if (e.key === 'Escape') { 
             const sea = document.getElementById('sea-input');
             if (sea) {
