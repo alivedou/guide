@@ -55,6 +55,9 @@ async function getAuthContext(request, env) {
       }
     } catch (e) {
       console.error('[Auth] JWT Verification failed:', e.message);
+      if (e.code === 'ERR_JWT_EXPIRED') {
+        return { userId: "expired", userRole: "guest", username: "", isAdmin: false };
+      }
       userId = "guest";
     }
   }
@@ -75,7 +78,11 @@ export async function onRequestOptions() {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-  const { userId, userRole, username, isAdmin } = await getAuthContext(request, env);
+  const auth = await getAuthContext(request, env);
+  if (auth.userId === "expired") {
+    return new Response(JSON.stringify({ error: "Session Expired", code: "ERR_JWT_EXPIRED" }), { status: 401 });
+  }
+  const { userId, userRole, username, isAdmin } = auth;
   const kvKey = userId === "guest" ? "config" : `user_config:${userId}`;
 
   const headers = { "Content-Type": "application/json;charset=UTF-8" };
@@ -111,15 +118,43 @@ export async function onRequestGet(context) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const { userId } = await getAuthContext(request, env);
-  if (userId === "guest") return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  const auth = await getAuthContext(request, env);
+  
+  if (auth.userId === "guest" || auth.userId === "expired") {
+    return new Response(JSON.stringify({ 
+      error: "Unauthorized", 
+      code: auth.userId === "expired" ? "ERR_JWT_EXPIRED" : "ERR_UNAUTHORIZED" 
+    }), { status: 401 });
+  }
 
+  const userId = auth.userId;
   const kvKey = `user_config:${userId}`;
   try {
     const newData = await request.json();
+    
+    // Task 4.3: 资源配额校验 (Quota Guard)
     if (newData.categories && newData.categories.length > 20) {
-      return new Response(JSON.stringify({ error: "Quota exceeded", message: "分类不能超过 20 个" }), { status: 403 });
+      return new Response(JSON.stringify({ 
+        error: "分类数量已达到上限 (20)", 
+        code: "ERR_QUOTA_EXCEEDED" 
+      }), { status: 403 });
     }
+
+    // 统计每个分类下的书签数量
+    if (newData.items) {
+      const catCounts = {};
+      for (const item of newData.items) {
+        const cId = item.catId || item.cat_id;
+        catCounts[cId] = (catCounts[cId] || 0) + 1;
+        if (catCounts[cId] > 100) {
+          return new Response(JSON.stringify({ 
+            error: "单个分类下的书签不能超过 100 个", 
+            code: "ERR_QUOTA_EXCEEDED" 
+          }), { status: 403 });
+        }
+      }
+    }
+
     newData.lastUpdated = formatCNTime(new Date());
     await env.nav.put(kvKey, JSON.stringify(newData));
     return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
@@ -130,9 +165,16 @@ export async function onRequestPost(context) {
 
 export async function onRequestDelete(context) {
   const { request, env } = context;
-  const { userId } = await getAuthContext(request, env);
-  if (userId === "guest") return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  const auth = await getAuthContext(request, env);
+  
+  if (auth.userId === "guest" || auth.userId === "expired") {
+    return new Response(JSON.stringify({ 
+      error: "Unauthorized", 
+      code: auth.userId === "expired" ? "ERR_JWT_EXPIRED" : "ERR_UNAUTHORIZED" 
+    }), { status: 401 });
+  }
 
+  const userId = auth.userId;
   const kvKey = `user_config:${userId}`;
   try {
     const resetData = getFreshDefaultData();

@@ -33,9 +33,9 @@
 - [ ] **Task 3.3: 页面管理 (Page Management) 深度集成** (实现 SortableJS 跨分类拖拽排版 + 底部多选批量管理工具栏)
 
 ## 🛡️ Phase 4: 全站管控中心 (4.3)
-- [ ] **Task 4.1: 管理员 Dashboard 与审计** (用户列表查询、封禁、操作日志)
-- [ ] **Task 4.2: 系统公告发布系统** (Quiet/Important 两种形态的公告 UI)
-- [ ] **Task 4.3: 资源配额拦截器 (Quotas)** (后端强制执行 20 cats / 50 items 限制)
+- [ ] **Task 4.1: 管理员管控枢纽 (Admin Hub)** (实现用户状态熔断、全站 SEO 配置与管理行为审计日志)
+- [ ] **Task 4.2: 多态公告下发系统 (Broadcast)** (实现 Important(顶部常驻) 与 Quiet(右下角静默) 两种形态的公告通知)
+- [x] **Task 4.3: 云端资源配额与风控 (Guardrail)** (后端强制执行 20 cats/100 items 限制，并补全 Token 过期校验机制)
 
 ## 📱 Phase 5: 跨端一致性与 PWA (4.5)
 - [ ] **Task 5.1: PWA 离线支持优化** (ServiceWorker 静态资源与图标拦截缓存)

@@ -106,6 +106,15 @@ const syncClicksToCloud = async () => {
             body: JSON.stringify(payload)
         });
 
+        if (res.status === 401) return handleAuthError(); // Token 过期
+        
+        if (res.status === 403) {
+            const err = await res.json();
+            if (err.code === 'ERR_QUOTA_EXCEEDED') {
+                return showToast(err.error || "已达到配额上限", "#e74c3c");
+            }
+        }
+
         if (res.ok) {
             console.log('[Sync] Cloud sync successful');
             syncRetryCount = 0;
@@ -113,12 +122,19 @@ const syncClicksToCloud = async () => {
             throw new Error('Sync failed');
         }
     } catch (e) {
-        syncRetryCount++;
-        const delay = Math.min(Math.pow(2, syncRetryCount) * 1000, 60000); // 指数退避
-        console.warn(`[Sync] Retrying in ${delay/1000}s...`, e);
-        clearTimeout(syncTimer);
-        syncTimer = setTimeout(syncClicksToCloud, delay);
+        console.warn('[Sync] Background sync failed:', e.message);
     }
+};
+
+// 认证失效统一处理
+const handleAuthError = () => {
+    console.warn('[Auth] Session expired or invalid');
+    localStorage.removeItem('nav_token');
+    sysToken = '';
+    isAdmin = false;
+    showToast("会话已过期，请重新登录", "#e67e22");
+    document.getElementById('auth-overlay').style.display = 'flex';
+    init(true); // 回退到游客视图
 };
 
 // 页面关闭前的紧急同步
@@ -164,6 +180,11 @@ const doLogin = async () => {
             body: JSON.stringify({ username: u, password: p })
         });
         const data = await res.json();
+        
+        if (res.status === 429) {
+            return showToast(data.error || "尝试次数过多，请稍后再试", "#e74c3c");
+        }
+
         if (data.success) {
             sysToken = 'Bearer ' + data.token;
             localStorage.setItem('nav_token', sysToken);
@@ -787,7 +808,18 @@ const syncConfigToCloud = async () => {
             },
             body: JSON.stringify(appData)
         });
+
+        if (res.status === 401) return handleAuthError();
+        
+        if (res.status === 403) {
+            const err = await res.json();
+            if (err.code === 'ERR_QUOTA_EXCEEDED') {
+                return showToast(err.error || "已达到书签配额上限，请先清理无用书签", "#e74c3c");
+            }
+        }
+
         if (res.ok) showToast("更改已自动保存到云端");
+        else throw new Error("Cloud save failed");
     } catch (e) {
         showToast("自动保存失败", "#e74c3c");
     }

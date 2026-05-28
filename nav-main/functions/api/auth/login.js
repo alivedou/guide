@@ -42,6 +42,7 @@ export async function onRequestPost(context) {
     })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
+    .setExpirationTime('7d') // Task 4.3: 设置 7 天有效期
     .sign(secret);
 
     return new Response(JSON.stringify({

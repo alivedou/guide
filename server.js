@@ -22,6 +22,9 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'cloudnav-secret-2026';
 const secret = new TextEncoder().encode(JWT_SECRET);
 
+// ====== Task 4.3: 登录防爆破模拟 ======
+const loginAttempts = new Map(); // IP -> { count, lockUntil }
+
 // ====== 鉴权中间件 ======
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -34,7 +37,9 @@ const authenticate = async (req, res, next) => {
         next();
     } catch (err) {
         console.error('[Auth] Token verification failed:', err.message);
-        return res.status(403).json({ error: 'Invalid token' });
+        // 区分过期与其他错误
+        const status = err.code === 'ERR_JWT_EXPIRED' ? 401 : 403;
+        return res.status(status).json({ error: 'Invalid or expired token', code: err.code });
     }
 };
 
@@ -190,13 +195,35 @@ app.post('/api/auth/register', (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
+    const ip = req.ip;
+
+    // 防爆破检查
+    const attempt = loginAttempts.get(ip) || { count: 0, lockUntil: 0 };
+    if (attempt.lockUntil > Date.now()) {
+        const waitMin = Math.ceil((attempt.lockUntil - Date.now()) / 60000);
+        return res.status(429).json({ error: `登录尝试过多，请在 ${waitMin} 分钟后再试` });
+    }
+
     const hash = crypto.createHash('sha256').update(password).digest('hex');
     const user = db.prepare('SELECT * FROM users WHERE username = ? AND password_hash = ?').get(username, hash);
-    if (!user) return res.status(401).json({ error: 'Auth failed' });
+    
+    if (!user) {
+        attempt.count++;
+        if (attempt.count >= 5) {
+            attempt.lockUntil = Date.now() + 10 * 60 * 1000; // 锁定 10 分钟 (Task 4.3)
+            console.log(`[Security] IP ${ip} locked for 10 mins due to failures`);
+        }
+        loginAttempts.set(ip, attempt);
+        return res.status(401).json({ error: '用户名或密码错误' });
+    }
+    
+    // 登录成功，重置尝试次数
+    loginAttempts.delete(ip);
     
     const token = await new jose.SignJWT({ id: user.id, username: user.username, role: user.role })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
+        .setExpirationTime('7d') // Task 4.3: 设置 7 天过期
         .sign(secret);
         
     res.json({ success: true, token, user: { username: user.username, role: user.role } });
@@ -243,7 +270,22 @@ app.post('/api/config', authenticate, (req, res) => {
     const { categories, items, settings, clicks_history } = req.body;
     const userId = req.user.id;
 
-    if (categories && categories.length > 20) return res.status(403).json({ error: 'Quota exceeded' });
+    // Task 4.3: 资源配额硬核校验
+    if (categories && categories.length > 20) {
+        return res.status(403).json({ error: '分类数量超出上限 (20)', code: 'ERR_QUOTA_EXCEEDED' });
+    }
+    
+    // 统计每个分类下的书签数量
+    if (items) {
+        const catCounts = {};
+        for (const item of items) {
+            const cId = item.catId || item.cat_id;
+            catCounts[cId] = (catCounts[cId] || 0) + 1;
+            if (catCounts[cId] > 100) {
+                return res.status(403).json({ error: '单个分类下的书签不能超过 100 个', code: 'ERR_QUOTA_EXCEEDED' });
+            }
+        }
+    }
 
     db.transaction(() => {
         db.prepare('DELETE FROM categories WHERE user_id = ?').run(userId);
