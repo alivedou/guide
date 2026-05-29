@@ -30,10 +30,11 @@ export async function onRequestPost(context) {
     const passwordHash = await sha256(password);
     const uuid = crypto.randomUUID();
 
-    // 1. 检查是否为首位用户
-    const userCount = await env.DB.prepare('SELECT COUNT(*) as count FROM users').first('count');
-    const isFirstUser = (userCount === 0);
+    // 1. 检查是否为首位用户并获取最大 UID
+    const stats = await env.DB.prepare('SELECT COUNT(*) as count, MAX(uid) as maxUid FROM users').first();
+    const isFirstUser = (stats.count === 0);
     const role = isFirstUser ? 'admin' : 'user';
+    const nextUid = isFirstUser ? 10001 : (stats.maxUid || 10000) + 1;
 
     // 2. 策略拦截 (非首位用户才拦截)
     if (!isFirstUser) {
@@ -49,7 +50,7 @@ export async function onRequestPost(context) {
 
     // 3. 事务级写入 D1
     const queries = [
-      env.DB.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)').bind(uuid, username, passwordHash, role),
+      env.DB.prepare('INSERT INTO users (id, uid, username, password_hash, role) VALUES (?, ?, ?, ?, ?)').bind(uuid, nextUid, username, passwordHash, role),
       env.DB.prepare('INSERT INTO user_settings (user_id) VALUES (?)').bind(uuid)
     ];
 
@@ -98,14 +99,14 @@ export async function onRequestPost(context) {
           openInNewTab: !!settings.openInNewTab 
         },
         user: uuid, 
-        isAdmin: (role === 'admin') 
+        isAdmin: (role === 'admin' || role === 'super_user') 
       };
       await env.nav.put(`user_config:${uuid}`, JSON.stringify(initialKV));
     }
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: role === 'admin' ? "首位管理员注册成功" : "注册成功",
+      message: role === 'admin' ? "首位超级管理员注册成功" : "注册成功",
       role: role
     }), {
       headers: { "Content-Type": "application/json" }

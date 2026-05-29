@@ -27,7 +27,7 @@ export async function onRequestPost(context) {
     const passwordHash = await sha256(password);
 
     // 查询用户信息
-    const user = await env.DB.prepare('SELECT id, username, role, status FROM users WHERE username = ? AND password_hash = ?')
+    const user = await env.DB.prepare('SELECT id, uid, username, role, status FROM users WHERE username = ? AND password_hash = ?')
       .bind(username, passwordHash)
       .first();
 
@@ -56,6 +56,7 @@ export async function onRequestPost(context) {
     const secret = new TextEncoder().encode(env.JWT_SECRET || 'cloudnav-secret-2026');
     const token = await new jose.SignJWT({ 
         id: user.id, 
+        uid: user.uid,
         username: user.username, 
         role: user.role 
     })
@@ -69,6 +70,7 @@ export async function onRequestPost(context) {
       token: token,
       user: { 
         id: user.id, 
+        uid: user.uid,
         username: user.username, 
         role: user.role 
       }

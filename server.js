@@ -22,8 +22,16 @@ if (fs.existsSync(migrationsDir)) {
     const files = fs.readdirSync(migrationsDir).sort();
     files.forEach(file => {
         if (file.endsWith('.sql')) {
-            console.log(`[DB] Executing migration: ${file}`);
-            db.exec(fs.readFileSync(path.join(migrationsDir, file), 'utf-8'));
+            console.log(`[DB] Processing migration: ${file}`);
+            try {
+                db.exec(fs.readFileSync(path.join(migrationsDir, file), 'utf-8'));
+            } catch (e) {
+                if (e.message.includes('duplicate column name') || e.message.includes('already exists')) {
+                    console.log(`[DB] Migration ${file} already applied or partially applied (skipped duplicate)`);
+                } else {
+                    console.error(`[DB] Migration ${file} failed:`, e.message);
+                }
+            }
         }
     });
 }
@@ -40,6 +48,11 @@ try {
         if (!columns.includes('role')) {
             console.log('[DB] Patching: Adding role column to users table');
             db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
+        }
+        if (!columns.includes('uid')) {
+            console.log('[DB] Patching: Adding uid column to users table');
+            db.exec("ALTER TABLE users ADD COLUMN uid INTEGER");
+            db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid)");
         }
     }
 
@@ -340,9 +353,10 @@ app.post('/api/auth/register', (req, res) => {
     const uuid = crypto.randomUUID();
 
     try {
-        const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-        const isFirstUser = userCount === 0;
+        const stats = db.prepare('SELECT COUNT(*) as count, MAX(uid) as maxUid FROM users').get();
+        const isFirstUser = stats.count === 0;
         const role = isFirstUser ? 'admin' : 'user';
+        const nextUid = isFirstUser ? 10001 : (stats.maxUid || 10000) + 1;
 
         // 策略拦截
         if (!isFirstUser) {
@@ -360,7 +374,7 @@ app.post('/api/auth/register', (req, res) => {
         const onboardingData = getOnboardingData();
 
         db.transaction(() => {
-            db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)').run(uuid, username, passwordHash, role);
+            db.prepare('INSERT INTO users (id, uid, username, password_hash, role) VALUES (?, ?, ?, ?, ?)').run(uuid, nextUid, username, passwordHash, role);
             
             // 使用模板设置
             const s = onboardingData.settings || {};
@@ -475,13 +489,27 @@ app.post('/api/auth/login', async (req, res) => {
     loginAttempts.delete(ip);
     console.log(`[Auth] Login successful: ${username} (${user.role})`);
     
-    const token = await new jose.SignJWT({ id: user.id, username: user.username, role: user.role })
+    const token = await new jose.SignJWT({ 
+            id: user.id, 
+            uid: user.uid, 
+            username: user.username, 
+            role: user.role 
+        })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime('7d') // Task 4.3: 设置 7 天过期
         .sign(secret);
         
-    res.json({ success: true, token, user: { username: user.username, role: user.role } });
+    res.json({ 
+        success: true, 
+        token, 
+        user: { 
+            id: user.id, 
+            uid: user.uid, 
+            username: user.username, 
+            role: user.role 
+        } 
+    });
 });
 
 // 辅助函数：记录登录失败
@@ -526,7 +554,20 @@ app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
         }
 
         if (role) {
-            if (req.user.role !== 'admin') return res.status(403).json({ error: '权限不足' });
+            // 权限等级逻辑：admin 权限最高，super_user 次之
+            if (req.user.role === 'admin') {
+                // admin 无限权限
+            } else if (req.user.role === 'super_user') {
+                if (role !== 'user') return res.status(403).json({ error: '权限不足：super_user 只能管理普通用户' });
+            } else {
+                return res.status(403).json({ error: '权限不足' });
+            }
+
+            // 防止降级自己
+            if (userId === req.user.id && req.user.role === 'admin' && role !== 'admin') {
+                return res.status(403).json({ error: '管理员不能降级自己' });
+            }
+
             db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, userId);
             db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
               .run(req.user.id, 'CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, req.ip);

@@ -6,7 +6,6 @@
  * ==========================================
  */
 
-import * as jose from 'jose';
 import { defaultData, MINIMAL_SAFE_DATA } from './defaultData.js';
 
 const CONFIG = {
@@ -31,39 +30,6 @@ async function sha256(text) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ====== 鉴权提取函数 (Task 2.6.1: 使用 jose 验证 JWT) ======
-async function getAuthContext(request, env) {
-  const authHeader = request.headers.get("Authorization");
-  let userId = "guest";
-  let userRole = "guest";
-  let username = "";
-
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    try {
-      const token = authHeader.split(" ")[1];
-      const secret = new TextEncoder().encode(env.JWT_SECRET || 'cloudnav-secret-2026');
-      
-      const { payload } = await jose.jwtVerify(token, secret);
-      userId = payload.id;
-      
-      const user = await env.DB.prepare('SELECT username, role, status FROM users WHERE id = ?').bind(userId).first();
-      if (user && user.status !== 'frozen') {
-        userRole = user.role;
-        username = user.username;
-      } else {
-        userId = "guest";
-      }
-    } catch (e) {
-      console.error('[Auth] JWT Verification failed:', e.message);
-      if (e.code === 'ERR_JWT_EXPIRED') {
-        return { userId: "expired", userRole: "guest", username: "", isAdmin: false };
-      }
-      userId = "guest";
-    }
-  }
-  return { userId, userRole, username, isAdmin: (userRole === "admin" || userRole === "super_user") };
-}
-
 export async function onRequestOptions() {
   return new Response(null, {
     status: 204,
@@ -77,12 +43,12 @@ export async function onRequestOptions() {
 }
 
 export async function onRequestGet(context) {
-  const { request, env } = context;
-  const auth = await getAuthContext(request, env);
-  if (auth.userId === "expired") {
-    return new Response(JSON.stringify({ error: "Session Expired", code: "ERR_JWT_EXPIRED" }), { status: 401 });
-  }
-  const { userId, userRole, username, isAdmin } = auth;
+  const { env, data } = context;
+  const authUser = data.user;
+  const userId = authUser.id || "guest";
+  const userRole = authUser.role;
+  const isAdmin = (userRole === "admin" || userRole === "super_user");
+
   const kvKey = userId === "guest" ? "config" : `user_config:${userId}`;
 
   const headers = { "Content-Type": "application/json;charset=UTF-8" };
@@ -107,7 +73,8 @@ export async function onRequestGet(context) {
       ...dataObj,
       isAdmin,
       user: userId,
-      username: username,
+      uid: authUser.uid,
+      username: authUser.username,
       role: userRole,
       lastUpdated: dataObj.lastUpdated || formatCNTime(new Date())
     }), { headers });
@@ -117,17 +84,17 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPost(context) {
-  const { request, env } = context;
-  const auth = await getAuthContext(request, env);
+  const { request, env, data } = context;
+  const authUser = data.user;
   
-  if (auth.userId === "guest" || auth.userId === "expired") {
+  if (!authUser.id) {
     return new Response(JSON.stringify({ 
       error: "Unauthorized", 
-      code: auth.userId === "expired" ? "ERR_JWT_EXPIRED" : "ERR_UNAUTHORIZED" 
+      code: "ERR_UNAUTHORIZED" 
     }), { status: 401 });
   }
 
-  const userId = auth.userId;
+  const userId = authUser.id;
   const kvKey = `user_config:${userId}`;
   try {
     const newData = await request.json();
@@ -165,6 +132,7 @@ export async function onRequestPost(context) {
 
     if (items) {
       items.forEach((item, idx) => {
+        // Task 4.4: 强制所有权绑定，防止跨用户注入数据
         queries.push(env.DB.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .bind(item.id, userId, item.catId || item.cat_id, item.title, item.url, item.desc, item.icon, item.bg_color || '', idx, item.hidden ? 1 : 0));
       });
@@ -188,17 +156,17 @@ export async function onRequestPost(context) {
 }
 
 export async function onRequestDelete(context) {
-  const { request, env } = context;
-  const auth = await getAuthContext(request, env);
+  const { request, env, data } = context;
+  const authUser = data.user;
   
-  if (auth.userId === "guest" || auth.userId === "expired") {
+  if (!authUser.id) {
     return new Response(JSON.stringify({ 
       error: "Unauthorized", 
-      code: auth.userId === "expired" ? "ERR_JWT_EXPIRED" : "ERR_UNAUTHORIZED" 
+      code: "ERR_UNAUTHORIZED" 
     }), { status: 401 });
   }
 
-  const userId = auth.userId;
+  const userId = authUser.id;
   const kvKey = `user_config:${userId}`;
   try {
     // 1. 阶梯式模板加载逻辑 (Task 6.1.1)

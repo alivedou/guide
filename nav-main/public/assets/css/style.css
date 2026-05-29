@@ -1474,31 +1474,98 @@ body.zen-active.zen-silent .mobile-fab-visual:hover {
 .sidebar-user-info {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
+    gap: 12px;
+    padding: 12px;
     font-size: 13px;
     color: var(--text-dim);
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-    margin-bottom: 8px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-user-info:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-1px);
 }
 
 .sidebar-user-info .ri-user-smile-line {
-    font-size: 18px;
+    font-size: 22px;
     color: var(--primary);
+    background: rgba(57, 157, 255, 0.1);
+    padding: 6px;
+    border-radius: 10px;
+}
+
+.user-meta-box {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.user-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+    display: flex;
+    align-items: center;
+}
+
+.user-uid {
+    font-size: 11px;
+    opacity: 0.5;
+    font-family: monospace;
+}
+
+.sidebar-user-info .admin-badge {
+    font-size: 9px;
+    background: var(--primary);
+    color: white;
+    padding: 1px 4px;
+    border-radius: 4px;
+    margin-left: 6px;
+    line-height: 1.2;
+}
+
+/* Task 7.2: 侧边栏用户卡片布局 */
+.sidebar-user-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.sidebar-user-card .sidebar-user-info {
+    flex: 1;
+    margin-bottom: 0; /* 抵消原有的 margin */
+    cursor: pointer;
+}
+
+.sidebar-quick-logout {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.sidebar-quick-logout:hover {
+    background: #e74c3c;
+    color: white;
+    transform: scale(1.05);
 }
 
 .logout-btn {
     color: #ff6b6b !important;
-}
-
-.sidebar-user-info .admin-badge {
-    font-size: 10px;
-    background: var(--primary);
-    color: white;
-    padding: 2px 4px;
-    border-radius: 4px;
-    margin-left: 4px;
 }
 
 .sidebar-footer .manage-cat-btn {
@@ -2114,6 +2181,52 @@ body.light-theme .modal-content {
 
 body.light-theme .form-row label {
     color: #555;
+}
+
+/* ==================== 登录/注册 Tab 样式 (Task 6.1) ==================== */
+.auth-title-group {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 25px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.auth-tab {
+    position: relative;
+    cursor: pointer;
+    margin: 0;
+    padding-bottom: 10px;
+    font-size: 18px;
+    color: var(--text-dim);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-bottom: 3px solid transparent;
+    opacity: 0.6;
+}
+
+.auth-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+    font-weight: bold;
+    opacity: 1;
+    transform: translateY(-1px);
+}
+
+.auth-tab:hover:not(.active) {
+    color: var(--text);
+    opacity: 0.9;
+}
+
+body.light-theme .auth-title-group {
+    border-color: rgba(0, 0, 0, 0.05);
+}
+
+body.light-theme .auth-tab {
+    color: #666;
+}
+
+body.light-theme .auth-tab.active {
+    color: var(--primary);
 }
 
 input,

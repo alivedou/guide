@@ -165,14 +165,14 @@
             
             <!-- 视图 1: 登录注册表单 -->
             <div id="auth-form-view">
-                <div id="auth-title-group" style="display:flex; justify-content:center; gap:20px; margin-bottom:20px;">
-                    <h3 id="tab-login" class="auth-tab active" style="cursor:pointer; margin:0; padding-bottom:5px;">登录</h3>
-                    <h3 id="tab-register" class="auth-tab" style="cursor:pointer; margin:0; padding-bottom:5px; color:#777;">注册</h3>
+                <div id="auth-title-group" class="auth-title-group">
+                    <h3 id="tab-login" class="auth-tab active">登录</h3>
+                    <h3 id="tab-register" class="auth-tab">注册</h3>
                 </div>
                 <div class="auth-form">
                     <input type="text" id="auth-username" placeholder="用户名" style="text-align:center; margin-bottom: 12px;">
                     <input type="password" id="auth-password" placeholder="密码" style="text-align:center; margin-bottom: 12px;">
-                    <input type="text" id="auth-invite-code" placeholder="邀请码 (必填/选填，视系统策略而定)" style="text-align:center; margin-bottom: 20px;">
+                    <input type="text" id="auth-invite-code" placeholder="邀请码 (必填/选填)" style="text-align:center; margin-bottom: 20px; display: none;">
                     <button id="btn-auth-submit" class="tab-btn active" style="width:100%">确认</button>
                 </div>
                 <p id="auth-switch-tip" style="font-size:12px; color:#888; margin-top:15px;">还没有账号？点击上方“注册”开始</p>

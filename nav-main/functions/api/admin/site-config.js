@@ -1,16 +1,5 @@
 import * as jose from 'jose';
 
-async function getAuthContext(request, env) {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return { role: 'guest' };
-  try {
-    const token = authHeader.split(" ")[1];
-    const secret = new TextEncoder().encode(env.JWT_SECRET || 'cloudnav-secret-2026');
-    const { payload } = await jose.jwtVerify(token, secret);
-    return payload;
-  } catch (e) { return { role: 'guest' }; }
-}
-
 export async function onRequestGet(context) {
   const { env } = context;
   const configStr = await env.nav.get("system:site_config");
@@ -24,10 +13,11 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPost(context) {
-  const { request, env } = context;
-  const admin = await getAuthContext(request, env);
+  const { request, env, data } = context;
+  const admin = data.user;
   
-  if (admin.role !== 'admin') {
+  // 已经在中间件校验了 admin/super_user 权限
+  try {
     return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
   }
 

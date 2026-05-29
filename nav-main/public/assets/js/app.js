@@ -755,25 +755,41 @@ const showAuthModal = () => {
         formView.style.display = 'none';
         userView.style.display = 'block';
         
-        // Task 39.5: 优先读取独立状态，严格映射角色
+        // Task 5.3: 优先从全局状态同步最新信息
         const info = currentUser || JSON.parse(localStorage.getItem('nav_current_user') || '{}');
         const nameEl = document.getElementById('auth-current-user-name');
         const roleEl = document.getElementById('auth-user-role-label');
         
-        if (nameEl) nameEl.innerText = info.username || appData.username || '未知用户';
+        if (nameEl) {
+            // Task 7.1: 标准化 ID 格式为 id: xxxx
+            const uidStr = info.uid ? ` <small style="font-weight: normal; opacity: 0.6; font-family: monospace;">(id: ${info.uid})</small>` : '';
+            nameEl.innerHTML = (info.username || appData.username || '未知用户') + uidStr;
+        }
         if (roleEl) {
             const roleKey = info.role || appData.role || 'guest';
             const roles = { 
-                'admin': '系统管理员', 
-                'super_user': '高级用户', 
+                'admin': '系统总管理员', 
+                'super_user': '高级协管员', 
                 'user': '注册会员',
-                'guest': '游客' 
+                'guest': '访客' 
             };
             roleEl.innerText = roles[roleKey] || '注册会员';
+            
+            // 权限颜色映射 (Task 5.3)
+            if (roleKey === 'admin') {
+                roleEl.style.color = '#f1c40f'; // 金色
+                roleEl.style.fontWeight = 'bold';
+            } else if (roleKey === 'super_user') {
+                roleEl.style.color = '#3498db'; // 蓝色
+                roleEl.style.fontWeight = 'bold';
+            } else {
+                roleEl.style.color = '#888'; // 普通灰色
+                roleEl.style.fontWeight = 'normal';
+            }
         }
         
         overlay.style.display = 'flex';
-        // 自动聚焦退出按钮，方便键盘操作
+        // 自动聚焦退出按钮
         setTimeout(() => document.getElementById('btn-logout-fast')?.focus(), 100);
     } else {
         // 未登录：展示登录表单视图
@@ -806,8 +822,13 @@ const doLogin = async () => {
             sysToken = 'Bearer ' + data.token;
             localStorage.setItem('nav_token', sysToken);
             
-            // Task 39.4: 立即持久化用户信息
-            currentUser = { username: data.user.username, role: data.user.role };
+            // Task 5.1: 立即持久化完整的用户信息
+            currentUser = { 
+                id: data.user.id,
+                uid: data.user.uid,
+                username: data.user.username, 
+                role: data.user.role 
+            };
             localStorage.setItem('nav_current_user', JSON.stringify(currentUser));
 
             document.getElementById('auth-overlay').style.display = 'none';
@@ -928,10 +949,16 @@ const initAuthUI = () => {
     const tabLogin = document.getElementById('tab-login');
     const tabRegister = document.getElementById('tab-register');
     const btnSubmit = document.getElementById('btn-auth-submit');
+    const btnCloseAuth = document.getElementById('btn-close-auth');
     const authOverlay = document.getElementById('auth-overlay');
     let mode = 'login';
 
     if (!tabLogin || !tabRegister || !btnSubmit) return;
+
+    // Task 8.4: 绑定右上角关闭按钮
+    if (btnCloseAuth) {
+        btnCloseAuth.onclick = () => closeAllModals();
+    }
 
     // 清理可能存在的旧监听器 (如果是热重载)
     tabLogin.onclick = null;
@@ -944,7 +971,10 @@ const initAuthUI = () => {
         tabLogin.classList.add('active');
         tabRegister.classList.remove('active');
         const tip = document.getElementById('auth-switch-tip');
+        const inviteEl = document.getElementById('auth-invite-code');
         if (tip) tip.innerText = '还没有账号？点击上方“注册”开始';
+        if (inviteEl) inviteEl.style.display = 'none'; // 登录模式隐藏邀请码
+        document.getElementById('auth-username')?.focus();
     });
 
     tabRegister.addEventListener('click', () => {
@@ -953,7 +983,10 @@ const initAuthUI = () => {
         tabRegister.classList.add('active');
         tabLogin.classList.remove('active');
         const tip = document.getElementById('auth-switch-tip');
+        const inviteEl = document.getElementById('auth-invite-code');
         if (tip) tip.innerText = '已有账号？点击上方“登录”返回';
+        if (inviteEl) inviteEl.style.display = 'block'; // 注册模式显示邀请码
+        document.getElementById('auth-username')?.focus();
     });
 
     btnSubmit.addEventListener('click', async () => {
@@ -1000,7 +1033,7 @@ const initAuthUI = () => {
     // 点击遮罩关闭 (Task 1.1 优化)
     authOverlay.addEventListener('click', (e) => {
         if (e.target === authOverlay) {
-            authOverlay.style.display = 'none';
+            closeAllModals();
         }
     });
     // Task O.3 & O++.1: 统一通过 closeAllModals 处理，由其决定是否静默或同步
@@ -1032,10 +1065,21 @@ const init = async (forceRender = false) => {
 
             appData = data;
             
-            // Task 39.4: 同步最新的用户信息
+            // Task 5.1: 同步最新的用户信息 (包含 UID)
             if (data.username && data.role) {
-                currentUser = { username: data.username, role: data.role };
+                currentUser = { 
+                    id: data.user || data.id, 
+                    uid: data.uid,
+                    username: data.username, 
+                    role: data.role 
+                };
                 localStorage.setItem('nav_current_user', JSON.stringify(currentUser));
+                
+                // Task 5.4: 如果当前弹窗是打开的，强制同步更新弹窗内的信息
+                const userView = document.getElementById('auth-user-view');
+                if (userView && userView.style.display === 'block') {
+                    showAuthModal(); 
+                }
             }
             
             // 恢复云端点击数据 (Task 2.5.4)
@@ -1461,14 +1505,24 @@ const renderTools = () => {
     
     // 如果已登录
     if (sysToken) {
-        const userDisplayName = appData.username || '已登录用户';
-        const roleBadge = isAdmin ? '<span class="admin-badge">ADMIN</span>' : '';
+        const info = currentUser || JSON.parse(localStorage.getItem('nav_current_user') || '{}');
+        const userDisplayName = info.username || appData.username || '已登录用户';
+        const displayUid = info.uid ? `<span class="user-uid">id: ${info.uid}</span>` : '';
+        const roleBadge = isAdmin ? '<span class="admin-badge">ADMIN</span>' : (info.role === 'super_user' ? '<span class="admin-badge" style="background:#3498db">SUP</span>' : '');
         
-        // 1. 渲染顶部用户信息 (仅展示身份)
+        // Task 7.2 & 8.5: 渲染顶部用户信息 (职责分离：左侧纯显示，右侧纯动作)
         userArea.innerHTML = `
-            <div class="sidebar-user-info">
-                <i class="ri-user-smile-line"></i>
-                <span>${userDisplayName} ${roleBadge}</span>
+            <div class="sidebar-user-card">
+                <div class="sidebar-user-info">
+                    <i class="ri-user-smile-line"></i>
+                    <div class="user-meta-box">
+                        <span class="user-name">${userDisplayName} ${roleBadge}</span>
+                        ${displayUid}
+                    </div>
+                </div>
+                <button class="sidebar-quick-logout" onclick="doLogout()" title="安全退出登录">
+                    <i class="ri-logout-box-r-line"></i>
+                </button>
             </div>
         `;
 
@@ -1546,12 +1600,6 @@ const renderTools = () => {
                         <span class="nav-icon"><i class="${themeIconMap[themeMode]}"></i></span>
                         <span class="nav-label">外观模式</span>
                     </div>
-
-                    <!-- 5. 退出登录 (Action Sinking) -->
-                    <div class="sidebar-nav-item toolbar-item logout-btn" onclick="doLogout()" tabindex="0" data-tooltip="退出登录">
-                        <span class="nav-icon"><i class="ri-logout-box-r-line"></i></span>
-                        <span class="nav-label">退出登录</span>
-                    </div>
                 </div>
 
                 <!-- 页面管理子菜单 (仅在管理模式下显示) -->
@@ -1593,11 +1641,19 @@ const renderTools = () => {
         const themeIconMap = { 'auto': 'ri-computer-line', 'light': 'ri-sun-line', 'dark': 'ri-moon-line' };
         const themeNameMap = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
 
-        // 未登录状态：顶部极简，底部工具栏显示登录图标
+        // 未登录状态：顶部卡片化，职责分离 (Task 8.1 & 8.5)
         userArea.innerHTML = `
-            <div class="sidebar-user-info">
-                <i class="ri-user-line"></i>
-                <span>未登录用户</span>
+            <div class="sidebar-user-card guest-mode">
+                <div class="sidebar-user-info">
+                    <i class="ri-user-line"></i>
+                    <div class="user-meta-box">
+                        <span class="user-name">未登录用户</span>
+                        <span class="user-uid">访客模式</span>
+                    </div>
+                </div>
+                <button class="sidebar-quick-logout" onclick="showAuthModal()" style="background: var(--primary-color); opacity: 0.8;" title="点击登录 / 注册">
+                    <i class="ri-login-box-line"></i>
+                </button>
             </div>
         `;
         area.innerHTML = `
@@ -1612,10 +1668,6 @@ const renderTools = () => {
                     <div class="sidebar-nav-item toolbar-item" onclick="toggleThemeMode()" tabindex="0" data-tooltip="外观: ${themeNameMap[themeMode]}">
                         <span class="nav-icon"><i class="${themeIconMap[themeMode]}"></i></span>
                         <span class="nav-label">外观切换</span>
-                    </div>
-                    <div class="sidebar-nav-item toolbar-item" onclick="showAuthModal()" tabindex="0" data-tooltip="登录 / 注册">
-                        <span class="nav-icon"><i class="ri-login-box-line"></i></span>
-                        <span class="nav-label">登录系统</span>
                     </div>
                 </div>
             </div>

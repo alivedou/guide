@@ -1,23 +1,6 @@
-import * as jose from 'jose';
-
-async function getAuthContext(request, env) {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return { role: 'guest' };
-  try {
-    const token = authHeader.split(" ")[1];
-    const secret = new TextEncoder().encode(env.JWT_SECRET || 'cloudnav-secret-2026');
-    const { payload } = await jose.jwtVerify(token, secret);
-    return payload;
-  } catch (e) { return { role: 'guest' }; }
-}
 
 export async function onRequestGet(context) {
-  const { request, env } = context;
-  const admin = await getAuthContext(request, env);
-  
-  if (admin.role !== 'admin' && admin.role !== 'super_user') {
-    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
-  }
+  const { env } = context;
 
   try {
     const list = await env.DB.prepare(`
@@ -36,12 +19,8 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPost(context) {
-  const { request, env } = context;
-  const admin = await getAuthContext(request, env);
-  
-  if (admin.role !== 'admin' && admin.role !== 'super_user') {
-    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
-  }
+  const { request, env, data } = context;
+  const admin = data.user;
 
   try {
     const { count } = await request.json();
@@ -64,10 +43,8 @@ export async function onRequestPost(context) {
 }
 
 export async function onRequestDelete(context) {
-  const { request, env } = context;
-  const admin = await getAuthContext(request, env);
-  
-  if (admin.role !== 'admin') return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+  const { request, env, data } = context;
+  const admin = data.user;
 
   try {
     const { code } = await request.json();

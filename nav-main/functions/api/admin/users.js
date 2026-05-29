@@ -1,5 +1,3 @@
-import * as jose from 'jose';
-
 async function sha256(text) {
   const msgBuffer = new TextEncoder().encode(text);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -7,30 +5,13 @@ async function sha256(text) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function getAuthContext(request, env) {
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return { role: 'guest' };
-  
-  try {
-    const token = authHeader.split(" ")[1];
-    const secret = new TextEncoder().encode(env.JWT_SECRET || 'cloudnav-secret-2026');
-    const { payload } = await jose.jwtVerify(token, secret);
-    return payload;
-  } catch (e) {
-    return { role: 'guest' };
-  }
-}
-
 export async function onRequestGet(context) {
-  const { request, env } = context;
-  const user = await getAuthContext(request, env);
+  const { env, data } = context;
+  const user = data.user;
   
-  if (user.role !== 'admin' && user.role !== 'super_user') {
-    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
-  }
-
+  // 权限已经在 _middleware.js 校验过，这里只需处理业务逻辑
   try {
-    const users = await env.DB.prepare('SELECT id, username, role, status, last_login, created_at FROM users ORDER BY created_at DESC').all();
+    const users = await env.DB.prepare('SELECT id, uid, username, role, status, last_login, created_at FROM users ORDER BY created_at DESC').all();
     return new Response(JSON.stringify({ success: true, users: users.results }), {
       headers: { "Content-Type": "application/json" }
     });
@@ -40,13 +21,9 @@ export async function onRequestGet(context) {
 }
 
 export async function onRequestPatch(context) {
-  const { request, env } = context;
-  const admin = await getAuthContext(request, env);
+  const { request, env, data } = context;
+  const admin = data.user;
   
-  if (admin.role !== 'admin') {
-    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
-  }
-
   try {
     const { userId, status, role, adminPassword } = await request.json();
     if (!userId) throw new Error("Missing userId");
@@ -69,7 +46,24 @@ export async function onRequestPatch(context) {
     }
 
     if (role) {
-      if (admin.role !== 'admin') return new Response(JSON.stringify({ error: "只有超级管理员可修改角色" }), { status: 403 });
+      // 权限等级逻辑：admin 权限最高，super_user 次之
+      // admin 可以修改任何人；super_user 只能修改普通 user
+      if (admin.role === 'admin') {
+         // admin 无限权限，但防止降级最后一个 admin (可选逻辑，此处先保证能操作)
+      } else if (admin.role === 'super_user') {
+         // super_user 只能修改普通用户的状态，不能提拔他人为 admin 或修改其他 super_user
+         if (role !== 'user') {
+            return new Response(JSON.stringify({ error: "权限不足：super_user 只能管理普通用户" }), { status: 403 });
+         }
+      } else {
+         return new Response(JSON.stringify({ error: "权限不足" }), { status: 403 });
+      }
+      
+      // 防止降级自己 (如果是 admin)
+      if (userId === admin.id && admin.role === 'admin' && role !== 'admin') {
+         return new Response(JSON.stringify({ error: "管理员不能降级自己" }), { status: 403 });
+      }
+
       await env.DB.prepare('UPDATE users SET role = ? WHERE id = ?').bind(role, userId).run();
       await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
         .bind(admin.id, 'CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, request.headers.get("cf-connecting-ip") || "unknown")
