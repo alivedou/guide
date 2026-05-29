@@ -466,7 +466,7 @@ body.view-isolated .category-section-title {
     border-bottom: none;
 }
 
-/* Task 4.6.3: 禅意隔离态进一步减噪 */
+/* Task 4.6.3 & 26.1: 禅意隔离态进一步减噪，但保持材质一致性 */
 body.zen-active .category-section-title {
     opacity: 0.6;
     font-weight: 300;
@@ -475,17 +475,34 @@ body.zen-active .category-section-title {
 }
 
 body.zen-active .card {
-    border: 1px solid transparent;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
 }
 
 body.zen-active .card:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: var(--glass-border);
+    background: var(--glass-hover);
+    border-color: var(--primary);
 }
 
 body.zen-active.light-theme .card {
-    background: rgba(0, 0, 0, 0.03);
+    background: var(--glass);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Task 26.2: 亮色模式下导航菜单与常去图标的感知度增强 */
+body.light-theme .zen-menu-item,
+body.light-theme .zen-freq-item {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme .zen-menu-item:hover,
+body.light-theme .zen-freq-item:hover {
+    background: var(--glass-hover);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 body.zen-active.light-theme .card:hover {
@@ -744,47 +761,27 @@ body.page-manage-active.admin-mode::after {
     100% { border-color: rgba(231, 76, 60, 0.4); box-shadow: inset 0 0 20px rgba(231, 76, 60, 0.2); }
 }
 
-/* 禅意静默态 (Task 4.6.1) */
+/* 禅意静默态 (Task 4.6.1 & 26.3) */
 body.zen-active.zen-silent .grid-container,
 body.zen-active.zen-silent .footer-info,
 body.zen-active.zen-silent .category-section,
+body.zen-active.zen-silent .zen-horizon,
 body.zen-active.zen-silent .zen-expand-btn,
 body.zen-active.zen-silent .quick-nav-group,
 body.zen-active.zen-silent .sidebar-toggle,
 body.zen-active.zen-silent .guest-login-bridge {
     opacity: 0 !important;
-    transform: translateY(40px) !important;
+    transform: translateY(30px) !important;
     pointer-events: none !important;
-    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 body.zen-active.zen-silent .sidebar {
     transform: translateX(-100%) !important;
-    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* 移除旧有的禅意模式搜索框定位逻辑，由 .search-section 统一处理 */
-
-body.zen-active:not(.zen-silent) .grid-container,
-body.zen-active:not(.zen-silent) .footer-info,
-body.zen-active:not(.zen-silent) .category-section {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
-}
-
-/* 唤醒瞬间的过渡增强 */
-body.zen-silent-woken .grid-container,
-body.zen-silent-woken .category-section {
-    animation: zenContentRise 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-@keyframes zenContentRise {
-    from { opacity: 0; transform: translateY(60px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* 导航视界 (Navigation Horizon) - T6/T7 */
+/* 导航视界过渡优化 */
 .zen-horizon {
     display: none;
     flex-direction: column;
@@ -794,12 +791,17 @@ body.zen-silent-woken .category-section {
     margin: 0 auto;
     padding: 0 20px;
     z-index: 10;
+    transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body.zen-active .zen-horizon {
+    display: flex;
+    opacity: 1;
+    transform: translateY(0);
 }
 
 body.zen-active:not(.zen-silent) .zen-horizon {
-    display: flex;
     margin-top: 140px; /* 为顶部搜索框留位 */
-    animation: zenContentRise 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 .zen-frequent-container {
@@ -1076,12 +1078,17 @@ body.is-searching .grid-container {
     transition: all 0.4s ease;
 }
 
-/* 焦点环增强 (Task 2.5.3) */
-.card:focus-visible {
+/* 焦点环增强 (Task 2.5.3 & 30.2) */
+.card:focus-visible,
+.sidebar-nav-item:focus-visible,
+.zen-menu-item:focus-visible,
+.zen-freq-item:focus-visible {
     outline: 3px solid var(--primary);
     outline-offset: 4px;
     box-shadow: 0 0 20px var(--primary);
     animation: focus-pulse 1.5s infinite;
+    z-index: 50; /* 确保高亮不被遮挡 */
+    position: relative;
 }
 
 @keyframes focus-pulse {
@@ -1114,7 +1121,7 @@ body.is-searching .grid-container {
     border-right: 1px solid var(--glass-border);
     display: flex;
     flex-direction: column;
-    z-index: 4000; /* 提升层级，确保在禅意模式搜索框之上 */
+    z-index: 3000; /* 还原侧边栏自然层级，不再与全屏搜索 Overlay 竞争 */
     transition: width var(--sidebar-transition), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
     overflow: hidden;
 }
@@ -1134,7 +1141,7 @@ body.sidebar-folded .sidebar-title,
 body.sidebar-folded .sidebar:not(:hover) .sidebar-pin-btn,
 body.sidebar-folded .sidebar:not(:hover) .nav-label,
 body.sidebar-folded .sidebar:not(:hover) .sidebar-user-info span,
-body.sidebar-folded .sidebar:not(:hover) .sidebar-admin-toolbar span,
+body.sidebar-folded .sidebar:not(:hover) .sidebar-admin-toolbar .nav-label,
 body.sidebar-folded .sidebar:not(:hover) .admin-tools-submenu .nav-label,
 body.sidebar-folded .sidebar:not(:hover) .nav-count {
     opacity: 0;
@@ -1148,7 +1155,7 @@ body.sidebar-folded .sidebar:hover .sidebar-title,
 body.sidebar-folded .sidebar:hover .sidebar-pin-btn,
 body.sidebar-folded .sidebar:hover .nav-label,
 body.sidebar-folded .sidebar:hover .sidebar-user-info span,
-body.sidebar-folded .sidebar:hover .sidebar-admin-toolbar span,
+body.sidebar-folded .sidebar:hover .sidebar-admin-toolbar .nav-label,
 body.sidebar-folded .sidebar:hover .admin-tools-submenu .nav-label,
 body.sidebar-folded .sidebar:hover .nav-count {
     opacity: 1;
@@ -1171,11 +1178,19 @@ body.sidebar-folded .sidebar:hover .sidebar-header {
 body.sidebar-folded .sidebar-nav-item {
     justify-content: center;
     padding: 10px 0;
+    margin: 4px 6px;
+    border-radius: 12px;
+}
+
+body.sidebar-folded .sidebar-nav-item .nav-icon {
+    margin: 0;
+    font-size: 1.2rem;
 }
 
 body.sidebar-folded .sidebar:hover .sidebar-nav-item {
     justify-content: flex-start;
     padding: 10px 14px;
+    margin: 4px 8px;
 }
 
 body.sidebar-folded .sidebar-user-section {
@@ -1190,12 +1205,20 @@ body.sidebar-folded .sidebar:hover .sidebar-user-section {
 }
 
 body.sidebar-folded .sidebar-admin-toolbar {
-    padding: 4px 0;
+    padding: 6px 4px;
     justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    background: transparent;
+    border: none;
 }
 
 body.sidebar-folded .sidebar:hover .sidebar-admin-toolbar {
     padding: 4px;
+    flex-direction: row;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--glass-border);
 }
 
 .sidebar-header {
@@ -1331,19 +1354,69 @@ body.light-theme.admin-mode .sidebar {
 }
 
 .sidebar-footer {
-    padding: 10px 8px;
+    padding: 12px 8px;
     border-top: 1px solid var(--glass-border);
     flex-shrink: 0;
-    /* Task 4.14: 强制放开溢出限制，允许气泡破框而出 */
+    background: var(--sidebar-bg);
+    backdrop-filter: blur(10px);
+    /* Task 28.1: 锚点化底部区域 */
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
     overflow: visible !important;
 }
 
 .sidebar-admin-container {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    /* Task 4.14: 强制放开溢出限制 */
+    gap: 10px;
     overflow: visible !important;
+}
+
+/* 视觉实验室快捷悬浮按钮 (Task 28.2) */
+.mobile-fab-visual {
+    position: fixed;
+    right: 20px;
+    bottom: 30px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    display: none; /* 默认隐藏，JS 控制显示 */
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 15px rgba(57, 157, 255, 0.4);
+    z-index: 4000;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.mobile-fab-visual:active {
+    transform: scale(0.9);
+}
+
+.mobile-fab-visual i {
+    font-size: 24px;
+}
+
+@media (max-width: 768px) {
+    .mobile-fab-visual {
+        display: flex;
+    }
+}
+
+/* 禅意静默态下的视觉实验室恢复 (Task 28.2) */
+body.zen-active.zen-silent .mobile-fab-visual {
+    opacity: 0.3;
+    transform: scale(0.8);
+    right: 15px;
+    bottom: 15px;
+}
+
+body.zen-active.zen-silent .mobile-fab-visual:hover {
+    opacity: 1;
+    transform: scale(1);
 }
 
 .sidebar-nav-label {
@@ -3120,7 +3193,7 @@ body.view-style-2 .card[data-tooltip]::before {
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: 4000;
+    z-index: 5500; /* 确立最高统治权，覆盖侧边栏 (3000) 与气泡提示 (5000) */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3140,10 +3213,10 @@ body.search-active .search-section {
 }
 
 .search-wrapper {
-    background: rgba(15, 25, 35, 0.75); /* 统一背景深度 */
-    border: 1px solid rgba(255, 255, 255, 0.18); /* 统一边框透明度 */
-    border-radius: 28px; /* 统一圆角：稍微调大一点更显平滑 */
-    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.35); /* 统一阴影参数 */
+    background: rgba(15, 25, 35, 0.82); /* 提升背景不透明度以增强输入文字对比度 */
+    border: 1px solid var(--glass-border); /* 复用全局边框变量 */
+    border-radius: 28px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4); /* 增强悬浮阴影，确立 Overlay 深度 */
     backdrop-filter: blur(25px);
     -webkit-backdrop-filter: blur(25px);
     transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
@@ -3165,6 +3238,11 @@ body.search-active .search-wrapper {
 @media (max-width: 768px) {
     .search-wrapper {
         width: 95%;
+        border-radius: 20px; /* 移动端圆角稍微减小以适配小屏比例 */
+        transform: perspective(1000px) scale(0.95) translateY(20px);
+    }
+    body.search-active .search-wrapper {
+        transform: perspective(1000px) scale(1) translateY(0);
     }
 }
 
@@ -3404,8 +3482,6 @@ body.zen-active .main-content {
     min-height: 100vh;
 }
 
-/* 禅意模式下搜索框位置由 .search-section 统一控制 */
-
 .zen-expand-btn {
     position: fixed;
     bottom: 40px;
@@ -3461,9 +3537,9 @@ body.light-theme .search-section {
 }
 
 body.light-theme .search-wrapper {
-    background: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.9);
     border-color: rgba(0, 0, 0, 0.08);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
 }
 
 .search-section:focus-within .search-wrapper {

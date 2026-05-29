@@ -632,6 +632,21 @@ const openVisualLab = () => {
             <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示: 使用 Alt + Z 可快速切换禅意模式</p>
         </div>
         <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-contrast-2-line"></i> 外观模式 (Task 29.3)</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn ${themeMode === 'auto' ? 'active' : ''}" onclick="setThemeMode('auto')">
+                    <i class="ri-computer-line"></i> 跟随系统
+                </button>
+                <button class="tab-btn ${themeMode === 'light' ? 'active' : ''}" onclick="setThemeMode('light')">
+                    <i class="ri-sun-line"></i> 明亮
+                </button>
+                <button class="tab-btn ${themeMode === 'dark' ? 'active' : ''}" onclick="setThemeMode('dark')">
+                    <i class="ri-moon-line"></i> 暗黑
+                </button>
+            </div>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">说明: “跟随系统”将根据您的设备设置自动切换亮/暗色</p>
+        </div>
+        <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-image-line"></i> 自定义背景</span>
             <div style="display:flex; gap:10px; align-items:center;">
                 <input type="text" id="bg-url-input" placeholder="输入图片 URL (留空显示 Bing 壁纸)" 
@@ -1064,8 +1079,14 @@ const renderNav = () => {
             cats.forEach((cat, idx) => {
                 const menuItem = document.createElement('div');
                 menuItem.className = `zen-menu-item ${activeCatId === cat.id ? 'active' : ''}`;
+                menuItem.tabIndex = 0; // Task 30.2: 启用键盘焦点
                 menuItem.style.animationDelay = `${(idx * 0.05) + 0.2}s`; // T8: Stagger
                 menuItem.innerHTML = `<span class="menu-icon">${cat.icon}</span><span class="menu-label">${cat.name}</span>`;
+                
+                // 处理键盘激活
+                menuItem.onkeydown = (e) => {
+                    if (e.key === 'Enter') menuItem.click();
+                };
                 menuItem.onclick = () => {
                     if (activeCatId === cat.id) return;
                     activeCatId = cat.id;
@@ -1086,6 +1107,7 @@ const renderNav = () => {
         cats.forEach(cat => {
             const navItem = document.createElement('div');
             navItem.className = `sidebar-nav-item ${activeCatId === cat.id ? 'active' : ''} ${cat.hidden ? 'is-hidden-cat' : ''}`;
+            navItem.tabIndex = 0; // Task 30.2: 启用键盘焦点
             
             // 计算书签数量 (Task 4.5.2)
             const itemCount = appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
@@ -1233,6 +1255,7 @@ const renderNav = () => {
                 const isCatFull = catItemCount >= 100;
 
                 addCard.className = `card add-new-card ${isCatFull ? 'disabled' : ''}`;
+                addCard.tabIndex = 0; // Task 30.2: 启用键盘焦点
                 addCard.innerHTML = `
                     <div class="icon-wrapper"><i class="ri-add-line"></i></div>
                     <h3>${isCatFull ? '已满' : '新增书签'}</h3>
@@ -1241,6 +1264,11 @@ const renderNav = () => {
                     if (isCatFull) return showToast("该分类已达到 100 个书签上限", "#e74c3c");
                     activeCatId = cat.id;
                     openEditModal('');
+                };
+                
+                // 键盘支持
+                addCard.onkeydown = (e) => {
+                    if (e.key === 'Enter') addCard.click();
                 };
                 grid.appendChild(addCard);
             }
@@ -1317,6 +1345,21 @@ const renderTools = () => {
     const adminBanner = document.getElementById('admin-active-banner');
     if (!area || !userArea) return;
     
+    // Task 28.2: 渲染移动端快捷入口 (如果尚未存在)
+    let mobileFab = document.getElementById('mobile-fab-visual');
+    if (!mobileFab) {
+        mobileFab = document.createElement('div');
+        mobileFab.id = 'mobile-fab-visual';
+        mobileFab.className = 'mobile-fab-visual';
+        mobileFab.innerHTML = '<i class="ri-settings-4-line"></i>';
+        mobileFab.title = '视觉实验室';
+        mobileFab.onclick = (e) => {
+            e.stopPropagation();
+            openVisualLab();
+        };
+        document.body.appendChild(mobileFab);
+    }
+    
     // 如果已登录
     if (sysToken) {
         const userDisplayName = appData.username || '已登录用户';
@@ -1331,10 +1374,21 @@ const renderTools = () => {
         `;
 
         // 2. 渲染底部管理工具
+        const themeIconMap = { 'auto': 'ri-computer-line', 'light': 'ri-sun-line', 'dark': 'ri-moon-line' };
+        const themeNameMap = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
+        
         // 配额状态感知
         const isAllFull = appData.categories.length > 0 && appData.categories.every(cat => 
             appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length >= 100
         );
+
+        // Task 28.1: 基础设置入口（始终存在，在折叠态下作为齿轮锚点）
+        const settingsHubHtml = `
+            <div class="sidebar-nav-item toolbar-item" onclick="openVisualLab()" title="视觉实验室">
+                <div class="nav-icon"><i class="ri-settings-4-line"></i></div>
+                <span class="nav-label">视觉实验室</span>
+            </div>
+        `;
 
         // 管理员模式视觉高亮切换 (Task 9.2 增强)
         if (isAdmin && isPageManagementMode) {
@@ -1367,6 +1421,7 @@ const renderTools = () => {
                     <!-- 1. 页面管理 -->
                     <div class="sidebar-nav-item toolbar-item ${isPageManagementMode ? 'active' : ''}" 
                          onclick="togglePageManagement()" 
+                         tabindex="0"
                          data-tooltip="页面管理">
                         <span class="nav-icon"><i class="ri-layout-masonry-line"></i></span>
                         <span class="nav-label">页面管理</span>
@@ -1374,18 +1429,29 @@ const renderTools = () => {
 
                     <!-- 2. 系统控制 (仅管理员) -->
                     ${isAdmin ? `
-                    <div class="sidebar-nav-item toolbar-item" onclick="openAdminHub()" data-tooltip="控制中心">
+                    <div class="sidebar-nav-item toolbar-item" onclick="openAdminHub()" tabindex="0" data-tooltip="控制中心">
                         <span class="nav-icon"><i class="ri-shield-user-line"></i></span>
                     </div>` : ''}
 
-                    <!-- 3. 视觉实验室 -->
-                    <div class="sidebar-nav-item toolbar-item" onclick="openVisualLab()" data-tooltip="个性化偏好">
-                        <span class="nav-icon"><i class="ri-palette-line"></i></span>
+                    <!-- 3. 视觉实验室 (齿轮锚点) -->
+                    <div class="sidebar-nav-item toolbar-item" onclick="openVisualLab()" tabindex="0" data-tooltip="个性化设置">
+                        <span class="nav-icon"><i class="ri-settings-4-line"></i></span>
+                        <span class="nav-label">视觉实验室</span>
                     </div>
 
-                    <!-- 4. 退出登录 (Action Sinking) -->
-                    <div class="sidebar-nav-item toolbar-item logout-btn" onclick="doLogout()" data-tooltip="退出登录">
+                    <!-- 4. 主题模式切换 (Task 29.2) -->
+                    <div class="sidebar-nav-item toolbar-item ${themeMode !== 'auto' ? 'active' : ''}" 
+                         onclick="toggleThemeMode()" 
+                         tabindex="0"
+                         data-tooltip="主题模式: ${themeNameMap[themeMode]}">
+                        <span class="nav-icon"><i class="${themeIconMap[themeMode]}"></i></span>
+                        <span class="nav-label">外观模式</span>
+                    </div>
+
+                    <!-- 5. 退出登录 (Action Sinking) -->
+                    <div class="sidebar-nav-item toolbar-item logout-btn" onclick="doLogout()" tabindex="0" data-tooltip="退出登录">
                         <span class="nav-icon"><i class="ri-logout-box-r-line"></i></span>
+                        <span class="nav-label">退出登录</span>
                     </div>
                 </div>
 
@@ -1425,6 +1491,9 @@ const renderTools = () => {
             </div>
         `;
     } else {
+        const themeIconMap = { 'auto': 'ri-computer-line', 'light': 'ri-sun-line', 'dark': 'ri-moon-line' };
+        const themeNameMap = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
+
         // 未登录状态：顶部极简，底部工具栏显示登录图标
         userArea.innerHTML = `
             <div class="sidebar-user-info">
@@ -1435,8 +1504,19 @@ const renderTools = () => {
         area.innerHTML = `
             <div class="sidebar-admin-container">
                 <div class="sidebar-admin-toolbar">
-                    <div class="sidebar-nav-item toolbar-item" onclick="document.getElementById('auth-overlay').style.display='flex'" data-tooltip="登录 / 注册">
+                    <!-- Task 28.1: 访客齿轮锚点 -->
+                    <div class="sidebar-nav-item toolbar-item" onclick="openVisualLab()" tabindex="0" data-tooltip="视觉设置">
+                        <span class="nav-icon"><i class="ri-settings-4-line"></i></span>
+                        <span class="nav-label">视觉预览</span>
+                    </div>
+                    <!-- Task 29.2: 访客主题切换 -->
+                    <div class="sidebar-nav-item toolbar-item" onclick="toggleThemeMode()" tabindex="0" data-tooltip="外观: ${themeNameMap[themeMode]}">
+                        <span class="nav-icon"><i class="${themeIconMap[themeMode]}"></i></span>
+                        <span class="nav-label">外观切换</span>
+                    </div>
+                    <div class="sidebar-nav-item toolbar-item" onclick="document.getElementById('auth-overlay').style.display='flex'" tabindex="0" data-tooltip="登录 / 注册">
                         <span class="nav-icon"><i class="ri-login-box-line"></i></span>
+                        <span class="nav-label">登录系统</span>
                     </div>
                 </div>
             </div>
@@ -1445,24 +1525,60 @@ const renderTools = () => {
 };
 
 // ==================== 6. 其他初始化 ====================
-const initThemeMode = () => {
-    const updateThemeClass = () => {
-        const isDark = themeMode === 'dark' || (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        document.body.classList.toggle('dark-theme', isDark);
-        document.body.classList.toggle('light-theme', !isDark);
-        
-        const meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) {
-            meta.content = isDark ? '#111111' : '#f0f3f8';
-        }
-    };
-
-    updateThemeClass();
+// Task 29.4: 提取稳定的主题更新函数
+const applyThemeUpdate = () => {
+    const isDark = themeMode === 'dark' || (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.body.classList.toggle('dark-theme', isDark);
+    document.body.classList.toggle('light-theme', !isDark);
     
-    // 监听系统主题变化
-    if (themeMode === 'auto') {
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateThemeClass);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+        meta.content = isDark ? '#111111' : '#f0f3f8';
     }
+};
+
+// 监听系统主题变化 (全局监听一次即可)
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (themeMode === 'auto') applyThemeUpdate();
+});
+
+window.setThemeMode = (mode) => {
+    themeMode = mode;
+    localStorage.setItem('nav_theme_mode', mode);
+    
+    // 如果已登录，保存到云端设置
+    if (sysToken && appData.settings) {
+        appData.settings.themeMode = mode;
+        isDataDirty = true;
+    }
+    
+    applyThemeUpdate(); // 立即应用
+    
+    // 同步 UI
+    renderTools();
+    if (document.getElementById('edit-modal')?.style.display === 'flex') {
+        openVisualLab();
+    }
+};
+
+window.toggleThemeMode = () => {
+    const modes = ['auto', 'light', 'dark'];
+    let index = modes.indexOf(themeMode);
+    if (index === -1) index = 0;
+    const nextMode = modes[(index + 1) % modes.length];
+    
+    setThemeMode(nextMode);
+    
+    const modeNames = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
+    showToast(`主题已切换为: ${modeNames[nextMode]}`, "#3498db");
+};
+
+const initThemeMode = () => {
+    // 优先从 appData 读取 (针对登录用户)
+    if (appData.settings?.themeMode) {
+        themeMode = appData.settings.themeMode;
+    }
+    applyThemeUpdate();
 };
 
 const toggleSidebar = (force) => {
@@ -2963,40 +3079,86 @@ const initGlobalEvents = () => {
         const isCtrl = e.ctrlKey || e.metaKey;
         const key = e.key.toLowerCase();
         
-        // 2. 全键盘磁贴流转算法 (Task 2.5.3 - 动态适配)
+        // 2. 全键盘全域空间导航 (Task 30.1 - Grid-Agnostic)
         if (!isInput && ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
-            const cards = Array.from(document.querySelectorAll('.grid-container .card:not(.hidden-item)'));
-            if (cards.length === 0) return;
-
+            // 获取全域可聚焦元素池 (磁贴 + 侧边栏项 + 禅意菜单)
+            const focusableSelectors = '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item';
+            const pool = Array.from(document.querySelectorAll(focusableSelectors))
+                        .filter(el => {
+                            const rect = el.getBoundingClientRect();
+                            return rect.width > 0 && rect.height > 0; // 仅过滤可见元素
+                        });
+            
+            if (pool.length === 0) return;
             e.preventDefault();
             
-            if (!focusedCard) {
-                cards[0].focus();
+            const current = document.activeElement;
+            const isInsidePool = pool.includes(current);
+
+            // 如果当前没有焦点在池中，默认聚焦第一个可见磁贴或侧边栏项
+            if (!isInsidePool) {
+                const firstVisible = pool[0];
+                if (firstVisible) firstVisible.focus();
                 return;
             }
 
-            const currentIndex = cards.indexOf(focusedCard);
-            let nextIndex = currentIndex;
+            const r1 = current.getBoundingClientRect();
+            const c1 = { x: r1.left + r1.width / 2, y: r1.top + r1.height / 2 };
 
-            // 获取网格列数 (根据实际渲染样式动态计算)
-            const grid = focusedCard.closest('.nav-grid');
-            let columns = 1;
-            if (grid) {
-                const computed = window.getComputedStyle(grid).gridTemplateColumns;
-                columns = computed.split(' ').length;
-            }
+            let bestMatch = null;
+            let minScore = Infinity;
 
-            switch (e.key) {
-                case 'ArrowRight': nextIndex = Math.min(currentIndex + 1, cards.length - 1); break;
-                case 'ArrowLeft': nextIndex = Math.max(currentIndex - 1, 0); break;
-                case 'ArrowDown': nextIndex = Math.min(currentIndex + columns, cards.length - 1); break;
-                case 'ArrowUp': nextIndex = Math.max(currentIndex - columns, 0); break;
-            }
+            pool.forEach(target => {
+                if (target === current) return;
 
-            if (cards[nextIndex]) {
-                cards[nextIndex].focus();
-                // 确保聚焦磁贴在视界中心 (Task 2.5.3 优化)
-                cards[nextIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const r2 = target.getBoundingClientRect();
+                const c2 = { x: r2.left + r2.width / 2, y: r2.top + r2.height / 2 };
+
+                const dx = c2.x - c1.x;
+                const dy = c2.y - c1.y;
+
+                let isValid = false;
+                let score = 0;
+
+                // 几何筛选与加权评分 (Task 30.1)
+                switch (e.key) {
+                    case 'ArrowRight':
+                        if (dx > 5) { // 增加冗余防止微小偏差
+                            isValid = true;
+                            score = Math.abs(dx) + Math.abs(dy) * 2.5; // 侧重水平对齐
+                        }
+                        break;
+                    case 'ArrowLeft':
+                        if (dx < -5) {
+                            isValid = true;
+                            score = Math.abs(dx) + Math.abs(dy) * 2.5;
+                        }
+                        break;
+                    case 'ArrowDown':
+                        if (dy > 5) {
+                            isValid = true;
+                            score = Math.abs(dy) + Math.abs(dx) * 2.0; // 侧重垂直对齐
+                        }
+                        break;
+                    case 'ArrowUp':
+                        if (dy < -5) {
+                            isValid = true;
+                            score = Math.abs(dy) + Math.abs(dx) * 2.0;
+                        }
+                        break;
+                }
+
+                if (isValid && score < minScore) {
+                    minScore = score;
+                    bestMatch = target;
+                }
+            });
+
+            if (bestMatch) {
+                bestMatch.focus();
+                // 确保聚焦元素在视界中央 (Task 30.3 优化)
+                // block: 'nearest' 能减少不必要的剧烈跳动，让滚动更平滑
+                bestMatch.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
             return;
         }
