@@ -763,25 +763,13 @@ body.zen-active.zen-silent .sidebar {
     transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-body.zen-active.zen-silent .search-section {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    /* 极致居中：移除 20vh 的偏移，确保启动时处于屏幕正中央 */
-    transform: translate(-50%, -50%) !important;
-    z-index: 1000;
-    transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-/* 禅意模式展开态的搜索框位置 (还原到顶部) */
-body.zen-active:not(.zen-silent) .search-section {
-    transform: translate(-50%, 0) !important;
-    top: 60px; /* 留出一点顶部间距 */
-}
+/* 移除旧有的禅意模式搜索框定位逻辑，由 .search-section 统一处理 */
 
 body.zen-active:not(.zen-silent) .grid-container,
 body.zen-active:not(.zen-silent) .footer-info,
 body.zen-active:not(.zen-silent) .category-section {
     opacity: 1;
+    pointer-events: auto;
     transform: translateY(0);
 }
 
@@ -1460,6 +1448,62 @@ body.light-theme.admin-mode .sidebar {
     border: 1px solid var(--glass-border);
     color: var(--text);
     transition: all 0.3s ease;
+}
+
+/* 移动端/禅意模式搜索召唤按钮 (Task S.3) */
+.summon-search-btn {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 2500;
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    width: 45px;
+    height: 45px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid var(--glass-border);
+    color: var(--text);
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.summon-search-btn:hover {
+    background: var(--glass-hover);
+    transform: scale(1.05);
+    color: var(--primary);
+}
+
+body.search-active .summon-search-btn {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-20px);
+}
+
+/* 禅意模式静默态隐藏按钮 */
+body.zen-active.zen-silent .summon-search-btn {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-20px);
+}
+
+body.zen-active:not(.zen-silent) .summon-search-btn {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+/* 移动端常驻显示 (除搜索激活态) */
+@media (max-width: 768px) {
+    .summon-search-btn {
+        width: 40px;
+        height: 40px;
+        top: 15px;
+        right: 15px;
+    }
 }
 
 .sidebar-toggle:hover {
@@ -3069,16 +3113,30 @@ body.view-style-2 .card[data-tooltip]::before {
     }
 }
 
-/* ==================== 高颜值立体搜索框 ==================== */
+/* ==================== 高颜值立体搜索框 (Summoned Overlay) ==================== */
 .search-section {
-    max-width: 62rem;
-    margin: 45px auto 45px;
-    width: 100%;
-    position: relative;
-    z-index: 900;
-    scroll-margin-top: 50px;
-    /* 统一过渡曲线 (Task 10.2) */
-    transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 4000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+    visibility: hidden;
+}
+
+body.search-active .search-section {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
 }
 
 .search-wrapper {
@@ -3090,12 +3148,24 @@ body.view-style-2 .card[data-tooltip]::before {
     -webkit-backdrop-filter: blur(25px);
     transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
     position: relative;
+    width: 90%;
     max-width: 720px;
     margin: 0 auto;
     /* 抗锯齿补丁 (Task 10.1) */
     outline: 1px solid transparent;
     backface-visibility: hidden;
-    transform: translateZ(0);
+    transform: perspective(1000px) scale(0.9) translateY(30px);
+}
+
+body.search-active .search-wrapper {
+    transform: perspective(1000px) scale(1) translateY(0);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .search-wrapper {
+        width: 95%;
+    }
 }
 
 /* 搜索引擎切换器具体样式 */
@@ -3334,34 +3404,7 @@ body.zen-active .main-content {
     min-height: 100vh;
 }
 
-body.zen-active .search-section {
-    position: fixed;
-    top: 45%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90%;
-    max-width: 720px;
-    margin: 0 !important;
-    z-index: 3500;
-    transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-    /* 移除 Scale 缩放，改用阴影扩散消除锯齿 (Task 10.1) */
-    animation: zenSearchBreath 4s ease-in-out infinite;
-}
-
-@keyframes zenSearchBreath {
-    0%, 100% { 
-        transform: translate(-50%, -50%); 
-        box-shadow: 0 10px 40px rgba(0,0,0,0.3), 0 0 0 0 rgba(57, 157, 255, 0); 
-    }
-    50% { 
-        transform: translate(-50%, -50%); 
-        box-shadow: 0 15px 50px rgba(0,0,0,0.5), 0 0 15px 2px rgba(57, 157, 255, 0.1); 
-    }
-}
-
-body:not(.zen-active) .search-section {
-    transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
+/* 禅意模式下搜索框位置由 .search-section 统一控制 */
 
 .zen-expand-btn {
     position: fixed;
@@ -3411,6 +3454,10 @@ body:not(.zen-active) .zen-expand-btn {
 
 .sidebar, .sidebar-toggle, .grid-container, .category-section-title, .footer-info {
     transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+body.light-theme .search-section {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 body.light-theme .search-wrapper {
@@ -3682,81 +3729,102 @@ body.light-theme .icon-btn-action {
     font-size: 11px;
 }
 
-.sidebar-announce-slot {
-    padding: 0 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-body.sidebar-folded .sidebar-announce-slot {
-    padding: 0;
-    align-items: center;
-}
-
-.notice-bell {
+.notice-center-btn {
     position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: rgba(52, 152, 219, 0.2);
-    border-radius: 50%;
-    margin-bottom: 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 20px;
     cursor: pointer;
-    color: #3498db;
-    animation: bellBreath 2s infinite ease-in-out;
+    padding: 5px;
+    border-radius: 8px;
+    transition: all 0.2s;
 }
 
-/* Zen Mode 公告提醒原点 (Task 6.9 增强) */
-.zen-notice-dot {
+.notice-center-btn:hover {
+    color: var(--primary);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.notice-dot {
     position: absolute;
-    right: 15px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 28px;
-    height: 28px;
-    background: var(--primary, #3498db);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    cursor: pointer;
-    box-shadow: 0 0 10px rgba(52, 152, 219, 0.5);
-    z-index: 1001;
-    transition: all 0.3s ease;
-    animation: zenNoticePulse 2s infinite;
-}
-
-@keyframes zenNoticePulse {
-    0% { transform: translateY(-50%) scale(0.95); box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.6); }
-    70% { transform: translateY(-50%) scale(1.05); box-shadow: 0 0 0 10px rgba(52, 152, 219, 0); }
-    100% { transform: translateY(-50%) scale(0.95); box-shadow: 0 0 0 0 rgba(52, 152, 219, 0); }
-}
-
-.zen-notice-dot:hover {
-    transform: translateY(-50%) scale(1.15);
-    background: var(--primary-hover, #2980b9);
-}
-
-@keyframes bellBreath {
-    0% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(52, 152, 219, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0); }
-}
-
-.bell-dot {
-    position: absolute;
-    top: 2px;
-    right: 2px;
+    top: 5px;
+    right: 5px;
     width: 8px;
     height: 8px;
     background: #e74c3c;
     border-radius: 50%;
-    border: 1px solid #fff;
+    display: none;
+    border: 2px solid #1a1a1a;
+}
+
+.notice-dot.active {
+    display: block;
+    animation: dotPulse 1.5s infinite;
+}
+
+@keyframes dotPulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+    70% { transform: scale(1.2); box-shadow: 0 0 0 6px rgba(231, 76, 60, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+}
+
+/* 公告中心弹窗样式 */
+.notice-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.notice-item {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.light-theme .notice-item {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+.notice-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.notice-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.notice-tag.important { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+.notice-tag.info { background: rgba(52, 152, 219, 0.2); color: #3498db; }
+
+.notice-time {
+    font-size: 12px;
+    color: var(--text-dim);
+    opacity: 0.6;
+}
+
+.notice-item-title {
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: var(--text);
+}
+
+.notice-item-content {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
 }
 
 .admin-hub-tabs {

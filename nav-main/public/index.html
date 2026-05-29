@@ -49,6 +49,10 @@
     <button id="sidebar-toggle" class="sidebar-toggle" aria-label="打开导航菜单">
         <i class="ri-menu-line"></i>
     </button>
+    <!-- 移动端/禅意模式搜索唤起按钮 (Task S.3) -->
+    <button id="btn-summon-search" class="summon-search-btn" title="搜索 (/)">
+        <i class="ri-search-2-line"></i>
+    </button>
     <!-- 移动端遮罩 -->
     <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
@@ -68,10 +72,7 @@
             </div>
             <div id="sidebar-user-section" class="sidebar-user-section"></div>
             <nav id="sidebar-nav" class="sidebar-nav"></nav>
-            <!-- Task 6.5: 专用公告挂载点，防止被 renderTools 覆盖 -->
-            <div id="sidebar-announce-slot" class="sidebar-announce-slot"></div>
             <div id="sidebar-footer" class="sidebar-footer">
-                <div id="sidebar-announce-slot"></div>
                 <div id="sidebar-admin-actions" class="sidebar-admin-section"></div>
             </div>
         </aside>
