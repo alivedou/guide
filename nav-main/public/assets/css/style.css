@@ -3313,6 +3313,12 @@ body.light-theme .current-engine {
 
 .engine-list.show {
     display: flex; /* 只在有 .show 时显示 */
+    animation: engineListFadeIn 0.2s ease-out;
+}
+
+@keyframes engineListFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .engine-item {

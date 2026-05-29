@@ -14,6 +14,7 @@ let appData = {
 };
 let activeCatId = 'temp_init';
 let sysToken = localStorage.getItem('nav_token') || '';
+let currentUser = JSON.parse(localStorage.getItem('nav_current_user') || 'null'); // Task 39.4
 let isAdmin = false;
 let isZenTempExpanded = true;
 let isActuallyZen = false;
@@ -36,6 +37,7 @@ let simpleMode = localStorage.getItem('nav_simple_mode') === 'true';
 let currentEnginePrefix = localStorage.getItem('nav_search_prefix') || 'https://cn.bing.com/search?q=';
 let isDataDirty = false; // Task O+.1: 全局数据变更标记
 let currentEditingAnnounceId = null; // Task 34.2: 正在编辑的公告 ID
+let lastFocusedElement = null; // Task 37.2: 记录弹窗前的焦点元素
 
 // ==================== 1. 初始化入口 ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -396,6 +398,7 @@ const handleAuthError = () => {
 
 // Task 7.2: 统一登录弹窗调用逻辑
 const openLoginModal = () => {
+    lastFocusedElement = document.activeElement; // Task 37.2
     const overlay = document.getElementById('auth-overlay');
     const tabLogin = document.getElementById('tab-login');
     const editModal = document.getElementById('edit-modal');
@@ -404,6 +407,11 @@ const openLoginModal = () => {
     if (overlay) overlay.style.display = 'flex';
     // 强制切换到登录 Tab
     if (tabLogin) tabLogin.click();
+
+    // Task 37.2: 自动聚焦
+    setTimeout(() => {
+        document.getElementById('auth-username')?.focus();
+    }, 100);
 };
 
 // 页面关闭前的紧急同步
@@ -561,6 +569,7 @@ const getBingWallpaper = async () => {
 
 // Task 4.2: 视觉实验室控制
 const openVisualLab = () => {
+    lastFocusedElement = document.activeElement; // Task 37.2
     // Task 9.6: 互斥显示 (使用静默模式刷新，不触发云端同步)
     closeAllModals(true);
 
@@ -663,6 +672,11 @@ const openVisualLab = () => {
     confirmBtn.onclick = () => {
         closeAllModals();
     };
+
+    // Task 37.2: 自动聚焦第一个选项
+    setTimeout(() => {
+        modal.querySelector('.tab-btn')?.focus();
+    }, 50);
 };
 
 window.setVisualSetting = (key, value) => {
@@ -726,6 +740,50 @@ const toggleSkeleton = (s) => {
 };
 
 // ==================== 3. 认证逻辑 ====================
+/**
+ * 统一调度认证/用户中心弹窗 (Task 39.2)
+ */
+const showAuthModal = () => {
+    const overlay = document.getElementById('auth-overlay');
+    const formView = document.getElementById('auth-form-view');
+    const userView = document.getElementById('auth-user-view');
+    
+    if (!overlay || !formView || !userView) return;
+
+    if (sysToken) {
+        // 已登录：展示用户信息视图
+        formView.style.display = 'none';
+        userView.style.display = 'block';
+        
+        // Task 39.5: 优先读取独立状态，严格映射角色
+        const info = currentUser || JSON.parse(localStorage.getItem('nav_current_user') || '{}');
+        const nameEl = document.getElementById('auth-current-user-name');
+        const roleEl = document.getElementById('auth-user-role-label');
+        
+        if (nameEl) nameEl.innerText = info.username || appData.username || '未知用户';
+        if (roleEl) {
+            const roleKey = info.role || appData.role || 'guest';
+            const roles = { 
+                'admin': '系统管理员', 
+                'super_user': '高级用户', 
+                'user': '注册会员',
+                'guest': '游客' 
+            };
+            roleEl.innerText = roles[roleKey] || '注册会员';
+        }
+        
+        overlay.style.display = 'flex';
+        // 自动聚焦退出按钮，方便键盘操作
+        setTimeout(() => document.getElementById('btn-logout-fast')?.focus(), 100);
+    } else {
+        // 未登录：展示登录表单视图
+        userView.style.display = 'none';
+        formView.style.display = 'block';
+        overlay.style.display = 'flex';
+        setTimeout(() => document.getElementById('auth-username')?.focus(), 100);
+    }
+};
+
 const doLogin = async () => {
     const u = document.getElementById('auth-username').value.trim();
     const p = document.getElementById('auth-password').value.trim();
@@ -747,6 +805,11 @@ const doLogin = async () => {
         if (data.success) {
             sysToken = 'Bearer ' + data.token;
             localStorage.setItem('nav_token', sysToken);
+            
+            // Task 39.4: 立即持久化用户信息
+            currentUser = { username: data.user.username, role: data.user.role };
+            localStorage.setItem('nav_current_user', JSON.stringify(currentUser));
+
             document.getElementById('auth-overlay').style.display = 'none';
             showToast(`欢迎回来，${data.user.username}`);
             await init(true);
@@ -803,7 +866,9 @@ const doRegister = async () => {
 
 const doLogout = async () => {
     localStorage.removeItem('nav_token');
+    localStorage.removeItem('nav_current_user'); // Task 39.4
     sysToken = '';
+    currentUser = null;
     isAdmin = false;
     localStorage.removeItem('nav_app_data');
     await init(true);
@@ -907,6 +972,31 @@ const initAuthUI = () => {
         }
     });
 
+    // Task 39.3: 用户中心交互逻辑
+    const btnLogoutFast = document.getElementById('btn-logout-fast');
+    const btnSwitchAuth = document.getElementById('btn-switch-auth');
+    const formView = document.getElementById('auth-form-view');
+    const userView = document.getElementById('auth-user-view');
+
+    if (btnLogoutFast) {
+        btnLogoutFast.onclick = async () => {
+            await doLogout();
+            authOverlay.style.display = 'none'; // 退出后关闭
+        };
+    }
+
+    if (btnSwitchAuth) {
+        btnSwitchAuth.onclick = async () => {
+            await doLogout(); // 先注销当前用户
+            // 切换视图回登录表单而不关闭弹窗
+            if (userView) userView.style.display = 'none';
+            if (formView) formView.style.display = 'block';
+            // 默认切回登录 tab
+            tabLogin.click();
+            setTimeout(() => document.getElementById('auth-username')?.focus(), 100);
+        };
+    }
+
     // 点击遮罩关闭 (Task 1.1 优化)
     authOverlay.addEventListener('click', (e) => {
         if (e.target === authOverlay) {
@@ -942,6 +1032,12 @@ const init = async (forceRender = false) => {
 
             appData = data;
             
+            // Task 39.4: 同步最新的用户信息
+            if (data.username && data.role) {
+                currentUser = { username: data.username, role: data.role };
+                localStorage.setItem('nav_current_user', JSON.stringify(currentUser));
+            }
+            
             // 恢复云端点击数据 (Task 2.5.4)
             if (data.clicks_history) {
                 localStorage.setItem('nav_clicks_history', JSON.stringify(data.clicks_history));
@@ -973,6 +1069,14 @@ const init = async (forceRender = false) => {
 
         updateStyles();
         toggleSkeleton(false);
+
+        // Task 38.3: 同步云端搜索引擎设置
+        if (appData.settings?.searchEngine) {
+            if (typeof window.setSearchEngine === 'function') {
+                window.setSearchEngine(appData.settings.searchEngine, true);
+            }
+        }
+
         // Task 6.3: 在工具栏渲染完成后再初始化公告，防止铃铛图标被覆盖
         initAnnouncements();
     }
@@ -1006,7 +1110,7 @@ const renderNav = () => {
                 <div class="empty-state-tip" style="text-align:center; padding: 100px 20px; color: var(--text-dim);">
                     <i class="ri-wind-line" style="font-size: 48px; opacity: 0.3;"></i>
                     <p style="margin-top: 15px;">暂无内容，请登录后开始添加</p>
-                    ${!sysToken ? '<button class="tab-btn" style="margin-top:20px;" onclick="document.getElementById(\'auth-overlay\').style.display=\'flex\'">立即登录</button>' : ''}
+                    ${!sysToken ? '<button class="tab-btn" style="margin-top:20px;" onclick="showAuthModal()">立即登录</button>' : ''}
                 </div>
             `;
             isRendering = false;
@@ -1322,7 +1426,7 @@ const renderNav = () => {
                 bridge.id = 'guest-login-bridge';
                 bridge.className = 'guest-login-bridge';
                 bridge.innerText = '管理我的书签';
-                bridge.onclick = () => document.getElementById('auth-overlay').style.display = 'flex';
+                bridge.onclick = () => showAuthModal();
                 const searchSection = document.getElementById('search-section');
                 if (searchSection) searchSection.appendChild(bridge);
             }
@@ -1509,7 +1613,7 @@ const renderTools = () => {
                         <span class="nav-icon"><i class="${themeIconMap[themeMode]}"></i></span>
                         <span class="nav-label">外观切换</span>
                     </div>
-                    <div class="sidebar-nav-item toolbar-item" onclick="document.getElementById('auth-overlay').style.display='flex'" tabindex="0" data-tooltip="登录 / 注册">
+                    <div class="sidebar-nav-item toolbar-item" onclick="showAuthModal()" tabindex="0" data-tooltip="登录 / 注册">
                         <span class="nav-icon"><i class="ri-login-box-line"></i></span>
                         <span class="nav-label">登录系统</span>
                     </div>
@@ -1783,7 +1887,71 @@ const initSearch = () => {
     const sea = document.getElementById('sea-input');
     const dropdown = document.getElementById('sea-dropdown');
     const resultsList = document.getElementById('local-results-list');
+    const engineTrigger = document.getElementById('current-engine-trigger');
+    const engineList = document.getElementById('engine-list');
     if (!sea || !dropdown || !resultsList) return;
+
+    // Task 38.2: 初始化搜索引擎切换逻辑
+    const initEngineSwitcher = () => {
+        if (!engineTrigger || !engineList) return;
+
+        // 1. 点击触发器显示/隐藏列表
+        engineTrigger.onclick = (e) => {
+            e.stopPropagation();
+            engineList.classList.toggle('show');
+            if (engineList.classList.contains('show')) {
+                // 展开后自动聚焦第一个活跃引擎
+                setTimeout(() => engineList.querySelector('.engine-item.active')?.focus(), 50);
+            }
+        };
+
+        // 2. 点击项进行切换 (抽取为全局函数供外部调用)
+        window.setSearchEngine = (engine, silent = false) => {
+            const item = Array.from(document.querySelectorAll('.engine-item')).find(el => el.dataset.engine === engine);
+            if (!item) return;
+
+            const action = item.dataset.action;
+            const logo = item.querySelector('.engine-logo').innerText;
+
+            currentEnginePrefix = action;
+            localStorage.setItem('nav_search_prefix', action);
+            localStorage.setItem('nav_search_engine', engine);
+
+            engineTrigger.innerHTML = logo;
+            document.querySelectorAll('.engine-item').forEach(el => el.classList.toggle('active', el === item));
+            engineList.classList.remove('show');
+            
+            if (sysToken && appData.settings) {
+                appData.settings.searchEngine = engine;
+                if (!silent) isDataDirty = true;
+            }
+
+            if (!silent) {
+                showToast(`已切换至 ${item.innerText.trim()}`, "#3498db");
+                sea.focus();
+            }
+        };
+
+        document.querySelectorAll('.engine-item').forEach(item => {
+            item.onclick = (e) => {
+                e.stopPropagation();
+                window.setSearchEngine(item.dataset.engine);
+            };
+            // 键盘支持
+            item.onkeydown = (e) => {
+                if (e.key === 'Enter') item.click();
+            };
+        });
+
+        // 3. 点击外部关闭
+        document.addEventListener('click', () => engineList.classList.remove('show'));
+
+        // 4. 恢复初始状态
+        const savedEngine = (sysToken && appData.settings?.searchEngine) || localStorage.getItem('nav_search_engine') || 'bing';
+        window.setSearchEngine(savedEngine, true);
+    };
+
+    initEngineSwitcher();
 
     sea.onkeydown = (e) => {
         if (e.key === 'Enter') {
@@ -1927,6 +2095,12 @@ const closeAllModals = (silent = false) => {
     // 3. 关闭认证遮罩
     const authOverlay = document.getElementById('auth-overlay');
     if (authOverlay) authOverlay.style.display = 'none';
+
+    // Task 37.2: 焦点还原
+    if (!silent && lastFocusedElement) {
+        lastFocusedElement.focus();
+        lastFocusedElement = null;
+    }
 };
 
 // ==================== 9. Task 3.3: 页面管理模式 (Page Management) ====================
@@ -1971,6 +2145,7 @@ const togglePageManagement = (force) => {
 
 // Task 4.3: 分类管理函数
 const openCategoryEditModal = (catId) => {
+    lastFocusedElement = document.activeElement; // Task 37.2
     // Task 9.6 & O++.1: 切换弹窗启用静默模式
     closeAllModals(true);
 
@@ -1998,6 +2173,12 @@ const openCategoryEditModal = (catId) => {
     
     modal.style.display = 'flex';
     confirmBtn.style.display = 'block';
+
+    // Task 37.2: 自动聚焦
+    setTimeout(() => {
+        document.getElementById('edit-cat-name')?.focus();
+    }, 50);
+
     confirmBtn.onclick = async () => {
         const newName = document.getElementById('edit-cat-name').value.trim();
         const newIcon = document.getElementById('edit-cat-icon').value.trim();
@@ -2278,6 +2459,7 @@ const openBatchMoveModal = () => {
 // ==================== 10. Task 4.1: 管理员后台 (Admin Hub) ====================
 
 const openAdminHub = async (defaultTab = 'users') => {
+    lastFocusedElement = document.activeElement; // Task 37.2
     // Task 9.6 & O++.1: 切换弹窗启用静默模式
     closeAllModals(true);
 
@@ -2664,6 +2846,7 @@ window.toggleUserStatus = async (userId, currentStatus) => {
 
 // Task 6.8: 公告中心交互逻辑
 window.openNoticeCenter = async (targetId = null) => {
+    lastFocusedElement = document.activeElement; // Task 37.2
     // Task 9.6: 互斥显示
     closeAllModals();
 
@@ -2761,6 +2944,16 @@ window.openNoticeCenter = async (targetId = null) => {
         if (data && Array.isArray(data.announcements)) {
             cachedAnnouncements = data.announcements;
             renderList(cachedAnnouncements);
+
+            // Task 37.2: 自动聚焦第一个项
+            setTimeout(() => {
+                modal.querySelector('.notice-list-item')?.focus();
+            }, 50);
+            
+            // Task 37.2: 自动聚焦第一个 Tab
+            setTimeout(() => {
+                modal.querySelector('.hub-tab')?.focus();
+            }, 50);
         } else {
             throw new Error('Invalid data format');
         }
@@ -2968,12 +3161,14 @@ const exportConfig = () => {
 };
 
 const initGlobalEvents = () => {
-    // Task 9.4: 全局快捷键监听 (Esc 退出管理模式)
+    // Task 9.4: 全局快捷键监听 (Esc 退出管理模式) - 移除冗余监听器，统一在下方的 document.keydown 中处理
+    /* 
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isPageManagementMode) {
             togglePageManagement(false);
         }
     });
+    */
 
     // 快捷导航按钮逻辑 (Task 4.2)
     const fabToTop = document.getElementById('scroll-to-top');
@@ -3145,6 +3340,9 @@ const initGlobalEvents = () => {
         const isCtrl = e.ctrlKey || e.metaKey;
         const key = e.key.toLowerCase();
         
+        // Task 37.4: 预检测活跃弹窗
+        const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
+
         // 2. 全键盘全域空间导航 (Task 30.1 - Grid-Agnostic)
         if (!isInput && ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
             // Task 31.2: 禅意静默态唤醒逻辑
@@ -3157,17 +3355,30 @@ const initGlobalEvents = () => {
                 return;
             }
 
-            // Task 32.1: 场景感知的可聚焦元素池过滤器
-            const isZen = appData.settings?.zenMode === true;
-            const focusableSelectors = isZen 
-                ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item' 
-                : '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item, .notice-center-btn, .sidebar-pin-btn';
-            
-            const pool = Array.from(document.querySelectorAll(focusableSelectors))
-                        .filter(el => {
-                            const rect = el.getBoundingClientRect();
-                            return rect.width > 0 && rect.height > 0; // 仅过滤可见元素
-                        });
+            // Task 37.1: 场景感知的焦点池检测 (重构以支持弹窗内部导航)
+            const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
+            let pool;
+
+            if (activeModal) {
+                // 弹窗模式：仅在弹窗内可见的可交互元素中导航
+                pool = Array.from(activeModal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+                             .filter(el => {
+                                 const rect = el.getBoundingClientRect();
+                                 return rect.width > 0 && rect.height > 0;
+                             });
+            } else {
+                // 常规模式：磁贴 + 侧边栏/禅意菜单 + 搜索引擎切换器
+                const isZen = appData.settings?.zenMode === true;
+                const selectors = isZen 
+                    ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item, #current-engine-trigger, .engine-item' 
+                    : '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item, .notice-center-btn, .sidebar-pin-btn, #current-engine-trigger, .engine-item';
+                
+                pool = Array.from(document.querySelectorAll(selectors))
+                            .filter(el => {
+                                const rect = el.getBoundingClientRect();
+                                return rect.width > 0 && rect.height > 0;
+                            });
+            }
             
             if (pool.length === 0) return;
             e.preventDefault();
@@ -3200,30 +3411,35 @@ const initGlobalEvents = () => {
                 let isValid = false;
                 let score = 0;
 
-                // 几何筛选与加权评分 (Task 30.1)
+                // Task 37.3: 场景感知的几何权重算法
+                // 弹窗内的组件通常更紧凑且对齐要求低，放宽权重限制
+                const hWeight = activeModal ? 1.5 : 2.5; // 水平移动时的垂直惩罚
+                const vWeight = activeModal ? 1.2 : 2.0; // 垂直移动时的水平惩罚
+
+                // 几何筛选与加权评分
                 switch (e.key) {
                     case 'ArrowRight':
-                        if (dx > 5) { // 增加冗余防止微小偏差
+                        if (dx > 2) { // 弹窗模式下减小位移判定阈值
                             isValid = true;
-                            score = Math.abs(dx) + Math.abs(dy) * 2.5; // 侧重水平对齐
+                            score = Math.abs(dx) + Math.abs(dy) * hWeight;
                         }
                         break;
                     case 'ArrowLeft':
-                        if (dx < -5) {
+                        if (dx < -2) {
                             isValid = true;
-                            score = Math.abs(dx) + Math.abs(dy) * 2.5;
+                            score = Math.abs(dx) + Math.abs(dy) * hWeight;
                         }
                         break;
                     case 'ArrowDown':
-                        if (dy > 5) {
+                        if (dy > 2) {
                             isValid = true;
-                            score = Math.abs(dy) + Math.abs(dx) * 2.0; // 侧重垂直对齐
+                            score = Math.abs(dy) + Math.abs(dx) * vWeight;
                         }
                         break;
                     case 'ArrowUp':
-                        if (dy < -5) {
+                        if (dy < -2) {
                             isValid = true;
-                            score = Math.abs(dy) + Math.abs(dx) * 2.0;
+                            score = Math.abs(dy) + Math.abs(dx) * vWeight;
                         }
                         break;
                 }
@@ -3246,16 +3462,24 @@ const initGlobalEvents = () => {
         // Task 33.3: 处理全局 Enter/Space 激活代理
         if (!isInput && (key === 'enter' || key === ' ')) {
             const active = document.activeElement;
-            const isZen = appData.settings?.zenMode === true;
-            const focusableSelectors = isZen 
-                ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item' 
-                : '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item, .notice-center-btn, .sidebar-pin-btn';
             
-            const pool = Array.from(document.querySelectorAll(focusableSelectors));
+            // Task 37.1: 场景感知池检测 (同步支持弹窗激活态)
+            const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
+            let pool;
+
+            if (activeModal) {
+                pool = Array.from(activeModal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+            } else {
+                const isZen = appData.settings?.zenMode === true;
+                const selectors = isZen 
+                    ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item, #current-engine-trigger, .engine-item' 
+                    : '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item, .notice-center-btn, .sidebar-pin-btn, #current-engine-trigger, .engine-item';
+                pool = Array.from(document.querySelectorAll(selectors));
+            }
             
             if (pool.includes(active)) {
                 // 如果是 div 实现的自定义按钮，手动触发点击
-                if (active.tagName === 'DIV') {
+                if (active.tagName === 'DIV' || active.tagName === 'SPAN') {
                     e.preventDefault();
                     active.click();
                     
@@ -3268,6 +3492,7 @@ const initGlobalEvents = () => {
 
         // 3. Ctrl+B 视图调度 (核心快捷键 - Task 11.3/15.2 对齐)
         if (isCtrl && key === 'b') {
+            if (activeModal) return; // Task 37.4: 弹窗时屏蔽
             e.preventDefault();
             
             const sidebar = document.getElementById('sidebar');
@@ -3284,6 +3509,7 @@ const initGlobalEvents = () => {
 
         // 3.1 Alt+Z 一键切换禅意模式 (Task 15.3 新增)
         if (e.altKey && key === 'z') {
+            if (activeModal) return; // Task 37.4: 弹窗时屏蔽
             e.preventDefault();
             toggleZenMode();
             return;
@@ -3291,6 +3517,7 @@ const initGlobalEvents = () => {
 
         // 4. 键入即唤醒 (Task 2.2 / S.2)
         if (!isInput && (e.key.length === 1 || key === '/') && !isCtrl && !e.altKey) {
+            if (activeModal) return; // Task 37.4: 弹窗时屏蔽
             const sea = document.getElementById('sea-input');
             if (sea) {
                 // 如果是 / 键，不输入到搜索框中
@@ -3302,11 +3529,10 @@ const initGlobalEvents = () => {
             }
         }
 
-        // 5. Ctrl + L 或 Alt + L 唤起登录
+        // 5. Ctrl + L 或 Alt + L 唤起登录/用户中心 (Task 39.2)
         if ((isCtrl || e.altKey) && key === 'l') {
             e.preventDefault();
-            document.getElementById('auth-overlay').style.display = 'flex';
-            setTimeout(() => document.getElementById('auth-username')?.focus(), 100);
+            showAuthModal();
             return;
         }
 
@@ -3336,21 +3562,16 @@ const initGlobalEvents = () => {
 
         // 8. Escape 一键复位
         if (e.key === 'Escape') { 
-            // 0. 优先关闭搜索层 (Task S.2)
-            if (document.body.classList.contains('search-active')) {
-                closeSearch();
+            // Task 37.4: 弹窗退出作为最高优先级 (Stack Layer 0)
+            if (activeModal) {
+                e.preventDefault();
+                closeAllModals();
                 return;
             }
 
-            // 1. 优先关闭所有 Modal (Stack Layer 1) - Task 9.6 统一化
-            const modals = document.querySelectorAll('.modal, #monaco-modal');
-            let anyModalOpen = false;
-            modals.forEach(m => {
-                if (window.getComputedStyle(m).display !== 'none') anyModalOpen = true;
-            });
-
-            if (anyModalOpen) {
-                closeAllModals();
+            // 1. 优先关闭搜索层 (Task S.2)
+            if (document.body.classList.contains('search-active')) {
+                closeSearch();
                 return;
             }
 
@@ -3358,13 +3579,6 @@ const initGlobalEvents = () => {
             if (isPageManagementMode) {
                 e.preventDefault();
                 togglePageManagement(false);
-                return;
-            }
-
-            // 3. 如果搜索框有内容，先清空搜索
-            if (sea && sea.value.trim() !== '') {
-                sea.value = '';
-                sea.dispatchEvent(new Event('input'));
                 return;
             }
 
@@ -3392,6 +3606,7 @@ const initGlobalEvents = () => {
 // ==================== 7. Task 3.2: 魔法棒与编辑逻辑 ====================
 
 const openEditModal = (id) => {
+    lastFocusedElement = document.activeElement; // Task 37.2
     // Task 9.6 & O++.1: 切换弹窗启用静默模式
     closeAllModals(true);
 
@@ -3450,6 +3665,11 @@ const openEditModal = (id) => {
     };
 
     modal.style.display = 'flex';
+
+    // Task 37.2: 自动聚焦
+    setTimeout(() => {
+        document.getElementById('edit-url')?.focus();
+    }, 50);
 };
 
 const triggerMagicWand = async () => {
