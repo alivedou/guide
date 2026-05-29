@@ -974,38 +974,7 @@ body.density-comfortable {
     padding: 10px 0;
 }
 
-/* 侧边栏风格切换 (Task 4.5.4 增强) */
-body.sidebar-style-colorful .sidebar-nav-item .nav-icon {
-    background: linear-gradient(135deg, var(--primary), #6eb6ff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-size: 20px;
-    filter: drop-shadow(0 2px 4px rgba(57, 157, 255, 0.3));
-}
-
-body.sidebar-style-colorful .sidebar-nav-item.active .nav-icon {
-    -webkit-text-fill-color: white;
-}
-
-/* 彩色模式：色块区隔带设计 */
-body.sidebar-style-colorful .sidebar-group {
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 12px;
-    padding: 10px 8px;
-    margin: 10px 10px 20px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-body.sidebar-style-colorful .sidebar-group:nth-child(2) { border-left: 3px solid #ff9f43; } /* 内容创作 */
-body.sidebar-style-colorful .sidebar-group:nth-child(3) { border-left: 3px solid #54a0ff; } /* 系统控制 */
-body.sidebar-style-colorful .sidebar-group:nth-child(4) { border-left: 3px solid #2ecc71; } /* 视觉实验室 */
-body.sidebar-style-colorful .sidebar-group:nth-child(5) { border-left: 3px solid #9b59b6; } /* 底层维护 */
-
-body.sidebar-style-colorful.light-theme .sidebar-group {
-    background: rgba(0, 0, 0, 0.02);
-}
-
-/* 经典模式：极简弱边框设计 */
+/* 侧边栏风格 (锁定经典模式：极简弱边框设计) */
 body.sidebar-style-classic .sidebar-nav-item {
     border: none;
     background: transparent;

@@ -384,10 +384,9 @@ const updateStyles = () => {
     document.body.classList.remove('density-compact', 'density-standard', 'density-comfortable');
     document.body.classList.add(`density-${density}`);
 
-    // 2. 处理侧边栏风格
-    const sidebarStyle = appData.settings?.sidebarStyle || 'classic';
-    document.body.classList.remove('sidebar-style-classic', 'sidebar-style-colorful');
-    document.body.classList.add(`sidebar-style-${sidebarStyle}`);
+    // 2. 处理侧边栏风格 - 锁定经典毛玻璃 (Task 9.2)
+    document.body.classList.remove('sidebar-style-colorful');
+    document.body.classList.add('sidebar-style-classic');
 
     // 3. 处理视图模态 (Task 4.5.1 & 4.6.3)
     const isZen = appData.settings?.zenMode === true;
@@ -448,13 +447,6 @@ const openVisualLab = () => {
                 <button class="tab-btn ${appData.settings?.density === 'compact' ? 'active' : ''}" onclick="setVisualSetting('density', 'compact')">紧凑模式</button>
                 <button class="tab-btn ${(!appData.settings?.density || appData.settings?.density === 'standard') ? 'active' : ''}" onclick="setVisualSetting('density', 'standard')">标准平衡</button>
                 <button class="tab-btn ${appData.settings?.density === 'comfortable' ? 'active' : ''}" onclick="setVisualSetting('density', 'comfortable')">极致透气</button>
-            </div>
-        </div>
-        <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-palette-line"></i> 侧边栏视觉风格</span>
-            <div class="visual-btn-group">
-                <button class="tab-btn ${(!appData.settings?.sidebarStyle || appData.settings?.sidebarStyle === 'classic') ? 'active' : ''}" onclick="setVisualSetting('sidebarStyle', 'classic')">经典毛玻璃</button>
-                <button class="tab-btn ${appData.settings?.sidebarStyle === 'colorful' ? 'active' : ''}" onclick="setVisualSetting('sidebarStyle', 'colorful')">缤纷拟物</button>
             </div>
         </div>
         <div class="visual-option-group">
