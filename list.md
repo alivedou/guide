@@ -48,7 +48,58 @@
     - 重构 renderTools，将专家模式、备份导出等 5 个按钮整合为“页面管理”的子菜单。
 - [ ] **Task 4.8.2: 深度状态重置 (Zero Residual)**
     - 完善退出管理模式时的清理逻辑，确保视觉与内存状态双重回归。
+## 🎨 Phase 4.9: 网址视界增强 (Navigation View Enhancement)
+- [x] **Task 4.9.1: CSS 气泡样式优化 (Tooltip Styling)**
+    - 优化 `data-tooltip` 视觉表现（圆角、毛玻璃、弹性动画、最大宽度）。
+    - 解决卡片 `overflow: hidden` 导致气泡被截断的显示问题。
+- [x] **Task 4.9.2: 渲染逻辑注入 (Render Logic Injection)**
+    - 修改渲染循环，动态注入 `desc` 到 `data-tooltip` 属性。
+    - 同步更新 `title` 属性作为兼容性方案。
+- [x] **Task 4.9.3: 交互场景适配 (UX Refinement)**
+    - 优化管理模式与移动端的交互感知，确保描述显示不遮挡核心操作。
+    - 移动端触屏场景下自动屏蔽 hover 气泡以防误触。
+## 🎨 Phase 4.10: 侧边栏精简与功能归口 (Sidebar UI Streamlining)
+- [x] **Task 4.10.1: 侧边栏冗余 UI 清理 (UI Cleanup)**
+    - 从 `index.html` 移除无效的样式切换按钮，清理 CSS 冗余样式。
+- [x] **Task 4.10.2: 视觉实验室逻辑校验 (Logic Alignment)**
+    - 确保 `sidebarStyle` (classic/colorful) 在“视觉实验室”中正常运作并同步云端。## 🛠️ Phase 4.11: 管理中心交互体验修复 (Admin Hub UX Fix)
+- [x] **Task 4.11.1: 增强 Tab 节点属性标识 (DOM Attributes)**
+    - 为管理 Tab 按钮注入 `data-tab` 属性，消除对文本匹配的依赖。
+- [x] **Task 4.11.2: 修复高亮错位逻辑 (Highlighting Logic)**
+    - 重构 `switchHubTab`，实现基于 `data-tab` 的精确高亮反馈。
 
+## 🎨 Phase 4.12: 侧边栏 space 压缩与交互进化 (Sidebar Space Optimization)
+- [x] **Task 4.12.1: 管理工具栏结构重组 (Structure Refactoring)**
+    - 将底部管理项改为水平并排，移除文字标签并注入 `data-tooltip`。
+- [x] **Task 4.12.2: 工具栏视觉表现优化 (Visual & CSS)**
+    - 定义横向工具栏样式，优化气泡弹出位置与层级。
+
+## 🎨 Phase 4.13: 全局气泡提示系统 (Global Tooltip System)
+- [x] **Task 4.13.1: 气泡提示样式全局化 (Global Tooltip CSS)**
+    - 重构 CSS，使 `data-tooltip` 属性支持侧边栏按钮等非卡片元素。
+- [x] **Task 4.13.2: 侧边栏溢出显示修正 (Sidebar Clipping Fix)**
+    - 确保侧边栏底部按钮的气泡不被父容器截断。
+
+## �️ Phase 4.14: 侧边栏气泡深度修复 (Sidebar Tooltip Deep Fix)
+- [x] **Task 4.14.1: 侧边栏容器溢出穿透 (Overflow Piercing)**
+    - 修改 `style.css`，放开 `.sidebar-footer` 和 `.sidebar-admin-container` 的溢出限制。
+- [x] **Task 4.14.2: 按钮项裁剪逻辑重构 (De-clipping)**
+    - 针对带气泡的按钮强制设置 `overflow: visible`，让气泡破框而出。
+## 🎨 Phase 4.15: 侧边栏动作聚合与布局优化 (Action Aggregation)
+- [x] **Task 4.15.1: 登录/登出动作下沉 (Action Sinking)**
+    - 将登录/登出按钮从顶部移除，以图标形式集成到底部工具栏。
+- [x] **Task 4.15.2: 极简身份展示 (Identity Simplification)**
+    - 重塑顶部用户信息区域，仅保留身份展示，移除冗余交互。
+## 🎨 Phase 4.16: 体验模态语义化增强 (Experience Modality Enhancement)
+- [x] **Task 4.16.1: 视觉实验室 UI 重构 (Radio Buttons)**
+    - 将单一禅意模式开关替换为“常规”与“禅意”互斥按钮组。
+- [x] **Task 4.16.2: 逻辑集成与状态持久化 (Logic Integration)**
+    - 确保互斥切换逻辑与快捷键体验完美融合。
+## 🎨 Phase 4.17: 内容组件自定义化 (Component Customization)
+- [x] **Task 4.17.1: 视觉实验室组件开关重构 (UI Refinement)**
+    - 在视觉实验室增加“常去网站”显隐控制按钮组。
+- [x] **Task 4.17.2: 渲染逻辑闭环与持久化 (Logic Integration)**
+    - 确保 `renderNav` 遵循 `showFrequent` 配置，并同步云端。
 ## �📦 Phase 5: 性能审计与生产准备 (Production Ready)
 - [ ] **Task 5.1: 性能瘦身与 Z-index 审计**
 - [ ] **Task 5.2: PWA 与离线体验补强**

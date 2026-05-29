@@ -338,11 +338,25 @@ const openVisualLab = () => {
         <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-focus-3-line"></i> 核心体验模态</span>
             <div class="visual-btn-group">
-                <button class="tab-btn ${appData.settings?.zenMode ? 'active' : ''}" onclick="toggleZenMode()">
-                    <i class="ri-leaf-line"></i> 禅意模式 (Zen): ${appData.settings?.zenMode ? '已开启' : '已关闭'}
+                <button class="tab-btn ${!appData.settings?.zenMode ? 'active' : ''}" onclick="toggleZenMode(false)">
+                    <i class="ri-layout-grid-line"></i> 常规模式
+                </button>
+                <button class="tab-btn ${appData.settings?.zenMode ? 'active' : ''}" onclick="toggleZenMode(true)">
+                    <i class="ri-leaf-line"></i> 禅意模式 (Zen)
                 </button>
             </div>
             <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示: 使用 Ctrl + B 可快速切换禅意模式</p>
+        </div>
+        <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-star-line"></i> 内容组件显示</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn ${appData.settings?.showFrequent !== false ? 'active' : ''}" onclick="setVisualSetting('showFrequent', true)">
+                    <i class="ri-star-fill"></i> 显示常去网站
+                </button>
+                <button class="tab-btn ${appData.settings?.showFrequent === false ? 'active' : ''}" onclick="setVisualSetting('showFrequent', false)">
+                    <i class="ri-star-off-line"></i> 隐藏常去网站
+                </button>
+            </div>
         </div>
     `;
     
@@ -353,6 +367,12 @@ const openVisualLab = () => {
 window.setVisualSetting = (key, value) => {
     if (!appData.settings) appData.settings = {};
     appData.settings[key] = value;
+    
+    // 如果修改了影响 DOM 结构的配置，触发重新渲染 (Task 4.17.2)
+    if (['isolatedView', 'showFrequent'].includes(key)) {
+        renderNav();
+    }
+
     updateStyles();
     openVisualLab(); // 刷新弹窗状态
     syncConfigToCloud();
@@ -750,6 +770,11 @@ const renderNav = () => {
                 // 为磁贴增加 Tab 索引与唯一 ID，方便键盘流转 (Task 2.5.3)
                 card.setAttribute('tabindex', '0');
                 card.setAttribute('data-id', item.id);
+                // 注入描述作为 Tooltip (Task 4.9.2)
+                if (item.desc) {
+                    card.setAttribute('data-tooltip', item.desc);
+                    card.setAttribute('title', item.desc); // 浏览器原生兼容
+                }
                 card.style.animationDelay = `${idx * 0.03}s`;
                 
                 let html = buildCardHtml(item);
@@ -889,15 +914,11 @@ const renderTools = () => {
         const userDisplayName = appData.username || '已登录用户';
         const roleBadge = isAdmin ? '<span class="admin-badge">ADMIN</span>' : '';
         
-        // 1. 渲染顶部用户信息和登出 (Fixed at Top)
+        // 1. 渲染顶部用户信息 (仅展示身份)
         userArea.innerHTML = `
             <div class="sidebar-user-info">
                 <i class="ri-user-smile-line"></i>
                 <span>${userDisplayName} ${roleBadge}</span>
-            </div>
-            <div class="sidebar-nav-item logout-btn" onclick="doLogout()">
-                <span class="nav-icon"><i class="ri-logout-box-r-line"></i></span>
-                <span class="nav-label">退出登录</span>
             </div>
         `;
 
@@ -925,72 +946,78 @@ const renderTools = () => {
 
         area.innerHTML = `
             <div class="sidebar-admin-container">
-                <!-- 1. 内容创作 (Content) -->
-                <div class="sidebar-group">
-                    <div class="sidebar-group-title">内容创作</div>
-                    <div class="sidebar-nav-item ${isPageManagementMode ? 'active' : ''}" onclick="togglePageManagement()">
+                <!-- Task 4.12.1: 极简工具栏 -->
+                <div class="sidebar-admin-toolbar">
+                    <!-- 1. 页面管理 -->
+                    <div class="sidebar-nav-item toolbar-item ${isPageManagementMode ? 'active' : ''}" 
+                         onclick="togglePageManagement()" 
+                         data-tooltip="${isPageManagementMode ? '关闭页面管理' : '开启页面管理'}">
                         <span class="nav-icon"><i class="ri-layout-masonry-line"></i></span>
-                        <span class="nav-label">页面管理</span>
                     </div>
-                    
-                    <!-- Task 4.8.1: 管理工具子菜单 -->
-                    ${isPageManagementMode ? `
-                    <div class="admin-tools-submenu" style="padding-left: 15px; margin-top: 5px; border-left: 1px dashed rgba(255,255,255,0.1); margin-left: 20px;">
-                        <div class="sidebar-nav-item ${isAllFull ? 'disabled' : ''}" 
-                             onclick="${isAllFull ? 'showToast(\'书签配额已满\', \'#e74c3c\')' : 'openEditModal(\'\')'}"
-                             style="font-size: 13px; padding: 6px 12px;">
-                            <span class="nav-icon"><i class="ri-add-circle-line"></i></span>
-                            <span class="nav-label">新增网址</span>
-                        </div>
-                        <div class="sidebar-nav-item" onclick="openJsonEditor()" style="font-size: 13px; padding: 6px 12px;">
-                            <span class="nav-icon"><i class="ri-code-s-slash-line"></i></span>
-                            <span class="nav-label">专家模式</span>
-                        </div>
-                        <div class="sidebar-nav-item" onclick="exportConfig()" style="font-size: 13px; padding: 6px 12px;">
-                            <span class="nav-icon"><i class="ri-download-2-line"></i></span>
-                            <span class="nav-label">备份导出</span>
-                        </div>
-                        <div class="sidebar-nav-item" onclick="document.getElementById('import-file').click()" style="font-size: 13px; padding: 6px 12px;">
-                            <span class="nav-icon"><i class="ri-upload-2-line"></i></span>
-                            <span class="nav-label">配置导入</span>
-                        </div>
-                        <div class="sidebar-nav-item" onclick="doResetConfig()" style="font-size: 13px; padding: 6px 12px;">
-                            <span class="nav-icon"><i class="ri-refresh-line"></i></span>
-                            <span class="nav-label">重置模板</span>
-                        </div>
-                    </div>
-                    ` : ''}
-                </div>
 
-                <!-- 2. 系统控制 (Control) -->
-                ${isAdmin ? `
-                <div class="sidebar-group">
-                    <div class="sidebar-group-title">系统控制</div>
-                    <div class="sidebar-nav-item" onclick="openAdminHub()">
+                    <!-- 2. 系统控制 (仅管理员) -->
+                    ${isAdmin ? `
+                    <div class="sidebar-nav-item toolbar-item" onclick="openAdminHub()" data-tooltip="控制中心">
                         <span class="nav-icon"><i class="ri-shield-user-line"></i></span>
-                        <span class="nav-label">控制中心</span>
-                    </div>
-                </div>` : ''}
+                    </div>` : ''}
 
-                <!-- 3. 视觉实验室 (Visual Laboratory) -->
-                <div class="sidebar-group">
-                    <div class="sidebar-group-title">视觉实验室</div>
-                    <div class="sidebar-nav-item" onclick="openVisualLab()">
+                    <!-- 3. 视觉实验室 -->
+                    <div class="sidebar-nav-item toolbar-item" onclick="openVisualLab()" data-tooltip="个性化偏好">
                         <span class="nav-icon"><i class="ri-palette-line"></i></span>
-                        <span class="nav-label">个性化偏好</span>
+                    </div>
+
+                    <!-- 4. 退出登录 (Action Sinking) -->
+                    <div class="sidebar-nav-item toolbar-item logout-btn" onclick="doLogout()" data-tooltip="退出登录">
+                        <span class="nav-icon"><i class="ri-logout-box-r-line"></i></span>
                     </div>
                 </div>
+
+                <!-- 页面管理子菜单 (仅在管理模式下显示) -->
+                ${isPageManagementMode ? `
+                <div class="admin-tools-submenu">
+                    <div class="sidebar-nav-item ${isAllFull ? 'disabled' : ''}" 
+                         onclick="${isAllFull ? 'showToast(\'书签配额已满\', \'#e74c3c\')' : 'openEditModal(\'\')'}"
+                         style="font-size: 13px; padding: 6px 12px;">
+                        <span class="nav-icon"><i class="ri-add-circle-line"></i></span>
+                        <span class="nav-label">新增网址</span>
+                    </div>
+                    <div class="sidebar-nav-item" onclick="openJsonEditor()" style="font-size: 13px; padding: 6px 12px;">
+                        <span class="nav-icon"><i class="ri-code-s-slash-line"></i></span>
+                        <span class="nav-label">专家模式</span>
+                    </div>
+                    <div class="sidebar-nav-item" onclick="exportConfig()" style="font-size: 13px; padding: 6px 12px;">
+                        <span class="nav-icon"><i class="ri-download-2-line"></i></span>
+                        <span class="nav-label">备份导出</span>
+                    </div>
+                    <div class="sidebar-nav-item" onclick="document.getElementById('import-file').click()" style="font-size: 13px; padding: 6px 12px;">
+                        <span class="nav-icon"><i class="ri-upload-2-line"></i></span>
+                        <span class="nav-label">配置导入</span>
+                    </div>
+                    <div class="sidebar-nav-item" onclick="doResetConfig()" style="font-size: 13px; padding: 6px 12px;">
+                        <span class="nav-icon"><i class="ri-refresh-line"></i></span>
+                        <span class="nav-label">重置模板</span>
+                    </div>
+                </div>
+                ` : ''}
             </div>
         `;
     } else {
-        // 未登录状态：顶部显示登录按钮
+        // 未登录状态：顶部极简，底部工具栏显示登录图标
         userArea.innerHTML = `
-            <div class="sidebar-nav-item" onclick="document.getElementById('auth-overlay').style.display='flex'">
-                <span class="nav-icon"><i class="ri-user-line"></i></span>
-                <span class="nav-label">登录 / 注册</span>
+            <div class="sidebar-user-info">
+                <i class="ri-user-line"></i>
+                <span>未登录用户</span>
             </div>
         `;
-        area.innerHTML = '';
+        area.innerHTML = `
+            <div class="sidebar-admin-container">
+                <div class="sidebar-admin-toolbar">
+                    <div class="sidebar-nav-item toolbar-item" onclick="document.getElementById('auth-overlay').style.display='flex'" data-tooltip="登录 / 注册">
+                        <span class="nav-icon"><i class="ri-login-box-line"></i></span>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 };
 
@@ -1589,10 +1616,10 @@ const openAdminHub = async () => {
 
         body.innerHTML = `
             <div class="admin-hub-tabs">
-                <button class="hub-tab active" onclick="switchHubTab('users')">用户管理</button>
-                <button class="hub-tab" onclick="switchHubTab('config')">全站设置</button>
-                <button class="hub-tab" onclick="switchHubTab('invites')">邀请管理</button>
-                <button class="hub-tab" onclick="switchHubTab('announcements')">公告管理</button>
+                <button class="hub-tab active" data-tab="users" onclick="switchHubTab('users')">用户管理</button>
+                <button class="hub-tab" data-tab="config" onclick="switchHubTab('config')">全站设置</button>
+                <button class="hub-tab" data-tab="invites" onclick="switchHubTab('invites')">邀请管理</button>
+                <button class="hub-tab" data-tab="announcements" onclick="switchHubTab('announcements')">公告管理</button>
             </div>
             <div id="hub-content-users" class="hub-pane active">
                 <table class="admin-table">
@@ -1751,9 +1778,7 @@ const openAdminHub = async () => {
 };
 
 window.switchHubTab = (tab) => {
-    document.querySelectorAll('.hub-tab').forEach(t => t.classList.toggle('active', t.innerText.includes(
-        tab === 'users' ? '用户' : (tab === 'config' ? '全站' : '邀请')
-    )));
+    document.querySelectorAll('.hub-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     document.querySelectorAll('.hub-pane').forEach(p => p.classList.toggle('active', p.id === `hub-content-${tab}`));
 };
 
