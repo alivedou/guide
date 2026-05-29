@@ -635,6 +635,16 @@ const openVisualLab = () => {
             <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示: 开启遮罩可确保背景复杂时文字清晰</p>
         </div>
         <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-external-link-line"></i> 网址跳转方式 (Task 36.2)</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn ${appData.settings?.link_target === '_self' ? 'active' : ''}" 
+                        onclick="setVisualSetting('link_target', '_self')">当前页面</button>
+                <button class="tab-btn ${(!appData.settings?.link_target || appData.settings?.link_target === '_blank') ? 'active' : ''}" 
+                        onclick="setVisualSetting('link_target', '_blank')">新窗口打开</button>
+            </div>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示：选择“新窗口打开”可避免导航页被覆盖</p>
+        </div>
+        <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-star-line"></i> 内容组件显示</span>
             <div class="visual-btn-group">
                 <button class="tab-btn ${appData.settings?.showFrequent !== false ? 'active' : ''}" onclick="setVisualSetting('showFrequent', true)">
@@ -668,7 +678,7 @@ window.setVisualSetting = (key, value) => {
     isDataDirty = true; // 标记待同步
     
     // 如果修改了影响 DOM 结构的配置，触发重新渲染 (Task 4.17.2)
-    if (['isolatedView', 'showFrequent'].includes(key)) {
+    if (['isolatedView', 'showFrequent', 'link_target'].includes(key)) {
         renderNav();
     }
 
@@ -970,11 +980,12 @@ const init = async (forceRender = false) => {
 
 // ==================== 5. 渲染逻辑 ====================
 const buildCardHtml = (i) => {
-    const target = appData.settings?.openInNewTab ? '_blank' : '_self';
+    const target = appData.settings?.link_target || '_blank';
+    const rel = target === '_blank' ? 'rel="noopener noreferrer"' : '';
     const icon = i.icon && i.icon.startsWith('http') 
         ? `<img src="${i.icon}" loading="lazy" data-retry-index="0" onerror="utils.handleIconError(this, '${i.url}')">` 
         : `<span class="emoji-icon">${i.icon || '🔗'}</span>`;
-    return `<a href="${i.url}" target="${target}"><div class="icon-wrapper">${icon}</div><h3>${i.title}</h3></a>`;
+    return `<a href="${i.url}" target="${target}" ${rel}><div class="icon-wrapper">${icon}</div><h3>${i.title}</h3></a>`;
 };
 
 const renderNav = () => {
@@ -1043,7 +1054,8 @@ const renderNav = () => {
                         : `<span class="emoji-icon" title="${item.title}">${item.icon || '🔗'}</span>`;
                     icon.onclick = () => {
                         recordClick(item.id);
-                        window.open(item.url, appData.settings?.openInNewTab ? '_blank' : '_self');
+                        const target = appData.settings?.link_target || '_blank';
+                        window.open(item.url, target);
                     };
                     freqList.appendChild(icon);
                 });
@@ -1222,7 +1234,8 @@ const renderNav = () => {
                             card.click();
                         } else {
                             recordClick(item.id);
-                            window.open(item.url, appData.settings?.openInNewTab ? '_blank' : '_self');
+                            const target = appData.settings?.link_target || '_blank';
+                            window.open(item.url, target);
                         }
                     }
                 };
@@ -2516,9 +2529,9 @@ window.updateUserAdmin = async (userId, payload) => {
 };
 
 window.saveAnnouncement = async () => {
-    const isEdit = !!currentEditingAnnounceId;
+    const isEdit = currentEditingAnnounceId !== null;
     const payload = {
-        id: currentEditingAnnounceId,
+        id: isEdit ? Number(currentEditingAnnounceId) : null,
         title: document.getElementById('announce-title').value.trim(),
         content: document.getElementById('announce-content').value.trim(),
         type: document.getElementById('announce-type').value,
@@ -2527,6 +2540,7 @@ window.saveAnnouncement = async () => {
     };
 
     if (!payload.title || !payload.content) return showToast("标题和内容不能为空", "#e67e22");
+    if (!sysToken) return showToast("登录已失效，请重新登录", "#e74c3c");
 
     try {
         const res = await fetch('/api/admin/announcements', {
@@ -2534,19 +2548,24 @@ window.saveAnnouncement = async () => {
             headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
+        
+        const data = await res.json();
         if (res.ok) {
             showToast(isEdit ? "公告已更新" : "公告已发布");
-            // 重置状态与表单
-            if (typeof cancelEditAnnounce === 'function') cancelEditAnnounce();
+            // 重置状态与表单 (无论成功失败都应确保逻辑闭环，但通常成功后才重置)
+            cancelEditAnnounce();
             // 刷新列表
             openAdminHub('announcements');
             // Task 6.6: 即时刷新前端公告状态
             initAnnouncements();
         } else {
-            const err = await res.json();
-            showToast(err.error || "操作失败", "#e74c3c");
+            // Task: 优先显示后端返回的详细错误
+            showToast(data.error || "操作失败", "#e74c3c");
         }
-    } catch (e) { showToast("操作失败", "#e74c3c"); }
+    } catch (e) { 
+        console.error('[Admin] Save Announcement Error:', e);
+        showToast("请求失败，请检查网络", "#e74c3c"); 
+    }
 };
 
 window.deleteAnnouncement = async (id) => {
@@ -2581,12 +2600,13 @@ window.editAnnouncement = (a) => {
     }
 
     // UI 状态切换
-    document.getElementById('btn-save-announce').innerText = "保存修改";
+    document.getElementById('btn-save-announce').innerText = "确认保存修改";
     document.getElementById('btn-save-announce').classList.add('warning-btn'); // 提示是修改操作
-    document.getElementById('btn-cancel-announce').style.display = 'block';
+    document.getElementById('btn-cancel-announce').style.display = 'inline-block';
     
-    // 平滑滚动到顶部表单
-    document.querySelector('.admin-announce-editor').scrollIntoView({ behavior: 'smooth' });
+    // 平滑滚动到编辑器区域
+    const editor = document.querySelector('.admin-announce-editor');
+    if (editor) editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
 window.cancelEditAnnounce = () => {

@@ -58,6 +58,14 @@ try {
             console.log('[DB] Patching: Adding type column to announcements table');
             db.exec("ALTER TABLE announcements ADD COLUMN type TEXT DEFAULT 'quiet'");
         }
+        if (!annCols.includes('is_top')) {
+            console.log('[DB] Patching: Adding is_top column to announcements table');
+            db.exec("ALTER TABLE announcements ADD COLUMN is_top BOOLEAN DEFAULT 0");
+        }
+        if (!annCols.includes('creator_id')) {
+            console.log('[DB] Patching: Adding creator_id column to announcements table');
+            db.exec("ALTER TABLE announcements ADD COLUMN creator_id TEXT");
+        }
     }
 
     // Task 22.1 & 23.1: 补齐 user_settings 缺失字段
@@ -76,6 +84,10 @@ try {
             console.log('[DB] Patching: Adding density column to user_settings table');
             db.exec("ALTER TABLE user_settings ADD COLUMN density TEXT DEFAULT 'standard'");
         }
+        if (!settingsCols.includes('link_target')) {
+            console.log('[DB] Patching: Adding link_target column to user_settings table');
+            db.exec("ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'");
+        }
     }
 } catch (e) {
     console.warn('[DB] Auto-patch skipped:', e.message);
@@ -92,8 +104,17 @@ const loginAttempts = new Map(); // IP -> { count, lockUntil }
 // ====== 鉴权中间件 ======
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) { req.user = { role: 'guest', id: 'guest' }; return next(); }
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        req.user = { role: 'guest', id: 'guest' };
+        return next();
+    }
+
+    const token = authHeader.split(' ')[1];
+    if (!token || token === 'null' || token === 'undefined') {
+        req.user = { role: 'guest', id: 'guest' };
+        return next();
+    }
     
     try {
         const { payload } = await jose.jwtVerify(token, secret);
@@ -619,15 +640,24 @@ app.get('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
 app.post('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
     const { title, content, type, is_top, expire_at } = req.body;
     try {
-        db.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at) VALUES (?, ?, ?, ?, ?, ?)')
-          .run(req.user.id, title, content, type, is_top ? 1 : 0, expire_at || null);
+        // 显式指定 status = 'published' 以对齐 D1 结构
+        db.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(req.user.id, title, content, type, is_top ? 1 : 0, expire_at || null, 'published');
         
-        // Task 6.20: 更新本地 KV 中的公告版本号
-        const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+        // Task 6.20: 增强本地 KV 模拟的健壮性
+        const kvDir = path.join(__dirname, 'local_kv');
+        if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
+
+        const configPath = path.join(kvDir, 'site_config.json');
         let config = {};
-        if (fs.existsSync(configPath)) {
-            config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        try {
+            if (fs.existsSync(configPath)) {
+                config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            }
+        } catch (e) {
+            console.warn('[KV] site_config.json 格式损坏，正在重置');
         }
+        
         config.announcements_last_update = Date.now().toString();
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
@@ -636,7 +666,44 @@ app.post('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
 
         res.json({ success: true });
     } catch (e) {
+        console.error('[API] Create Announcement Error:', e.message);
         res.status(500).json({ error: '创建公告失败', details: e.message });
+    }
+});
+
+app.patch('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
+    let { id, title, content, type, is_top, expire_at } = req.body;
+    if (!id) return res.status(400).json({ error: "Missing ID" });
+
+    // 强制转换为数字，防止字符串匹配失败
+    const targetId = Number(id);
+
+    try {
+        // 统一处理空字符串为 null，确保数据库日期比较逻辑正确
+        const finalExpire = (expire_at && expire_at.trim() !== '') ? expire_at : null;
+
+        const stmt = db.prepare('UPDATE announcements SET title = ?, content = ?, type = ?, is_top = ?, expire_at = ? WHERE id = ?');
+        const info = stmt.run(title, content, type, is_top ? 1 : 0, finalExpire, targetId);
+
+        if (info.changes === 0) {
+            console.warn(`[API] Update failed: No announcement found with ID ${targetId}`);
+            return res.status(404).json({ error: "更新失败：未找到对应 ID 的公告", code: "NOT_FOUND" });
+        }
+
+        // Task 6.20: 更新本地 KV 中的公告版本号
+        const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            config.announcements_last_update = Date.now().toString();
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+        }
+
+        db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+          .run(req.user.id, 'UPDATE_ANNOUNCEMENT', `Updated announcement ID: ${id}, Title: ${title}`, req.ip);
+
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: '更新公告失败', details: e.message });
     }
 });
 
