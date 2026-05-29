@@ -59,6 +59,24 @@ try {
             db.exec("ALTER TABLE announcements ADD COLUMN type TEXT DEFAULT 'quiet'");
         }
     }
+
+    // Task 22.1 & 23.1: 补齐 user_settings 缺失字段
+    const settingsInfo = db.prepare("PRAGMA table_info(user_settings)").all();
+    const settingsCols = settingsInfo.map(c => c.name);
+    if (settingsCols.length > 0) {
+        if (!settingsCols.includes('hide_bg_mask')) {
+            console.log('[DB] Patching: Adding hide_bg_mask column to user_settings table');
+            db.exec("ALTER TABLE user_settings ADD COLUMN hide_bg_mask BOOLEAN DEFAULT 0");
+        }
+        if (!settingsCols.includes('isolated_view')) {
+            console.log('[DB] Patching: Adding isolated_view column to user_settings table');
+            db.exec("ALTER TABLE user_settings ADD COLUMN isolated_view BOOLEAN DEFAULT 0");
+        }
+        if (!settingsCols.includes('density')) {
+            console.log('[DB] Patching: Adding density column to user_settings table');
+            db.exec("ALTER TABLE user_settings ADD COLUMN density TEXT DEFAULT 'standard'");
+        }
+    }
 } catch (e) {
     console.warn('[DB] Auto-patch skipped:', e.message);
 }
@@ -98,6 +116,63 @@ const adminOnly = (req, res, next) => {
 };
 
 app.use(express.json({ limit: '10mb' }));
+
+// Task 21.1 & 13.1 & 19.3: Bing 每日壁纸代理 (提权至 API 第一顺位)
+app.get('/api/bing', async (req, res) => {
+    const fetchWithTimeout = async (url, options = {}, timeout = 5000) => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+            const response = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(id);
+            return response;
+        } catch (e) {
+            clearTimeout(id);
+            throw e;
+        }
+    };
+
+    try {
+        // 尝试主源：Bing 官方 (强制 zh-CN 确保大陆可访问性)
+        try {
+            const response = await fetchWithTimeout("https://cn.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=zh-CN", {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+            });
+            const data = await response.json();
+            if (data.images && data.images.length > 0) {
+                // Task 19.3: 后端标准化，补全绝对路径，与 Worker 保持逻辑一致
+                data.images = data.images.map(img => ({
+                    ...img,
+                    url: img.url.startsWith('http') ? img.url : `https://cn.bing.com${img.url}`,
+                    urlbase: img.urlbase.startsWith('http') ? img.urlbase : `https://cn.bing.com${img.urlbase}`
+                }));
+                console.log(`[Bing] Primary source success: ${data.images[0].url.substring(0, 50)}...`);
+                return res.json(data);
+            }
+        } catch (e) {
+            console.warn('[Bing] Primary source failed, trying mirror...', e.message);
+        }
+
+        // 尝试副源：高可用镜像源 (BitURL)
+        console.log('[Bing] Fetching from mirror source...');
+        const mirrorRes = await fetchWithTimeout("https://bing.biturl.top/?resolution=1920&format=json&index=0&mkt=zh-CN");
+        const mirrorData = await mirrorRes.json();
+        if (mirrorData.url) {
+            console.log('[Bing] Mirror source success');
+            return res.json({
+                images: [{ 
+                    url: mirrorData.url,
+                    urlbase: mirrorData.url.split('&')[0] // 简单模拟 urlbase
+                }]
+            });
+        }
+
+        throw new Error('All sources failed');
+    } catch (e) {
+        console.error('[Bing] Proxy error:', e.message);
+        res.status(500).json({ error: 'Failed to fetch Bing wallpaper', details: e.message });
+    }
+});
 
 // ====== Task 3.2: Magic Wand Backend (Metadata Fetcher) ======
 app.get('/api/proxy/fetch-metadata', authenticate, async (req, res) => {
@@ -180,6 +255,9 @@ const syncUserToKV = (userId) => {
             zenMode: !!settings.zen_mode,
             showFrequent: !!settings.show_f_requent, // 容错处理
             bgUrl: settings.bg_url,
+            hideBgMask: !!settings.hide_bg_mask,
+            isolatedView: !!settings.isolated_view,
+            density: settings.density || 'standard',
             simpleMode: !!settings.simple_mode,
             openInNewTab: !!settings.open_in_new_tab,
             themeMode: settings.theme_mode
@@ -265,8 +343,8 @@ app.post('/api/auth/register', (req, res) => {
             
             // 使用模板设置
             const s = onboardingData.settings || {};
-            db.prepare('INSERT INTO user_settings (user_id, card_width, zen_mode, open_in_new_tab) VALUES (?, ?, ?, ?)').run(
-                uuid, s.cardWidth || 125, s.zenMode ? 1 : 0, s.openInNewTab ? 1 : 0
+            db.prepare('INSERT INTO user_settings (user_id, card_width, zen_mode, open_in_new_tab, hide_bg_mask) VALUES (?, ?, ?, ?, ?)').run(
+                uuid, s.cardWidth || 125, s.zenMode ? 1 : 0, s.openInNewTab ? 1 : 0, s.hideBgMask ? 1 : 0
             );
             
             if (!isFirstUser && inviteCode) {
@@ -653,8 +731,18 @@ app.post('/api/config', authenticate, (req, res) => {
             db.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(item.id, userId, targetCatId, item.title, item.url, item.desc, item.icon, item.bg_color, idx, item.hidden ? 1 : 0);
         });
         if (settings) {
-            db.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = ?, bg_url = ?, simple_mode = ?, open_in_new_tab = ?, theme_mode = ? WHERE user_id = ?').run(
-                settings.cardWidth, settings.zenMode ? 1 : 0, settings.showFrequent ? 1 : 0, settings.bgUrl, settings.simpleMode ? 1 : 0, settings.openInNewTab ? 1 : 0, settings.themeMode, userId
+            db.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = ?, bg_url = ?, hide_bg_mask = ?, isolated_view = ?, density = ?, simple_mode = ?, open_in_new_tab = ?, theme_mode = ? WHERE user_id = ?').run(
+                settings.cardWidth, 
+                settings.zenMode ? 1 : 0, 
+                settings.showFrequent ? 1 : 0, 
+                settings.bgUrl, 
+                settings.hideBgMask ? 1 : 0, 
+                settings.isolatedView ? 1 : 0,
+                settings.density || 'standard',
+                settings.simpleMode ? 1 : 0, 
+                settings.openInNewTab ? 1 : 0, 
+                settings.themeMode, 
+                userId
             );
         }
     })();
@@ -685,8 +773,8 @@ app.delete('/api/config', authenticate, (req, res) => {
             
             // 2. 重置用户设置到模板状态
             const s = onboardingData.settings || {};
-            db.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = 1, bg_url = NULL, simple_mode = 0, open_in_new_tab = ?, theme_mode = \'auto\' WHERE user_id = ?').run(
-                s.cardWidth || 125, s.zenMode ? 1 : 0, s.openInNewTab ? 1 : 0, userId
+            db.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = 1, bg_url = NULL, hide_bg_mask = ?, simple_mode = 0, open_in_new_tab = ?, theme_mode = \'auto\' WHERE user_id = ?').run(
+                s.cardWidth || 125, s.zenMode ? 1 : 0, s.hideBgMask ? 1 : 0, s.openInNewTab ? 1 : 0, userId
             );
             
             // 3. 重新注入最新的模板

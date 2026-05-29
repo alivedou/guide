@@ -47,8 +47,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. 初始视觉校准 (使用默认配置防止白屏)
     updateStyles();
+    
+    // 3. 异步获取 Bing 壁纸 (Task 12.1)
+    if (!appData.settings?.bgUrl) {
+        getBingWallpaper().then(() => updateStyles());
+    }
 
-    // 3. 异步获取云端配置与公告
+    // 4. 异步获取云端配置与公告
     initSiteConfig();
     init(); // 核心数据加载 (内部会触发 initAnnouncements)
     
@@ -106,10 +111,20 @@ const checkSWUpdate = async () => {
 };
 
 // ==================== 2. 辅助工具 ====================
-// Task 4.1: 全站 SEO 与标题下发
+// Task 4.1 & 21.2: 全站 SEO 与标题下发 (静默处理鉴权失败)
 const initSiteConfig = async () => {
     try {
-        const res = await fetch('/api/admin/site-config');
+        // 如果没有 token，大概率会 403，本地环境下我们选择直接跳过或静默处理
+        const res = await fetch('/api/admin/site-config', {
+            headers: sysToken ? { 'Authorization': sysToken } : {}
+        });
+        
+        if (res.status === 403 || res.status === 401) {
+            // 权限不足时不报 error，仅作为普通 warn 或忽略
+            console.log('[Config] Site config is protected, using defaults.');
+            return;
+        }
+
         if (res.ok) {
             const config = await res.json();
             document.title = config.siteTitle || "CloudNav 导航";
@@ -391,10 +406,12 @@ const updateStyles = () => {
     document.body.classList.remove('sidebar-style-colorful');
     document.body.classList.add('sidebar-style-classic');
 
-    // 3. 处理视图模态 (Task 4.5.1 & 4.6.3)
+    // 3. 处理视图模态 (Task 24.2: 逻辑解耦与优先级判定)
     const isZen = appData.settings?.zenMode === true;
-    const isolatedView = appData.settings?.isolatedView === true || isZen; // 禅意模式强制开启隔离视图
-    document.body.classList.toggle('view-isolated', isolatedView);
+    // 优先级判定：禅意模式强制开启隔离 (Primary) > 常规模式的用户设置 (Secondary)
+    const isEffectivelyIsolated = isZen || appData.settings?.isolatedView === true; 
+    
+    document.body.classList.toggle('view-isolated', isEffectivelyIsolated);
     document.body.classList.toggle('zen-active', isZen);
 
     // 4. 处理卡片宽度 (兼容旧配置)
@@ -414,13 +431,110 @@ const updateStyles = () => {
         if (typeof refreshNoticeBadge === 'function') refreshNoticeBadge();
     } catch (e) { console.warn('[Notice] UI sync failed'); }
 
+    // Task 12.1 & 12.3 & 16.2 & 18.3 & 19.2: 背景阶梯式对齐与类型标记
     const bg = appData.settings?.bgUrl;
-    if (bg) {
-        document.body.style.background = bg.startsWith('http') ? `url(${bg}) center/cover fixed` : bg;
+    if (bg && bg.trim() !== '') {
+        console.log('[Style] Applying user custom background:', bg);
+        document.body.dataset.bgType = 'custom';
+        if (bg.startsWith('http')) {
+            document.body.style.background = `url("${bg}") center/cover fixed`;
+        } else {
+            document.body.style.background = bg;
+        }
+    } else {
+        const cache = localStorage.getItem('nav_bing_cache');
+        let bingUrl = null;
+        if (cache) {
+            try {
+                const parsed = JSON.parse(cache);
+                if (parsed.url && parsed.url.startsWith('http')) {
+                    bingUrl = parsed.url;
+                }
+            } catch (e) {}
+        }
+
+        if (bingUrl) {
+            console.log('[Style] Applying cached Bing background:', bingUrl);
+            document.body.dataset.bgType = 'bing';
+            document.body.style.background = `url("${bingUrl}") center/cover fixed`;
+            document.body.style.backgroundSize = 'cover';
+            document.body.style.backgroundAttachment = 'fixed';
+        } else {
+            console.log('[Style] No valid background found, clearing inline styles for CSS fallback.');
+            document.body.dataset.bgType = 'none';
+            document.body.style.background = '';
+        }
     }
+
+    // 处理背景遮罩 (Task 12.3)
+    document.body.classList.toggle('no-bg-mask', appData.settings?.hideBgMask === true);
 
     // Task 6.3: 同步响应式侧边栏状态
     if (window.autoAdjustSidebar) window.autoAdjustSidebar();
+};
+
+// Task 12.1 & 16.3 & 20.3: Bing 壁纸获取与缓存优化 (先用旧图，异步更同步)
+const getBingWallpaper = async () => {
+    const cache = localStorage.getItem('nav_bing_cache');
+    const now = Date.now();
+    let oldUrl = null;
+    
+    if (cache) {
+        try {
+            const parsed = JSON.parse(cache);
+            // Task 18.2: 增加安全性校验，如果缓存的路径不是绝对路径（http开头），则视为无效缓存
+            if (parsed.url && parsed.url.startsWith('http')) {
+                oldUrl = parsed.url;
+                if (now - parsed.timestamp < 43200000) { // 12h 内视为新鲜
+                    return oldUrl;
+                }
+            } else {
+                localStorage.removeItem('nav_bing_cache');
+            }
+        } catch (e) { 
+            localStorage.removeItem('nav_bing_cache'); 
+        }
+    }
+
+    // 异步拉取逻辑
+    const fetchNew = async () => {
+        try {
+            // Task 21.3: 增加随机参数防止浏览器缓存 304 导致的数据不更新
+            const res = await fetch(`/api/bing?t=${Date.now()}`);
+            if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+            
+            // Task 21.3: 校验响应类型，防止拿到 HTML 错误页
+            const contentType = res.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned HTML/Text instead of JSON (likely 404 or Proxy Error)');
+            }
+
+            const data = await res.json();
+            
+            if (!data.images || !data.images[0]) throw new Error('Invalid Bing response');
+            
+            const url = data.images[0].url;
+            localStorage.setItem('nav_bing_cache', JSON.stringify({ url, timestamp: now }));
+            
+            // 如果新图和旧图不同，触发 UI 刷新
+            if (url !== oldUrl) {
+                updateStyles();
+            }
+            return url;
+        } catch (e) {
+            console.error('[Bing] 抓取失败:', e.message);
+            return oldUrl;
+        }
+    };
+
+    // 如果有旧图，先立即返回旧图，异步去更新
+    if (oldUrl) {
+        fetchNew(); // 后台跑，不 await
+        return oldUrl;
+    }
+
+    // 彻底没缓存，才去等待拉取
+    return await fetchNew();
 };
 
 // Task 4.2: 视觉实验室控制
@@ -436,13 +550,17 @@ const openVisualLab = () => {
     if (!modal || !body) return;
 
     title.innerText = "视觉实验室 (Visual Laboratory)";
+    const isZen = appData.settings?.zenMode === true;
     body.innerHTML = `
         <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-window-line"></i> 浏览模态</span>
-            <div class="visual-btn-group">
-                <button class="tab-btn ${!appData.settings?.isolatedView ? 'active' : ''}" onclick="setVisualSetting('isolatedView', false)">长页纵览</button>
-                <button class="tab-btn ${appData.settings?.isolatedView ? 'active' : ''}" onclick="setVisualSetting('isolatedView', true)">单视图隔离</button>
+            <span class="visual-option-label"><i class="ri-window-line"></i> 常规模式 - 浏览模态</span>
+            <div class="visual-btn-group" ${isZen ? 'style="opacity: 0.5; pointer-events: none;"' : ''}>
+                <button class="tab-btn ${!appData.settings?.isolatedView ? 'active' : ''}" 
+                        onclick="setVisualSetting('isolatedView', false)">长页纵览</button>
+                <button class="tab-btn ${appData.settings?.isolatedView ? 'active' : ''}" 
+                        onclick="setVisualSetting('isolatedView', true)">单视图隔离</button>
             </div>
+            ${isZen ? '<p style="font-size: 11px; color: #e67e22; margin-top: 5px;"><i class="ri-information-line"></i> 禅意模式已开启：当前由禅意模式强制接管为“单视图隔离”</p>' : ''}
         </div>
         <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-keyboard-line"></i> 布局密度</span>
@@ -465,6 +583,21 @@ const openVisualLab = () => {
             <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示: 使用 Ctrl + B 可快速切换禅意模式</p>
         </div>
         <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-image-line"></i> 自定义背景</span>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="text" id="bg-url-input" placeholder="输入图片 URL (留空显示 Bing 壁纸)" 
+                       value="${appData.settings?.bgUrl || ''}" 
+                       onchange="setVisualSetting('bgUrl', this.value)"
+                       style="flex:1; height:36px; font-size:12px;">
+                <button class="tab-btn ${!appData.settings?.hideBgMask ? 'active' : ''}" 
+                        onclick="setVisualSetting('hideBgMask', !appData.settings?.hideBgMask)"
+                        title="文字增强遮罩" style="width:40px; padding:0;">
+                    <i class="ri-contrast-drop-2-line"></i>
+                </button>
+            </div>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示: 开启遮罩可确保背景复杂时文字清晰</p>
+        </div>
+        <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-star-line"></i> 内容组件显示</span>
             <div class="visual-btn-group">
                 <button class="tab-btn ${appData.settings?.showFrequent !== false ? 'active' : ''}" onclick="setVisualSetting('showFrequent', true)">
@@ -483,6 +616,13 @@ const openVisualLab = () => {
 
 window.setVisualSetting = (key, value) => {
     if (!appData.settings) appData.settings = {};
+
+    // Task 24.3: 禅意模式下的交互拦截与引导
+    if (appData.settings.zenMode && key === 'isolatedView') {
+        showToast("禅意模式已强制开启隔离视图，退出后可修改常规模态", "#e67e22");
+        return;
+    }
+
     appData.settings[key] = value;
     
     // 如果修改了影响 DOM 结构的配置，触发重新渲染 (Task 4.17.2)
@@ -774,6 +914,12 @@ const init = async (forceRender = false) => {
         // 无论如何都要渲染并隐藏骨架屏
         renderNav();
         renderTools();
+        
+        // Task 20.2: 强制背景校验闭环
+        if (!appData.settings?.bgUrl) {
+            getBingWallpaper(); // 异步触发
+        }
+
         updateStyles();
         toggleSkeleton(false);
         // Task 6.3: 在工具栏渲染完成后再初始化公告，防止铃铛图标被覆盖
@@ -1271,6 +1417,14 @@ const toggleSidebar = (force) => {
     const isOpen = typeof force === 'boolean' ? force : !s.classList.contains('open');
     s.classList.toggle('open', isOpen);
     o.classList.toggle('visible', isOpen);
+
+    // --- Task 15.4: 侧边栏打开时，同步锁定禅意模式为唤醒态 ---
+    if (isOpen && appData.settings?.zenMode) {
+        isZenTempExpanded = true;
+        document.body.classList.remove('zen-silent');
+        // 确保不会因为静默态而无法操作侧边栏
+        updateStyles();
+    }
 };
 
 const initSidebar = () => {
@@ -2762,19 +2916,26 @@ const initGlobalEvents = () => {
             return;
         }
 
-        // 3. Ctrl+B 视图调度 (核心快捷键 - Task 11.3 对齐)
+        // 3. Ctrl+B 视图调度 (核心快捷键 - Task 11.3/15.2 对齐)
         if (isCtrl && key === 'b') {
             e.preventDefault();
             
-            if (appData.settings?.zenMode && document.body.classList.contains('zen-silent')) {
-                // 静默态下 Ctrl+B 先唤醒视界
+            const sidebar = document.getElementById('sidebar');
+            const isOpen = sidebar?.classList.contains('open');
+            
+            // 如果要打开侧边栏，且处于禅意静默态，先唤醒视界
+            if (!isOpen && appData.settings?.zenMode && document.body.classList.contains('zen-silent')) {
                 wakeUpNavigation();
-            } else {
-                // 唤醒态或标准模式下，Ctrl+B 切换侧边栏 (调度面板)
-                const sidebar = document.getElementById('sidebar');
-                const isOpen = sidebar?.classList.contains('open');
-                toggleSidebar(!isOpen);
             }
+            
+            toggleSidebar(!isOpen);
+            return;
+        }
+
+        // 3.1 Alt+Z 一键切换禅意模式 (Task 15.3 新增)
+        if (e.altKey && key === 'z') {
+            e.preventDefault();
+            toggleZenMode();
             return;
         }
 

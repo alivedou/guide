@@ -50,7 +50,8 @@ body.light-theme {
 }
 
 body.light-theme {
-    background-color: #eef1f5;
+    background-color: #f0f4f8; /* 仅作为背景图未加载时的底色 */
+    background-image: none;    /* 移除强制渐变，防止干扰 JS 注入的背景图 */
 }
 
 body.light-theme::before {
@@ -1032,7 +1033,9 @@ body.sidebar-style-classic .sidebar-nav-item.active::before {
 
 /* ==================== 页面主体样式 ==================== */
 body {
-    background-color: #111;
+    /* Task 13.3 & 17.3: 全局视觉占位底色 (消除白屏) */
+    background-color: #1a1c1e; 
+    background-image: radial-gradient(circle at center, #2c3e50 0%, #000000 100%);
     background-repeat: no-repeat;
     background-position: center center;
     background-attachment: fixed;
@@ -1040,7 +1043,7 @@ body {
     min-height: 100vh;
     color: var(--text);
     overflow-x: hidden;
-    transition: background-image 0.8s ease-in-out;
+    transition: background-image 0.8s ease-in-out, background-color 0.5s ease;
 }
 
 body::before {
@@ -1057,10 +1060,24 @@ body::before {
     transition: backdrop-filter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.5s ease;
 }
 
+/* Task 19.2: 当存在图片背景时，优化亮色模式下的遮罩透明度，防止洗白图片 */
+body.light-theme[data-bg-type="bing"]::before,
+body.light-theme[data-bg-type="custom"]::before {
+    background: rgba(255, 255, 255, 0.15); /* 降低亮色遮罩强度 */
+    backdrop-filter: blur(10px); /* 略微降低模糊度以展现壁纸细节 */
+}
+
 /* 搜索态视觉深度隔离 (Task 2.5.2) */
 body.is-searching::before {
     backdrop-filter: blur(35px) saturate(50%);
     background: rgba(0, 0, 0, 0.6);
+}
+
+/* 移除背景遮罩 (Task 12.3) */
+body.no-bg-mask::before {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 body.is-searching .grid-container {
@@ -3302,6 +3319,14 @@ body.zen-active .quick-nav-group {
     opacity: 0;
     pointer-events: none;
     transform: translateY(30px);
+}
+
+/* 确保侧边栏在显式打开时，无论是否在禅意模式都必须可见 */
+body.zen-active .sidebar.open {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateX(0) !important;
+    visibility: visible !important;
 }
 
 body.zen-active .main-content {
