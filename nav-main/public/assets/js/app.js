@@ -35,6 +35,7 @@ let themeMode = localStorage.getItem('nav_theme_mode') || 'auto';
 let simpleMode = localStorage.getItem('nav_simple_mode') === 'true';
 let currentEnginePrefix = localStorage.getItem('nav_search_prefix') || 'https://cn.bing.com/search?q=';
 let isDataDirty = false; // Task O+.1: 全局数据变更标记
+let currentEditingAnnounceId = null; // Task 34.2: 正在编辑的公告 ID
 
 // ==================== 1. 初始化入口 ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -260,64 +261,36 @@ const initAnnouncements = async () => {
 const renderImportantNotice = (notice) => {
     const banner = document.createElement('div');
     banner.className = 'important-banner';
+    banner.setAttribute('role', 'alert');
     banner.innerHTML = `
-        <div class="banner-content">
+        <div class="banner-content" onclick="viewNoticeDetail(${notice.id})">
             <i class="ri-error-warning-line"></i>
-            <span>${notice.content}</span>
-            <button onclick="this.parentElement.parentElement.remove(); localStorage.setItem('read_notice_${notice.id}', 'true'); refreshNoticeBadge();">不再提示</button>
+            <span class="banner-title"><b>重要公告：</b>${notice.title}</span>
+            <span class="banner-more">查看更多 <i class="ri-arrow-right-s-line"></i></span>
+            <button class="banner-close" onclick="event.stopPropagation(); this.parentElement.parentElement.remove(); localStorage.setItem('read_notice_${notice.id}', 'true'); refreshNoticeBadge();">不再提示</button>
         </div>
     `;
     document.body.prepend(banner);
 };
 
+// Task 33.3: 封装核心联动函数
+const viewNoticeDetail = (id) => {
+    const banner = document.querySelector('.important-banner');
+    if (banner) banner.remove();
+    
+    // 标记为已读并刷新红点
+    localStorage.setItem(`read_notice_${id}`, 'true');
+    refreshNoticeBadge();
+    
+    // 打开公告中心并精确定位
+    if (typeof window.openNoticeCenter === 'function') {
+        window.openNoticeCenter(id);
+    }
+};
+
 const renderQuietNotice = (notice) => {
     // 仅显示 Toast 提醒，不再向侧边栏底部注入铃铛
     showToast(`新公告: ${notice.title} (点击左上角查看)`, "#3498db");
-};
-
-// Task N.2: 实现统一的公告中心弹窗
-const openNoticeCenter = () => {
-    if (!cachedAnnouncements || cachedAnnouncements.length === 0) {
-        return showToast("暂无公告", "#7f8c8d");
-    }
-
-    // 标记所有公告为已读
-    cachedAnnouncements.forEach(n => {
-        localStorage.setItem(`read_notice_${n.id}`, 'true');
-    });
-
-    const modal = document.getElementById('edit-modal');
-    const title = document.getElementById('edit-title');
-    const body = document.getElementById('edit-form-body');
-    const confirmBtn = document.getElementById('btn-confirm-edit');
-
-    if (!modal || !body) return;
-
-    title.innerText = "公告中心";
-    body.innerHTML = `
-        <div class="notice-list">
-            ${cachedAnnouncements.map(n => `
-                <div class="notice-item">
-                    <div class="notice-item-header">
-                        <span class="notice-tag ${n.type}">${n.type === 'important' ? '重要' : '消息'}</span>
-                        <span class="notice-time">${new Date(n.created_at || Date.now()).toLocaleDateString()}</span>
-                    </div>
-                    <div class="notice-item-title">${n.title}</div>
-                    <div class="notice-item-content">${n.content}</div>
-                </div>
-            `).join('')}
-        </div>
-    `;
-
-    confirmBtn.innerText = "我知道了";
-    confirmBtn.style.display = 'block';
-    confirmBtn.onclick = () => {
-        modal.style.display = 'none';
-        refreshNoticeBadge();
-    };
-
-    modal.style.display = 'flex';
-    refreshNoticeBadge();
 };
 
 const showToast = (m, c = "#27ae60") => {
@@ -1136,6 +1109,15 @@ const renderNav = () => {
             }
             
             navItem.innerHTML = navHtml;
+            
+            // Task 33.2: 补全键盘激活逻辑
+            navItem.onkeydown = (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navItem.click();
+                }
+            };
+
             navItem.onclick = () => {
                 if (activeCatId === cat.id) return;
                 
@@ -2282,7 +2264,7 @@ const openBatchMoveModal = () => {
 
 // ==================== 10. Task 4.1: 管理员后台 (Admin Hub) ====================
 
-const openAdminHub = async () => {
+const openAdminHub = async (defaultTab = 'users') => {
     // Task 9.6 & O++.1: 切换弹窗启用静默模式
     closeAllModals(true);
 
@@ -2313,12 +2295,12 @@ const openAdminHub = async () => {
 
         body.innerHTML = `
             <div class="admin-hub-tabs">
-                <button class="hub-tab active" data-tab="users" onclick="switchHubTab('users')">用户管理</button>
-                <button class="hub-tab" data-tab="config" onclick="switchHubTab('config')">全站设置</button>
-                <button class="hub-tab" data-tab="invites" onclick="switchHubTab('invites')">邀请管理</button>
-                <button class="hub-tab" data-tab="announcements" onclick="switchHubTab('announcements')">公告管理</button>
+                <button class="hub-tab ${defaultTab === 'users' ? 'active' : ''}" data-tab="users" onclick="switchHubTab('users')">用户管理</button>
+                <button class="hub-tab ${defaultTab === 'config' ? 'active' : ''}" data-tab="config" onclick="switchHubTab('config')">全站设置</button>
+                <button class="hub-tab ${defaultTab === 'invites' ? 'active' : ''}" data-tab="invites" onclick="switchHubTab('invites')">邀请管理</button>
+                <button class="hub-tab ${defaultTab === 'announcements' ? 'active' : ''}" data-tab="announcements" onclick="switchHubTab('announcements')">公告管理</button>
             </div>
-            <div id="hub-content-users" class="hub-pane active">
+            <div id="hub-content-users" class="hub-pane ${defaultTab === 'users' ? 'active' : ''}">
                 <table class="admin-table">
                     <thead><tr><th>用户名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
                     <tbody>
@@ -2345,7 +2327,7 @@ const openAdminHub = async () => {
                     </tbody>
                 </table>
             </div>
-            <div id="hub-content-config" class="hub-pane">
+            <div id="hub-content-config" class="hub-pane ${defaultTab === 'config' ? 'active' : ''}">
                 <div class="admin-config-section">
                     <div class="sidebar-group-title" style="padding-left:0; margin-bottom:10px; opacity:0.8;">🌐 品牌与 SEO 设置</div>
                     <div class="form-row" style="display:flex; gap:10px;">
@@ -2395,7 +2377,7 @@ const openAdminHub = async () => {
                 </div>
                 <button class="tab-btn active" style="width:100%; margin-top:20px; font-weight:bold; height:40px;" onclick="saveSiteConfig()">保存全站配置</button>
             </div>
-            <div id="hub-content-invites" class="hub-pane">
+            <div id="hub-content-invites" class="hub-pane ${defaultTab === 'invites' ? 'active' : ''}">
                 <div style="display:flex; gap:10px; margin-bottom:15px;">
                     <button class="tab-btn active" onclick="generateInvites(1)">生成 1 个</button>
                     <button class="tab-btn active" onclick="generateInvites(5)">生成 5 个</button>
@@ -2419,7 +2401,7 @@ const openAdminHub = async () => {
                     </table>
                 </div>
             </div>
-            <div id="hub-content-announcements" class="hub-pane">
+            <div id="hub-content-announcements" class="hub-pane ${defaultTab === 'announcements' ? 'active' : ''}">
                 <div class="admin-announce-editor">
                     <div class="form-group">
                         <label>公告标题</label>
@@ -2447,7 +2429,10 @@ const openAdminHub = async () => {
                             <input type="checkbox" id="announce-top"> 置顶公告
                         </label>
                     </div>
-                    <button class="tab-btn active" style="width:100%; margin-top:10px;" onclick="saveAnnouncement()">发布公告</button>
+                    <div id="announce-actions" style="display:flex; gap:10px; margin-top:10px;">
+                        <button id="btn-save-announce" class="tab-btn active" style="flex:1;" onclick="saveAnnouncement()">发布公告</button>
+                        <button id="btn-cancel-announce" class="tab-btn" style="flex:1; display:none;" onclick="cancelEditAnnounce()">取消修改</button>
+                    </div>
                 </div>
                 <hr style="border:0; border-top:1px solid var(--glass-border); margin:15px 0;">
                 <div style="max-height: 200px; overflow-y: auto;">
@@ -2460,7 +2445,8 @@ const openAdminHub = async () => {
                                     <td>${a.type}</td>
                                     <td>${a.status}</td>
                                     <td>
-                                        <button class="action-link" onclick="deleteAnnouncement(${a.id})">删除</button>
+                                        <button class="action-link" onclick="editAnnouncement(${JSON.stringify(a).replace(/"/g, '&quot;')})">修改</button>
+                                        <button class="action-link danger" style="margin-left:8px;" onclick="deleteAnnouncement(${a.id})">删除</button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -2488,7 +2474,7 @@ window.generateInvites = async (count) => {
         });
         if (res.ok) {
             showToast(`成功生成 ${count} 个邀请码`);
-            openAdminHub();
+            openAdminHub('invites');
         }
     } catch (e) { showToast("生成失败", "#e74c3c"); }
 };
@@ -2503,7 +2489,7 @@ window.deleteInvite = async (code) => {
         });
         if (res.ok) {
             showToast("删除成功");
-            openAdminHub();
+            openAdminHub('invites');
         }
     } catch (e) { showToast("删除失败", "#e74c3c"); }
 };
@@ -2522,7 +2508,7 @@ window.updateUserAdmin = async (userId, payload) => {
         const data = await res.json();
         if (res.ok) {
             showToast("操作成功");
-            openAdminHub();
+            openAdminHub('users');
         } else {
             showToast(data.error || "操作失败", "#e74c3c");
         }
@@ -2530,7 +2516,9 @@ window.updateUserAdmin = async (userId, payload) => {
 };
 
 window.saveAnnouncement = async () => {
+    const isEdit = !!currentEditingAnnounceId;
     const payload = {
+        id: currentEditingAnnounceId,
         title: document.getElementById('announce-title').value.trim(),
         content: document.getElementById('announce-content').value.trim(),
         type: document.getElementById('announce-type').value,
@@ -2542,17 +2530,23 @@ window.saveAnnouncement = async () => {
 
     try {
         const res = await fetch('/api/admin/announcements', {
-            method: 'POST',
+            method: isEdit ? 'PATCH' : 'POST',
             headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         if (res.ok) {
-            showToast("公告已发布");
-            openAdminHub();
+            showToast(isEdit ? "公告已更新" : "公告已发布");
+            // 重置状态与表单
+            if (typeof cancelEditAnnounce === 'function') cancelEditAnnounce();
+            // 刷新列表
+            openAdminHub('announcements');
             // Task 6.6: 即时刷新前端公告状态
             initAnnouncements();
+        } else {
+            const err = await res.json();
+            showToast(err.error || "操作失败", "#e74c3c");
         }
-    } catch (e) { showToast("发布失败", "#e74c3c"); }
+    } catch (e) { showToast("操作失败", "#e74c3c"); }
 };
 
 window.deleteAnnouncement = async (id) => {
@@ -2565,9 +2559,47 @@ window.deleteAnnouncement = async (id) => {
         });
         if (res.ok) {
             showToast("已删除");
-            openAdminHub();
+            openAdminHub('announcements');
         }
     } catch (e) { showToast("删除失败", "#e74c3c"); }
+};
+
+window.editAnnouncement = (a) => {
+    currentEditingAnnounceId = a.id;
+    document.getElementById('announce-title').value = a.title;
+    document.getElementById('announce-content').value = a.content;
+    document.getElementById('announce-type').value = a.type;
+    document.getElementById('announce-top').checked = a.is_top === 1;
+    
+    if (a.expire_at) {
+        // 将数据库时间格式转换为 datetime-local 接受的格式 (YYYY-MM-DDTHH:MM)
+        const date = new Date(a.expire_at);
+        const isoStr = new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+        document.getElementById('announce-expire').value = isoStr;
+    } else {
+        document.getElementById('announce-expire').value = '';
+    }
+
+    // UI 状态切换
+    document.getElementById('btn-save-announce').innerText = "保存修改";
+    document.getElementById('btn-save-announce').classList.add('warning-btn'); // 提示是修改操作
+    document.getElementById('btn-cancel-announce').style.display = 'block';
+    
+    // 平滑滚动到顶部表单
+    document.querySelector('.admin-announce-editor').scrollIntoView({ behavior: 'smooth' });
+};
+
+window.cancelEditAnnounce = () => {
+    currentEditingAnnounceId = null;
+    document.getElementById('announce-title').value = '';
+    document.getElementById('announce-content').value = '';
+    document.getElementById('announce-type').value = 'quiet';
+    document.getElementById('announce-expire').value = '';
+    document.getElementById('announce-top').checked = false;
+
+    document.getElementById('btn-save-announce').innerText = "发布公告";
+    document.getElementById('btn-save-announce').classList.remove('warning-btn');
+    document.getElementById('btn-cancel-announce').style.display = 'none';
 };
 
 window.formatMonacoJson = () => {
@@ -2605,13 +2637,13 @@ window.toggleUserStatus = async (userId, currentStatus) => {
         });
         if (res.ok) {
             showToast("状态更新成功");
-            openAdminHub(); // 刷新
+            openAdminHub('users'); // 刷新并停留在用户管理
         }
     } catch (e) { showToast("操作失败", "#e74c3c"); }
 };
 
 // Task 6.8: 公告中心交互逻辑
-window.openNoticeCenter = async () => {
+window.openNoticeCenter = async (targetId = null) => {
     // Task 9.6: 互斥显示
     closeAllModals();
 
@@ -2666,9 +2698,11 @@ window.openNoticeCenter = async () => {
             <div class="notice-list-container">
                 ${announcements.map(a => {
                     const isRead = a.is_read || localStorage.getItem(`read_notice_${a.id}`) === 'true';
+                    // 如果是目标 ID，则强制显示（即使开启了隐藏已读）
+                    const forceShow = targetId && targetId == a.id;
                     return `
-                        <div class="notice-list-item ${a.is_top ? 'is-top' : ''} ${isRead ? 'is-read' : 'is-unread'} ${hideRead && isRead ? 'hide-read' : ''}" 
-                             data-id="${a.id}" onclick="toggleNotice(this, '${a.id}')">
+                        <div class="notice-list-item ${a.is_top ? 'is-top' : ''} ${isRead ? 'is-read' : 'is-unread'} ${hideRead && isRead && !forceShow ? 'hide-read' : ''}" 
+                             id="notice-item-${a.id}" data-id="${a.id}" onclick="toggleNotice(this, '${a.id}')">
                             <div class="notice-item-header">
                                 <span class="notice-item-title">
                                     ${a.is_top ? '<span class="notice-badge badge-top">置顶</span>' : ''}
@@ -2684,6 +2718,17 @@ window.openNoticeCenter = async () => {
                 }).join('')}
             </div>
         `;
+
+        // 处理 targetId 自动展开和滚动
+        if (targetId) {
+            setTimeout(() => {
+                const targetEl = document.getElementById(`notice-item-${targetId}`);
+                if (targetEl) {
+                    toggleNotice(targetEl, targetId);
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 100);
+        }
     };
 
     try {
@@ -2806,6 +2851,7 @@ window.saveSiteConfig = async () => {
         if (res.ok) {
             showToast("全站配置已更新，正在应用...");
             initSiteConfig();
+            openAdminHub('config');
         }
     } catch (e) { showToast("保存失败", "#e74c3c"); }
 };
@@ -3081,8 +3127,22 @@ const initGlobalEvents = () => {
         
         // 2. 全键盘全域空间导航 (Task 30.1 - Grid-Agnostic)
         if (!isInput && ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
-            // 获取全域可聚焦元素池 (磁贴 + 侧边栏项 + 禅意菜单)
-            const focusableSelectors = '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item';
+            // Task 31.2: 禅意静默态唤醒逻辑
+            if (appData.settings?.zenMode && document.body.classList.contains('zen-silent')) {
+                wakeUpNavigation();
+                // 唤醒后延迟一瞬待 DOM 状态更新（消除 opacity:0 带来的干扰）
+                setTimeout(() => {
+                    document.dispatchEvent(new KeyboardEvent('keydown', { key: e.key }));
+                }, 50);
+                return;
+            }
+
+            // Task 32.1: 场景感知的可聚焦元素池过滤器
+            const isZen = appData.settings?.zenMode === true;
+            const focusableSelectors = isZen 
+                ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item' 
+                : '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item, .notice-center-btn, .sidebar-pin-btn';
+            
             const pool = Array.from(document.querySelectorAll(focusableSelectors))
                         .filter(el => {
                             const rect = el.getBoundingClientRect();
@@ -3161,6 +3221,29 @@ const initGlobalEvents = () => {
                 bestMatch.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
             return;
+        }
+
+        // Task 33.3: 处理全局 Enter/Space 激活代理
+        if (!isInput && (key === 'enter' || key === ' ')) {
+            const active = document.activeElement;
+            const isZen = appData.settings?.zenMode === true;
+            const focusableSelectors = isZen 
+                ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item' 
+                : '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item, .notice-center-btn, .sidebar-pin-btn';
+            
+            const pool = Array.from(document.querySelectorAll(focusableSelectors));
+            
+            if (pool.includes(active)) {
+                // 如果是 div 实现的自定义按钮，手动触发点击
+                if (active.tagName === 'DIV') {
+                    e.preventDefault();
+                    active.click();
+                    
+                    // 增加瞬间缩放反馈
+                    active.style.transform = 'scale(0.95)';
+                    setTimeout(() => active.style.transform = '', 100);
+                }
+            }
         }
 
         // 3. Ctrl+B 视图调度 (核心快捷键 - Task 11.3/15.2 对齐)

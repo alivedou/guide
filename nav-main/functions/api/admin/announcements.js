@@ -51,6 +51,36 @@ export async function onRequestPost(context) {
   }
 }
 
+export async function onRequestPatch(context) {
+  const { request, env } = context;
+  const admin = await getAuthContext(request, env);
+  
+  if (admin.role !== 'admin' && admin.role !== 'super_user') {
+    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+  }
+
+  try {
+    const { id, title, content, type, is_top, expire_at } = await request.json();
+    if (!id) return new Response(JSON.stringify({ error: "Missing ID" }), { status: 400 });
+
+    await env.DB.prepare('UPDATE announcements SET title = ?, content = ?, type = ?, is_top = ?, expire_at = ? WHERE id = ?')
+      .bind(title, content, type, is_top ? 1 : 0, expire_at || null, id)
+      .run();
+
+    // Task 6.6: 更新全局公告版本号 (KV)
+    await env.nav.put('announcements_last_update', Date.now().toString());
+
+    // 记录审计日志
+    await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+      .bind(admin.id, 'UPDATE_ANNOUNCEMENT', `Updated announcement ID: ${id}, Title: ${title}`, request.headers.get("cf-connecting-ip") || "unknown")
+      .run();
+
+    return new Response(JSON.stringify({ success: true }));
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+  }
+}
+
 export async function onRequestDelete(context) {
   const { request, env } = context;
   const admin = await getAuthContext(request, env);

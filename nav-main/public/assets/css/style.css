@@ -785,11 +785,11 @@ body.zen-active.zen-silent .sidebar {
 .zen-horizon {
     display: none;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start; /* 统一左对齐 */
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 20px;
+    padding: 0 30px; /* 增加内边距，提供更多呼吸感 */
     z-index: 10;
     transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -809,7 +809,7 @@ body.zen-active:not(.zen-silent) .zen-horizon {
     margin-bottom: 25px;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start; /* 同步左对齐 */
 }
 
 .zen-freq-title {
@@ -825,7 +825,7 @@ body.zen-active:not(.zen-silent) .zen-horizon {
     display: flex;
     gap: 15px;
     overflow-x: auto;
-    padding: 5px;
+    padding: 5px 0; /* 取消左侧偏移，确保对齐基准线 */
     scrollbar-width: none;
 }
 
@@ -868,7 +868,7 @@ body.zen-active:not(.zen-silent) .zen-horizon {
     white-space: nowrap;
     width: 100%;
     gap: 10px;
-    padding: 10px 5px;
+    padding: 10px 0; /* 取消水平 padding，依靠父级 zen-horizon 的 padding 对齐 */
     margin-bottom: 20px;
     scrollbar-width: none; /* Firefox */
     -webkit-overflow-scrolling: touch; /* iOS 滚动丝滑 */
@@ -1078,17 +1078,22 @@ body.is-searching .grid-container {
     transition: all 0.4s ease;
 }
 
-/* 焦点环增强 (Task 2.5.3 & 30.2) */
+/* 焦点环增强 (Task 2.5.3 & 30.2 & 31.3) */
 .card:focus-visible,
 .sidebar-nav-item:focus-visible,
 .zen-menu-item:focus-visible,
-.zen-freq-item:focus-visible {
+.zen-freq-item:focus-visible,
+.notice-center-btn:focus-visible,
+.sidebar-pin-btn:focus-visible {
     outline: 3px solid var(--primary);
     outline-offset: 4px;
-    box-shadow: 0 0 20px var(--primary);
+    box-shadow: 0 0 25px var(--primary);
     animation: focus-pulse 1.5s infinite;
-    z-index: 50; /* 确保高亮不被遮挡 */
+    z-index: 50; 
     position: relative;
+    /* Task 31.3: 确保在禅意模式下聚焦即唤醒视觉 */
+    opacity: 1 !important;
+    visibility: visible !important;
 }
 
 @keyframes focus-pulse {
@@ -1681,6 +1686,12 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
     color: white;
     border-color: var(--primary);
     transform: scale(1.05);
+}
+
+.tab-btn.active.warning-btn {
+    background: #f39c12;
+    border-color: #e67e22;
+    box-shadow: 0 4px 15px rgba(230, 126, 34, 0.4);
 }
 
 .tab-btn.hidden-item {
@@ -3469,6 +3480,25 @@ body.zen-active .quick-nav-group {
     transform: translateY(30px);
 }
 
+/* Task 33.1: 禅意模式下统一容器宽度与对齐 */
+body.zen-active:not(.zen-silent) .grid-container {
+    max-width: 1200px !important; 
+    margin: 0 auto !important;
+    padding: 0 30px 40px !important; /* 与 zen-horizon 的 padding: 0 30px 一致 */
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+body.zen-active:not(.zen-silent) .category-section-title {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 8px 20px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
 /* 确保侧边栏在显式打开时，无论是否在禅意模式都必须可见 */
 body.zen-active .sidebar.open {
     opacity: 1 !important;
@@ -3784,6 +3814,7 @@ body.light-theme .icon-btn-action {
     z-index: 1000;
     font-size: 13px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: all 0.3s ease;
 }
 
 .banner-content {
@@ -3793,9 +3824,46 @@ body.light-theme .icon-btn-action {
     gap: 12px;
     max-width: 1200px;
     margin: 0 auto;
+    cursor: pointer;
 }
 
-.banner-content button {
+.banner-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+@media (max-width: 600px) {
+    .important-banner {
+        font-size: 12px;
+        padding: 8px 10px;
+    }
+    .banner-more span {
+        display: none; /* 极窄屏幕隐藏“查看更多”文字，仅留箭头 */
+    }
+    .banner-close {
+        padding: 2px 6px;
+    }
+}
+
+.banner-more {
+    font-size: 11px;
+    background: rgba(255,255,255,0.15);
+    padding: 2px 8px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    transition: background 0.2s;
+}
+
+.banner-content:hover .banner-more {
+    background: rgba(255,255,255,0.3);
+}
+
+.banner-close {
     background: rgba(255,255,255,0.2);
     border: none;
     color: white;
@@ -3803,6 +3871,7 @@ body.light-theme .icon-btn-action {
     border-radius: 4px;
     cursor: pointer;
     font-size: 11px;
+    margin-left: 10px;
 }
 
 .notice-center-btn {
@@ -3961,9 +4030,22 @@ body.light-theme .notice-item {
 .action-link {
     background: none;
     border: none;
-    color: var(--accent);
+    color: var(--primary);
     cursor: pointer;
-    text-decoration: underline;
+    font-size: 12px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.action-link:hover {
+    background: rgba(57, 157, 255, 0.1);
+    text-decoration: none;
+}
+
+.action-link.danger:hover {
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.1);
 }
 
 .form-group {
