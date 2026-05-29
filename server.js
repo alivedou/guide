@@ -45,9 +45,19 @@ try {
 
     const annInfo = db.prepare("PRAGMA table_info(announcements)").all();
     const annCols = annInfo.map(c => c.name);
-    if (annCols.length > 0 && !annCols.includes('expire_at')) {
-        console.log('[DB] Patching: Adding expire_at column to announcements table');
-        db.exec("ALTER TABLE announcements ADD COLUMN expire_at DATETIME");
+    if (annCols.length > 0) {
+        if (!annCols.includes('expire_at')) {
+            console.log('[DB] Patching: Adding expire_at column to announcements table');
+            db.exec("ALTER TABLE announcements ADD COLUMN expire_at DATETIME");
+        }
+        if (!annCols.includes('status')) {
+            console.log('[DB] Patching: Adding status column to announcements table');
+            db.exec("ALTER TABLE announcements ADD COLUMN status TEXT DEFAULT 'published'");
+        }
+        if (!annCols.includes('type')) {
+            console.log('[DB] Patching: Adding type column to announcements table');
+            db.exec("ALTER TABLE announcements ADD COLUMN type TEXT DEFAULT 'quiet'");
+        }
     }
 } catch (e) {
     console.warn('[DB] Auto-patch skipped:', e.message);
@@ -467,35 +477,111 @@ app.post('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
 
 // ====== Task 4.2: 公告系统 (Broadcast) ======
 
-app.get('/api/announcements', (req, res) => {
-    const list = db.prepare('SELECT id, title, content, type, is_top, created_at FROM announcements WHERE status = "published" AND (expire_at IS NULL OR expire_at > CURRENT_TIMESTAMP) ORDER BY is_top DESC, created_at DESC LIMIT 5').all();
-    res.json({ success: true, announcements: list });
+app.get('/api/announcements', authenticate, (req, res) => {
+    try {
+        const userId = req.user.id || 'guest';
+        
+        // 增强版 SQL：通过 LEFT JOIN 检查用户的已读记录 (Task 6.23)
+        const list = db.prepare(`
+            SELECT a.id, a.title, a.content, a.type, a.is_top, a.created_at,
+                   CASE WHEN r.user_id IS NOT NULL THEN 1 ELSE 0 END as is_read
+            FROM announcements a
+            LEFT JOIN announcement_read_states r ON a.id = r.announcement_id AND r.user_id = ?
+            WHERE a.status = 'published' 
+            AND (a.expire_at IS NULL OR datetime(replace(a.expire_at, 'T', ' ')) > datetime('now')) 
+            ORDER BY a.is_top DESC, a.created_at DESC 
+            LIMIT 10
+        `).all(userId);
+        
+        const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+        let lastUpdate = '0';
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            lastUpdate = config.announcements_last_update || '0';
+        }
+
+        res.json({ 
+            success: true, 
+            announcements: list,
+            lastUpdate: lastUpdate
+        });
+    } catch (e) {
+        console.error('[API] Announcements error:', e.message);
+        res.status(500).json({ error: '获取公告失败', details: e.message });
+    }
+});
+
+// Task 6.23: 标记公告已读接口
+app.post('/api/announcements/read', authenticate, (req, res) => {
+    const { ids } = req.body; // 兼容单条 [id] 或多条 [id1, id2]
+    const userId = req.user.id;
+    if (userId === 'guest') return res.json({ success: true }); // 游客不记录持久化状态
+
+    try {
+        const insert = db.prepare('INSERT OR IGNORE INTO announcement_read_states (user_id, announcement_id) VALUES (?, ?)');
+        db.transaction(() => {
+            ids.forEach(id => insert.run(userId, id));
+        })();
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: '标记已读失败', details: e.message });
+    }
 });
 
 app.get('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
-    const list = db.prepare('SELECT * FROM announcements ORDER BY is_top DESC, created_at DESC').all();
-    res.json({ success: true, announcements: list });
+    try {
+        const list = db.prepare('SELECT * FROM announcements ORDER BY is_top DESC, created_at DESC').all();
+        res.json({ success: true, announcements: list });
+    } catch (e) {
+        console.error('[API] Admin Announcements Get Error:', e.message);
+        res.status(500).json({ error: '获取后台公告列表失败', details: e.message });
+    }
 });
 
 app.post('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
     const { title, content, type, is_top, expire_at } = req.body;
-    db.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(req.user.id, title, content, type, is_top ? 1 : 0, expire_at || null);
-    
-    db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .run(req.user.id, 'CREATE_ANNOUNCEMENT', `Created announcement: ${title}`, req.ip);
+    try {
+        db.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(req.user.id, title, content, type, is_top ? 1 : 0, expire_at || null);
+        
+        // Task 6.20: 更新本地 KV 中的公告版本号
+        const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+        let config = {};
+        if (fs.existsSync(configPath)) {
+            config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        }
+        config.announcements_last_update = Date.now().toString();
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-    res.json({ success: true });
+        db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+          .run(req.user.id, 'CREATE_ANNOUNCEMENT', `Created announcement: ${title}`, req.ip);
+
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: '创建公告失败', details: e.message });
+    }
 });
 
 app.delete('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
     const { id } = req.body;
-    db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
+    try {
+        db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
 
-    db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .run(req.user.id, 'DELETE_ANNOUNCEMENT', `Deleted announcement ID: ${id}`, req.ip);
+        // Task 6.20: 更新本地 KV 中的公告版本号
+        const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            config.announcements_last_update = Date.now().toString();
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+        }
 
-    res.json({ success: true });
+        db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+          .run(req.user.id, 'DELETE_ANNOUNCEMENT', `Deleted announcement ID: ${id}`, req.ip);
+
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: '删除公告失败', details: e.message });
+    }
 });
 
 // ====== 4.4 页面数据 API ======

@@ -58,13 +58,20 @@
             <div class="sidebar-header">
                 <span class="sidebar-logo">🌐</span>
                 <span class="sidebar-title">个人导航</span>
+                <button id="btn-notice-center" class="notice-center-btn" title="公告中心">
+                    <i class="ri-notification-3-line"></i>
+                    <span class="notice-dot"></span>
+                </button>
                 <button id="btn-sidebar-pin" class="sidebar-pin-btn" title="固定/取消固定侧边栏">
                     <i class="ri-pushpin-2-line"></i>
                 </button>
             </div>
             <div id="sidebar-user-section" class="sidebar-user-section"></div>
             <nav id="sidebar-nav" class="sidebar-nav"></nav>
+            <!-- Task 6.5: 专用公告挂载点，防止被 renderTools 覆盖 -->
+            <div id="sidebar-announce-slot" class="sidebar-announce-slot"></div>
             <div id="sidebar-footer" class="sidebar-footer">
+                <div id="sidebar-announce-slot"></div>
                 <div id="sidebar-admin-actions" class="sidebar-admin-section"></div>
             </div>
         </aside>
@@ -122,6 +129,13 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- 导航视界 (Navigation Horizon) - 禅意模式专用 -->
+                <div id="zen-horizon" class="zen-horizon">
+                    <div id="zen-frequent-sites" class="zen-frequent-container"></div>
+                    <div id="zen-nav-menu" class="zen-nav-menu"></div>
+                </div>
+
                 <div id="grid-container" class="grid-container"></div>
                 <!-- 沉浸模式展开按钮 -->
                 <div id="zen-expand-btn" class="zen-expand-btn" style="display: none;">

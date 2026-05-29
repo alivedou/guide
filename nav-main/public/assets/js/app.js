@@ -47,11 +47,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. 异步获取云端配置与公告
     initSiteConfig();
-    initAnnouncements();
-    init(); // 核心数据加载
+    init(); // 核心数据加载 (内部会触发 initAnnouncements)
     
     checkSWUpdate();
+    
+    // Task 6.6: 初始化公告更新监听
+    initAnnouncementsWatcher();
 });
+
+// Task 6.6: 公告更新监听引擎
+const initAnnouncementsWatcher = () => {
+    // 1. 页面可见性变化检测 (切回标签页时触发)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            checkAnnouncementsUpdate();
+        }
+    });
+
+    // 2. 定时心跳轮询 (每 5 分钟检查一次)
+    setInterval(checkAnnouncementsUpdate, 300000);
+};
+
+const checkAnnouncementsUpdate = async () => {
+    try {
+        const res = await fetch('/api/announcements');
+        if (!res.ok) return;
+        const { lastUpdate } = await res.json();
+        
+        const localVersion = localStorage.getItem('nav_announcements_version');
+        if (lastUpdate && lastUpdate !== localVersion) {
+            console.log('[Notice] New version detected, refreshing...');
+            // 如果发现版本更新，重新调用初始化逻辑（内部会处理已读状态）
+            await initAnnouncements();
+        }
+    } catch (e) { console.warn('[Notice] Update check failed'); }
+};
 
 // Task 4.2: PWA 更新感知
 const checkSWUpdate = async () => {
@@ -106,20 +136,78 @@ const initSiteConfig = async () => {
 };
 
 // Task 4.2: 公告系统
+let cachedAnnouncements = []; // 缓存公告列表用于状态同步
+
+const refreshNoticeBadge = () => {
+    try {
+        if (!Array.isArray(cachedAnnouncements)) return;
+        
+        const unreadCount = cachedAnnouncements.filter(notice => {
+            try {
+                // Task 6.23: 优先使用后端返回的 is_read 状态，兼容 localStorage
+                if (notice.is_read !== undefined) return !notice.is_read;
+                return !localStorage.getItem(`read_notice_${notice.id}`);
+            } catch (e) { return true; }
+        }).length;
+        
+        // 1. 侧边栏红点
+        const noticeBtn = document.getElementById('btn-notice-center');
+        if (noticeBtn) {
+            const dot = noticeBtn.querySelector('.notice-dot');
+            if (dot) dot.classList.toggle('active', unreadCount > 0);
+        }
+
+        // 2. 禅意模式同步
+        const isZen = document.body.classList.contains('zen-active');
+        const searchWrapper = document.getElementById('search-wrapper');
+        if (isZen && searchWrapper) {
+            // 移除旧的提醒点
+            document.querySelectorAll('.zen-notice-dot').forEach(el => el.remove());
+            if (unreadCount > 0) {
+                const dot = document.createElement('div');
+                dot.className = 'zen-notice-dot';
+                dot.innerHTML = '<i class="ri-notification-3-line"></i>';
+                dot.title = `您有 ${unreadCount} 条未读公告`;
+                dot.onclick = (e) => {
+                    e.stopPropagation();
+                    if (typeof openNoticeCenter === 'function') openNoticeCenter();
+                };
+                searchWrapper.appendChild(dot);
+            }
+        } else {
+            document.querySelectorAll('.zen-notice-dot').forEach(el => el.remove());
+        }
+    } catch (e) {
+        console.warn('[Notice] Badge refresh failed:', e);
+    }
+};
+
 const initAnnouncements = async () => {
     try {
         const res = await fetch('/api/announcements');
         if (!res.ok) return;
-        const { announcements } = await res.json();
+        const { announcements, lastUpdate } = await res.json();
+        
+        cachedAnnouncements = announcements || [];
+        
+        // Task 6.6: 记录本次加载的版本号
+        if (lastUpdate) {
+            localStorage.setItem('nav_announcements_version', lastUpdate);
+        }
+
+        refreshNoticeBadge();
+
         if (!announcements || announcements.length === 0) return;
 
         announcements.forEach(notice => {
-            const hasRead = localStorage.getItem(`read_notice_${notice.id}`);
+            // Task 6.23: 状态判断逻辑升级
+            const hasRead = notice.is_read || localStorage.getItem(`read_notice_${notice.id}`);
             if (hasRead) return;
 
             if (notice.type === 'important') {
                 renderImportantNotice(notice);
             } else {
+                // renderQuietNotice 内部逻辑由 refreshNoticeBadge 接管部分 UI
                 renderQuietNotice(notice);
             }
         });
@@ -133,7 +221,7 @@ const renderImportantNotice = (notice) => {
         <div class="banner-content">
             <i class="ri-error-warning-line"></i>
             <span>${notice.content}</span>
-            <button onclick="this.parentElement.parentElement.remove(); localStorage.setItem('read_notice_${notice.id}', 'true')">不再提示</button>
+            <button onclick="this.parentElement.parentElement.remove(); localStorage.setItem('read_notice_${notice.id}', 'true'); refreshNoticeBadge();">不再提示</button>
         </div>
     `;
     document.body.prepend(banner);
@@ -141,19 +229,24 @@ const renderImportantNotice = (notice) => {
 
 const renderQuietNotice = (notice) => {
     showToast(`新公告: ${notice.title} (点击侧边栏查看)`, "#3498db");
-    const adminArea = document.getElementById('sidebar-admin-actions');
-    if (adminArea && !document.querySelector('.notice-bell')) {
+    
+    // 侧边栏挂载（仅挂载到 slot，红点由 refreshNoticeBadge 处理）
+    const announceSlot = document.getElementById('sidebar-announce-slot');
+    if (announceSlot && !document.querySelector(`.notice-bell[data-id="${notice.id}"]`)) {
         const bell = document.createElement('div');
         bell.className = 'notice-bell';
+        bell.setAttribute('data-id', notice.id);
         bell.innerHTML = '<i class="ri-notification-3-line"></i><span class="bell-dot"></span>';
         bell.onclick = () => {
             alert(`【公告】${notice.title}\n\n${notice.content}`);
             bell.remove();
-            localStorage.setItem('read_notice_${notice.id}', 'true');
+            localStorage.setItem(`read_notice_${notice.id}`, 'true');
+            refreshNoticeBadge();
         };
-        adminArea.prepend(bell);
+        announceSlot.prepend(bell);
     }
 };
+
 const showToast = (m, c = "#27ae60") => {
     const t = document.getElementById('toast');
     if (!t) return;
@@ -296,10 +389,18 @@ const updateStyles = () => {
         document.body.classList.remove('zen-silent');
     }
 
+    // Task 6.13: 容错调用公告刷新，确保不阻塞主样式更新
+    try {
+        if (typeof refreshNoticeBadge === 'function') refreshNoticeBadge();
+    } catch (e) { console.warn('[Notice] UI sync failed'); }
+
     const bg = appData.settings?.bgUrl;
     if (bg) {
         document.body.style.background = bg.startsWith('http') ? `url(${bg}) center/cover fixed` : bg;
     }
+
+    // Task 6.3: 同步响应式侧边栏状态
+    if (window.autoAdjustSidebar) window.autoAdjustSidebar();
 };
 
 // Task 4.2: 视觉实验室控制
@@ -659,6 +760,8 @@ const init = async (forceRender = false) => {
         renderTools();
         updateStyles();
         toggleSkeleton(false);
+        // Task 6.3: 在工具栏渲染完成后再初始化公告，防止铃铛图标被覆盖
+        initAnnouncements();
     }
 };
 
@@ -701,6 +804,13 @@ const renderNav = () => {
 
         sidebarNav.innerHTML = '';
         container.innerHTML = '';
+        
+        // 清空并隐藏禅意视界容器 (Task 5.6)
+        const zenHorizon = document.getElementById('zen-horizon');
+        const zenMenu = document.getElementById('zen-nav-menu');
+        const zenFreq = document.getElementById('zen-frequent-sites');
+        if (zenMenu) zenMenu.innerHTML = '';
+        if (zenFreq) zenFreq.innerHTML = '';
 
         let cats = isAdmin ? [...appData.categories] : appData.categories.filter(c => !c.hidden);
         if (freqIds.length > 0 && appData.settings?.showFrequent !== false) {
@@ -711,6 +821,51 @@ const renderNav = () => {
         const isValidActiveCat = cats.some(c => c.id === activeCatId);
         if (cats.length > 0 && (!activeCatId || !isValidActiveCat)) {
             activeCatId = cats[0].id;
+        }
+
+        // 渲染禅意模式下的横向菜单 (Task 5.7)
+        const isZen = appData.settings?.zenMode === true;
+        if (isZen && zenMenu) {
+            // 如果开启了常去网站，且有数据，在菜单上方渲染一个精简的常去图标栏 (Task 5.6)
+            if (appData.settings?.showFrequent !== false && freqIds.length > 0 && zenFreq) {
+                const freqItems = appData.items.filter(i => freqIds.includes(i.id)).slice(0, 10);
+                zenFreq.innerHTML = `<div class="zen-freq-title">常去网站</div><div class="zen-freq-list"></div>`;
+                const freqList = zenFreq.querySelector('.zen-freq-list');
+                freqItems.forEach((item, idx) => {
+                    const icon = document.createElement('div');
+                    icon.className = 'zen-freq-item';
+                    icon.style.animationDelay = `${idx * 0.05}s`; // T8: Stagger
+                    icon.innerHTML = item.icon?.startsWith('http') 
+                        ? `<img src="${item.icon}" title="${item.title}">` 
+                        : `<span class="emoji-icon" title="${item.title}">${item.icon || '🔗'}</span>`;
+                    icon.onclick = () => {
+                        recordClick(item.id);
+                        window.open(item.url, appData.settings?.openInNewTab ? '_blank' : '_self');
+                    };
+                    freqList.appendChild(icon);
+                });
+            }
+
+            cats.forEach((cat, idx) => {
+                const menuItem = document.createElement('div');
+                menuItem.className = `zen-menu-item ${activeCatId === cat.id ? 'active' : ''}`;
+                menuItem.style.animationDelay = `${(idx * 0.05) + 0.2}s`; // T8: Stagger
+                menuItem.innerHTML = `<span class="menu-icon">${cat.icon}</span><span class="menu-label">${cat.name}</span>`;
+                menuItem.onclick = () => {
+                    if (activeCatId === cat.id) return;
+                    activeCatId = cat.id;
+                    
+                    // 切换动画与重新渲染
+                    container.style.opacity = '0';
+                    container.style.transform = 'translateY(10px)';
+                    setTimeout(() => {
+                        renderNav();
+                        container.style.opacity = '1';
+                        container.style.transform = 'translateY(0)';
+                    }, 150);
+                };
+                zenMenu.appendChild(menuItem);
+            });
         }
 
         cats.forEach(cat => {
@@ -1054,13 +1209,22 @@ const renderTools = () => {
 
 // ==================== 6. 其他初始化 ====================
 const initThemeMode = () => {
-    document.body.classList.toggle('dark-theme', themeMode === 'dark');
-    document.body.classList.toggle('light-theme', themeMode === 'light');
+    const updateThemeClass = () => {
+        const isDark = themeMode === 'dark' || (themeMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.body.classList.toggle('dark-theme', isDark);
+        document.body.classList.toggle('light-theme', !isDark);
+        
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) {
+            meta.content = isDark ? '#111111' : '#f0f3f8';
+        }
+    };
+
+    updateThemeClass();
     
-    // 同步 PWA 状态栏颜色 (Task 5.1)
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) {
-        meta.content = themeMode === 'dark' ? '#111111' : '#f0f3f8';
+    // 监听系统主题变化
+    if (themeMode === 'auto') {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateThemeClass);
     }
 };
 
@@ -1077,9 +1241,49 @@ const initSidebar = () => {
     const t = document.getElementById('sidebar-toggle');
     const o = document.getElementById('sidebar-overlay');
     const pinBtn = document.getElementById('btn-sidebar-pin');
+    const noticeBtn = document.getElementById('btn-notice-center');
 
     if (t) t.onclick = () => toggleSidebar();
     if (o) o.onclick = () => toggleSidebar(false);
+    if (noticeBtn) noticeBtn.onclick = () => typeof openNoticeCenter === 'function' && openNoticeCenter();
+
+    // --- Task 6.3: JS 状态控制与“图钉”逻辑兼容 ---
+    window.autoAdjustSidebar = () => {
+        const width = window.innerWidth;
+        const isZen = appData.settings?.zenMode === true;
+        
+        // 禅意模式下强制不折叠（因为侧边栏通常是隐藏的）
+        if (isZen) {
+            document.body.classList.remove('sidebar-folded');
+            return;
+        }
+
+        if (width <= 768) {
+            // 移动端：移除折叠类，使用 transform 隐藏
+            document.body.classList.remove('sidebar-folded');
+        } else if (width <= 1024) {
+            // Tablet 端：根据图钉状态决定
+            document.body.classList.toggle('sidebar-folded', !isSidebarPinned);
+        } else {
+            // Desktop 端：根据图钉状态决定
+            document.body.classList.toggle('sidebar-folded', !isSidebarPinned);
+        }
+        
+        // 更新图钉按钮图标状态
+        if (pinBtn) {
+            const icon = pinBtn.querySelector('i');
+            if (icon) {
+                icon.className = isSidebarPinned ? 'ri-pushpin-2-fill' : 'ri-pushpin-2-line';
+            }
+        }
+    };
+
+    // 监听窗口缩放 (Task 6.3)
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(window.autoAdjustSidebar, 100);
+    });
 
     // Task 4.6.4: 移动端边缘滑动抽屉 (Swipe Engine)
     let touchStartX = 0;
@@ -1119,16 +1323,21 @@ const initSidebar = () => {
 
     // 图钉初始化 (Task 4.5.3)
     document.body.classList.toggle('sidebar-pinned', isSidebarPinned);
+    window.autoAdjustSidebar();
+
     if (pinBtn) {
         pinBtn.onclick = () => {
             isSidebarPinned = !isSidebarPinned;
             document.body.classList.toggle('sidebar-pinned', isSidebarPinned);
             localStorage.setItem('nav_sidebar_pinned', isSidebarPinned);
             
-            // 如果取消固定，自动关闭侧边栏
-            if (!isSidebarPinned) toggleSidebar(false);
+            // 重新校准布局
+            window.autoAdjustSidebar();
             
-            showToast(isSidebarPinned ? "侧边栏已固定" : "侧边栏已设为悬浮");
+            // 如果取消固定且是移动端，自动关闭侧边栏
+            if (!isSidebarPinned && window.innerWidth <= 768) toggleSidebar(false);
+            
+            showToast(isSidebarPinned ? "侧边栏已固定" : "侧边栏已设为自动折叠");
         };
     }
 };
@@ -1895,6 +2104,8 @@ window.saveAnnouncement = async () => {
         if (res.ok) {
             showToast("公告已发布");
             openAdminHub();
+            // Task 6.6: 即时刷新前端公告状态
+            initAnnouncements();
         }
     } catch (e) { showToast("发布失败", "#e74c3c"); }
 };
@@ -1952,6 +2163,172 @@ window.toggleUserStatus = async (userId, currentStatus) => {
             openAdminHub(); // 刷新
         }
     } catch (e) { showToast("操作失败", "#e74c3c"); }
+};
+
+// Task 6.8: 公告中心交互逻辑
+window.openNoticeCenter = async () => {
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    
+    if (!modal || !body) return;
+
+    title.innerText = "公告中心 (Notice Center)";
+    body.innerHTML = '<div style="text-align:center; padding:30px; opacity:0.6;">正在同步最新公示内容...</div>';
+    modal.style.display = 'flex';
+    confirmBtn.style.display = 'none';
+
+    const renderList = (announcements) => {
+        if (!announcements || announcements.length === 0) {
+            const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            body.innerHTML = `
+                <div class="empty-notice" style="text-align:center; padding:40px; opacity:0.6;">
+                    <i class="ri-inbox-line" style="font-size:32px; display:block; margin-bottom:10px;"></i>
+                    暂无公示中的公告
+                    ${isLocal ? `
+                        <div style="margin-top:20px; padding:12px; background:rgba(241,196,15,0.1); border:1px dashed #f1c40f; border-radius:8px; font-size:11px; color:#d35400;">
+                            <strong>👨‍💻 开发者提示 (Local Dev):</strong><br>
+                            本地 D1 数据库可能尚未同步或未添加公告。<br>
+                            请检查 <code>migrations/</code> 是否执行，或进入管理后台添加。
+                        </div>
+                    ` : ''}
+                </div>`;
+            return;
+        }
+
+        const unreadCount = announcements.filter(a => !(a.is_read || localStorage.getItem(`read_notice_${a.id}`))).length;
+        const hideRead = localStorage.getItem('nav_hide_read_announcements') === 'true';
+
+        body.innerHTML = `
+            <div class="notice-center-header">
+                <div class="notice-header-actions">
+                    <label class="toggle-hide-read">
+                        <input type="checkbox" ${hideRead ? 'checked' : ''} onchange="toggleHideRead(this.checked)"> 隐藏已读
+                    </label>
+                    ${unreadCount > 0 ? `<button class="btn-mark-all-read" onclick="markAllNoticesRead()">全部标记已读</button>` : ''}
+                </div>
+                <div style="font-size: 12px; opacity: 0.5;">共 ${announcements.length} 条公告</div>
+            </div>
+            <div class="notice-list-container">
+                ${announcements.map(a => {
+                    const isRead = a.is_read || localStorage.getItem(`read_notice_${a.id}`) === 'true';
+                    return `
+                        <div class="notice-list-item ${a.is_top ? 'is-top' : ''} ${isRead ? 'is-read' : 'is-unread'} ${hideRead && isRead ? 'hide-read' : ''}" 
+                             data-id="${a.id}" onclick="toggleNotice(this, '${a.id}')">
+                            <div class="notice-item-header">
+                                <span class="notice-item-title">
+                                    ${a.is_top ? '<span class="notice-badge badge-top">置顶</span>' : ''}
+                                    ${!isRead ? '<span class="notice-badge badge-new">NEW</span>' : ''}
+                                    <span class="title-text" style="margin-left: ${a.is_top || !isRead ? '8px' : '0'}">${a.title}</span>
+                                </span>
+                                <span class="notice-item-date">${new Date(a.created_at).toLocaleDateString()}</span>
+                                <i class="ri-arrow-down-s-line notice-item-arrow"></i>
+                            </div>
+                            <div class="notice-item-content">${a.content.replace(/\n/g, '<br>')}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    };
+
+    try {
+        const res = await fetch('/api/announcements', {
+            headers: sysToken ? { 'Authorization': `Bearer ${sysToken}` } : {}
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        
+        if (data && Array.isArray(data.announcements)) {
+            cachedAnnouncements = data.announcements;
+            renderList(cachedAnnouncements);
+        } else {
+            throw new Error('Invalid data format');
+        }
+    } catch (e) {
+        console.error('[Notice Center] Error:', e);
+        if (cachedAnnouncements && cachedAnnouncements.length > 0) {
+            showToast("使用本地缓存数据...", "#e67e22");
+            renderList(cachedAnnouncements);
+        } else {
+            body.innerHTML = `
+                <div class="error-text" style="text-align:center; padding:30px;">
+                    <i class="ri-wifi-off-line" style="font-size:32px; display:block; margin-bottom:10px; opacity:0.3;"></i>
+                    无法获取公告信息，请检查网络连接<br>
+                    <small style="opacity:0.5; font-size:11px;">Error: ${e.message}</small>
+                </div>`;
+        }
+    }
+};
+
+window.toggleNotice = async (el, id) => {
+    const isExpanded = el.classList.contains('is-expanded');
+    
+    // 折叠其他已展开的 (Accordion 模式)
+    document.querySelectorAll('.notice-list-item.is-expanded').forEach(item => {
+        if (item !== el) item.classList.remove('is-expanded');
+    });
+
+    el.classList.toggle('is-expanded');
+
+    // 如果是第一次展开且未读，标记为已读
+    const isUnread = el.classList.contains('is-unread');
+    if (!isExpanded && isUnread) {
+        el.classList.remove('is-unread');
+        el.classList.add('is-read');
+        const badge = el.querySelector('.badge-new');
+        if (badge) badge.remove();
+        
+        // 同步到后端和本地
+        localStorage.setItem(`read_notice_${id}`, 'true');
+        // 更新内存中的状态
+        const notice = cachedAnnouncements.find(a => a.id == id);
+        if (notice) notice.is_read = 1;
+        
+        refreshNoticeBadge();
+        
+        if (sysToken) {
+            try {
+                await fetch('/api/announcements/read', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${sysToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: [id] })
+                });
+            } catch (e) { console.warn('[Notice] Sync read state failed'); }
+        }
+    }
+};
+
+window.toggleHideRead = (checked) => {
+    localStorage.setItem('nav_hide_read_announcements', checked);
+    const items = document.querySelectorAll('.notice-list-item.is-read');
+    items.forEach(item => item.classList.toggle('hide-read', checked));
+};
+
+window.markAllNoticesRead = async () => {
+    if (!cachedAnnouncements.length) return;
+    
+    const unreadIds = cachedAnnouncements.filter(a => !(a.is_read || localStorage.getItem(`read_notice_${a.id}`))).map(a => a.id);
+    if (unreadIds.length === 0) return;
+
+    unreadIds.forEach(id => localStorage.setItem(`read_notice_${id}`, 'true'));
+    cachedAnnouncements.forEach(a => { if (unreadIds.includes(a.id)) a.is_read = 1; });
+    
+    showToast("已全部标记为已读");
+    refreshNoticeBadge();
+    
+    if (sysToken) {
+        try {
+            await fetch('/api/announcements/read', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${sysToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: unreadIds })
+            });
+        } catch (e) { console.warn('[Notice] Sync bulk read failed'); }
+    }
+    
+    openNoticeCenter(); // 刷新列表状态
 };
 
 window.saveSiteConfig = async () => {
@@ -2162,11 +2539,26 @@ const initGlobalEvents = () => {
         const deltaY = touchEndY - touchStartY;
         const deltaTime = Date.now() - touchStartTime;
 
-        // 1. Zen Mode 唤醒逻辑 (上滑唤醒)
-        if (document.body.classList.contains('zen-silent')) {
-            // 只要有明显的向上滑动且时间较短，即视为唤醒
-            if (deltaY < -50 && Math.abs(deltaX) < 40 && deltaTime < 300) {
-                wakeUpNavigation();
+        // 1. Zen Mode 唤醒与视图调度 (T9)
+        if (appData.settings?.zenMode) {
+            // A. 静默态上滑唤醒
+            if (document.body.classList.contains('zen-silent')) {
+                if (deltaY < -60 && Math.abs(deltaX) < 40 && deltaTime < 300) {
+                    wakeUpNavigation();
+                    return;
+                }
+            }
+            
+            // B. 需求：左向右拉拽式抽屉手势触发“视图调度” (等同于 Ctrl+B)
+            // 限制：仅在非静默态且非侧边栏区域触发，避免与侧边栏手势冲突
+            if (!document.body.classList.contains('zen-silent') && touchStartX < 50 && deltaX > 100 && Math.abs(deltaY) < 50) {
+                toggleZenMode(false); // 切回标准模式
+                return;
+            }
+        } else {
+            // C. 标准模式下左向右滑进入禅意模式 (视图调度)
+            if (touchStartX < 50 && deltaX > 100 && Math.abs(deltaY) < 50) {
+                toggleZenMode(true);
                 return;
             }
         }

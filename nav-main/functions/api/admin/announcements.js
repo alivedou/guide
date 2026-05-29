@@ -33,9 +33,12 @@ export async function onRequestPost(context) {
 
   try {
     const { title, content, type, is_top, expire_at } = await request.json();
-    await env.DB.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .bind(admin.id, title, content, type, is_top ? 1 : 0, expire_at || null)
+    await env.DB.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(admin.id, title, content, type, is_top ? 1 : 0, expire_at || null, 'published')
       .run();
+
+    // Task 6.6: 更新全局公告版本号 (KV)
+    await env.nav.put('announcements_last_update', Date.now().toString());
 
     // 记录审计日志
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
@@ -57,6 +60,9 @@ export async function onRequestDelete(context) {
   try {
     const { id } = await request.json();
     await env.DB.prepare('DELETE FROM announcements WHERE id = ?').bind(id).run();
+
+    // Task 6.6: 更新全局公告版本号 (KV)
+    await env.nav.put('announcements_last_update', Date.now().toString());
 
     // 记录审计日志
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
