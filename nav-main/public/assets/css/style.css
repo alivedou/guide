@@ -325,14 +325,16 @@ body.page-manage-active .sidebar-nav-item:hover .nav-actions {
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
-/* 页面管理激活态全局视觉增强 (Task 9.1) */
+/* 页面管理激活态全局视觉增强 (Task 9.1 & 9.3) */
 body.page-manage-active .sidebar {
     border-right: 2px solid var(--primary);
+    box-shadow: 4px 0 15px rgba(var(--primary-rgb), 0.1);
 }
 
 body.page-manage-active #grid-container {
     padding-top: 60px; /* 为顶部工具栏留出空间 */
     transition: padding 0.3s ease;
+    filter: saturate(0.9); /* 轻微降低饱和度，突出编辑项 */
 }
 
 body.page-manage-active .card:hover {
@@ -498,16 +500,17 @@ body.page-manage-active .sidebar-nav-item {
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
-/* Task 10.7.1: 管理模式图标旋转动效 */
+/* Task 10.7.1: 管理模式图标静止高亮，保持简洁 (Task 9.3 优化) */
 body.page-manage-active .toolbar-item.active .nav-icon i {
     display: inline-block;
-    animation: icon-rotate 2s linear infinite;
     color: var(--primary);
+    filter: drop-shadow(0 0 5px var(--primary));
+    transform: scale(1.1);
 }
 
+/* 移除之前的旋转动画 */
 @keyframes icon-rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    /* 保持定义以防其他地方引用，但此处不再调用 */
 }
 
 body.light-theme.page-manage-active .sidebar-nav-item {
@@ -1851,8 +1854,32 @@ body.light-theme .sidebar-admin-toolbar {
 }
 
 .toolbar-item.active {
-    background: var(--primary) !important;
-    color: white !important;
+    background: transparent !important;
+    color: var(--primary) !important;
+}
+
+/* 侧边指示器 (Task 9.1) */
+.toolbar-item.active::before {
+    content: '';
+    position: absolute;
+    left: -2px;
+    top: 20%;
+    height: 60%;
+    width: 3px;
+    background: var(--primary);
+    border-radius: 0 4px 4px 0;
+    box-shadow: 0 0 10px var(--primary);
+}
+
+.toolbar-item .nav-label {
+    font-size: 12px;
+    font-weight: 500;
+    margin-left: 6px;
+    display: none; /* 默认隐藏，仅在特定模式下或hover展示？不，用户要求“仅显示页面管理四个字” */
+}
+
+body.admin-mode .toolbar-item.active .nav-label {
+    display: block;
 }
 
 /* 侧边栏内管理工具子菜单微调 */
@@ -2278,13 +2305,25 @@ body.page-manage-active .card .icon-wrapper:active {
 body.page-manage-active .card .icon-wrapper::after {
     content: '⠿';
     position: absolute;
-    top: -10px;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
-    font-size: 14px;
+    transform: translate(-50%, -50%);
+    font-size: 20px;
     color: var(--primary);
-    opacity: 0.8;
+    opacity: 0;
+    transition: opacity 0.3s ease;
     pointer-events: none;
+    background: rgba(var(--primary-rgb), 0.1);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+body.page-manage-active .card:hover .icon-wrapper::after {
+    opacity: 0.8;
 }
 
 .batch-info {
@@ -3021,19 +3060,25 @@ body.view-style-2 .card[data-tooltip]::before {
     position: relative;
     z-index: 900;
     scroll-margin-top: 50px;
+    /* 统一过渡曲线 (Task 10.2) */
+    transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 .search-wrapper {
-    background: rgba(0, 0, 0, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 24px;
-    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.4);
+    background: rgba(15, 25, 35, 0.75); /* 统一背景深度 */
+    border: 1px solid rgba(255, 255, 255, 0.18); /* 统一边框透明度 */
+    border-radius: 28px; /* 统一圆角：稍微调大一点更显平滑 */
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.35); /* 统一阴影参数 */
     backdrop-filter: blur(25px);
     -webkit-backdrop-filter: blur(25px);
     transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
     position: relative;
     max-width: 720px;
     margin: 0 auto;
+    /* 抗锯齿补丁 (Task 10.1) */
+    outline: 1px solid transparent;
+    backface-visibility: hidden;
+    transform: translateZ(0);
 }
 
 /* 搜索引擎切换器具体样式 */
@@ -3274,12 +3319,19 @@ body.zen-active .search-section {
     margin: 0 !important;
     z-index: 3500;
     transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* 移除 Scale 缩放，改用阴影扩散消除锯齿 (Task 10.1) */
     animation: zenSearchBreath 4s ease-in-out infinite;
 }
 
 @keyframes zenSearchBreath {
-    0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
-    50% { transform: translate(-50%, -50%) scale(1.02); box-shadow: 0 15px 50px rgba(0,0,0,0.4); }
+    0%, 100% { 
+        transform: translate(-50%, -50%); 
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3), 0 0 0 0 rgba(57, 157, 255, 0); 
+    }
+    50% { 
+        transform: translate(-50%, -50%); 
+        box-shadow: 0 15px 50px rgba(0,0,0,0.5), 0 0 15px 2px rgba(57, 157, 255, 0.1); 
+    }
 }
 
 body:not(.zen-active) .search-section {
@@ -3337,9 +3389,9 @@ body:not(.zen-active) .zen-expand-btn {
 }
 
 body.light-theme .search-wrapper {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(0, 0, 0, 0.1);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    background: rgba(255, 255, 255, 0.85);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
 }
 
 .search-section:focus-within .search-wrapper {

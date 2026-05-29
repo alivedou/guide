@@ -19,6 +19,9 @@ let isZenTempExpanded = true;
 let isActuallyZen = false;
 let isRendering = false; // 渲染防抖锁
 let isPageManagementMode = false; // 页面管理模式开关 (Task 3.3)
+let zenMoveAccumulator = 0; // 禅意模式位移累加器 (Task 11.1)
+let lastMouseX = 0;
+let lastMouseY = 0;
 let isSidebarPinned = localStorage.getItem('nav_sidebar_pinned') !== 'false'; // 默认开启图钉 (Task 4.5.3)
 let selectedIds = new Set(); // 已选中的 ID 集合
 let sortableInstances = []; // Sortable 实例存储
@@ -892,7 +895,7 @@ const renderNav = () => {
                 : '';
 
             // 基础内容
-            let navHtml = `<span class="nav-icon" title="${isPageManagementMode ? '拖拽排序' : ''}">${cat.icon}</span><span class="nav-label">${cat.name}${countHtml}</span>`;
+            let navHtml = `<span class="nav-icon" title="">${cat.icon}</span><span class="nav-label">${cat.name}${countHtml}</span>`;
             
             // Task 4.3: 增加管理快捷按钮
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ' && isAdmin) {
@@ -916,7 +919,8 @@ const renderNav = () => {
                 if (activeCatId === cat.id) return;
                 
                 activeCatId = cat.id;
-                const isIsolated = appData.settings?.isolatedView || appData.settings?.zenMode;
+                // Task 11.2: 确定是否需要切换隔离视图
+                const isIsolated = (appData.settings?.zenMode || appData.settings?.isolatedView) && !isPageManagementMode;
                 
                 if (isIsolated) { 
                     isZenTempExpanded = true; 
@@ -946,9 +950,12 @@ const renderNav = () => {
             };
             sidebarNav.appendChild(navItem);
 
-            // 视图隔离核心逻辑 (Task 4.5.1 & 4.6.3)
-            // Task 11.4: 页面管理模式下强制显示所有分类，以支持跨分类拖拽
-            const isIsolatedView = (appData.settings?.isolatedView || appData.settings?.zenMode) && !isPageManagementMode;
+            // 视图隔离核心逻辑 (Task 11.2 深度对齐)
+            // 1. 禅意模式开启时：强制执行单一视图原则，无视 isolatedView 设置
+            // 2. 常规模式开启时：遵循用户的手动 isolatedView 设置 (默认为 false/长廊)
+            // 3. 页面管理模式：强制全分类展示以支持拖拽
+            const isIsolatedView = !isPageManagementMode && (appData.settings?.zenMode || appData.settings?.isolatedView);
+            
             if (isIsolatedView && cat.id !== activeCatId) return;
 
             const section = document.createElement('div');
@@ -1135,15 +1142,15 @@ const renderTools = () => {
                 adminBanner.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
                         <i class="ri-tools-fill" style="font-size:18px;"></i>
-                        <span>页面管理模式已激活</span>
+                        <span>页面管理中</span>
                     </div>
                     <div class="banner-hint" style="font-size:11px; opacity:0.9; font-weight:normal; display:flex; align-items:center; gap:5px;">
-                        <span>可拖拽图标或编辑分类</span>
+                        <span>拖拽图标排序或点击分类编辑</span>
                         <span style="background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); margin-left:10px;">
                             <i class="ri-keyboard-line" style="font-size:10px;"></i> Esc 退出
                         </span>
                     </div>
-                    <button class="banner-exit-btn" onclick="togglePageManagement(false)">保存并退出管理</button>
+                    <button class="banner-exit-btn" onclick="togglePageManagement(false)">退出页面管理</button>
                 `;
             }
             document.body.classList.add('admin-mode');
@@ -1159,8 +1166,9 @@ const renderTools = () => {
                     <!-- 1. 页面管理 -->
                     <div class="sidebar-nav-item toolbar-item ${isPageManagementMode ? 'active' : ''}" 
                          onclick="togglePageManagement()" 
-                         data-tooltip="${isPageManagementMode ? '关闭页面管理' : '开启页面管理'}">
+                         data-tooltip="页面管理">
                         <span class="nav-icon"><i class="ri-layout-masonry-line"></i></span>
+                        <span class="nav-label">页面管理</span>
                     </div>
 
                     <!-- 2. 系统控制 (仅管理员) -->
@@ -1209,7 +1217,7 @@ const renderTools = () => {
                     <div class="sidebar-nav-item exit-manage-btn" onclick="togglePageManagement(false)" 
                          style="font-size: 13px; padding: 8px 12px; margin-top: 10px; border-top: 1px solid var(--glass-border); color: var(--primary); font-weight: bold;">
                         <span class="nav-icon"><i class="ri-checkbox-circle-line"></i></span>
-                        <span class="nav-label">保存并退出管理</span>
+                        <span class="nav-label">退出页面管理</span>
                     </div>
                 </div>
                 ` : ''}
@@ -2629,6 +2637,23 @@ const initGlobalEvents = () => {
     let touchStartX = 0;
     let touchStartY = 0;
     let touchStartTime = 0;
+
+    // 1. 禅意模式大范围位移唤醒 (Task 11.1)
+    window.addEventListener('mousemove', (e) => {
+        if (appData.settings?.zenMode && !isZenTempExpanded) {
+            const dx = Math.abs(e.clientX - (lastMouseX || e.clientX));
+            const dy = Math.abs(e.clientY - (lastMouseY || e.clientY));
+            
+            zenMoveAccumulator += (dx + dy);
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+
+            if (zenMoveAccumulator > 150) { // 阈值 150px
+                wakeUpNavigation();
+            }
+        }
+    }, { passive: true });
+
     window.addEventListener('touchstart', (e) => {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
@@ -2642,7 +2667,7 @@ const initGlobalEvents = () => {
         const deltaY = touchEndY - touchStartY;
         const deltaTime = Date.now() - touchStartTime;
 
-        // 1. Zen Mode 唤醒与视图调度 (T9)
+        // 1. Zen Mode 唤醒与视图调度 (T9 & Task 11.3)
         if (appData.settings?.zenMode) {
             // A. 静默态上滑唤醒
             if (document.body.classList.contains('zen-silent')) {
@@ -2652,16 +2677,18 @@ const initGlobalEvents = () => {
                 }
             }
             
-            // B. 需求：左向右拉拽式抽屉手势触发“视图调度” (等同于 Ctrl+B)
-            // 限制：仅在非静默态且非侧边栏区域触发，避免与侧边栏手势冲突
-            if (!document.body.classList.contains('zen-silent') && touchStartX < 50 && deltaX > 100 && Math.abs(deltaY) < 50) {
-                toggleZenMode(false); // 切回标准模式
+            // B. 需求：左向右拉拽式抽屉手势触发“视图调度” (侧边栏)
+            if (touchStartX < 50 && deltaX > 100 && Math.abs(deltaY) < 50) {
+                if (document.body.classList.contains('zen-silent')) {
+                    wakeUpNavigation(); // 静默态先唤醒
+                }
+                toggleSidebar(true); // 唤起调度面板(侧边栏)
                 return;
             }
         } else {
-            // C. 标准模式下左向右滑进入禅意模式 (视图调度)
+            // C. 标准模式下左向右滑唤起侧边栏
             if (touchStartX < 50 && deltaX > 100 && Math.abs(deltaY) < 50) {
-                toggleZenMode(true);
+                toggleSidebar(true);
                 return;
             }
         }
@@ -2735,21 +2762,18 @@ const initGlobalEvents = () => {
             return;
         }
 
-        // 3. Ctrl+B 视图调度 (核心快捷键)
+        // 3. Ctrl+B 视图调度 (核心快捷键 - Task 11.3 对齐)
         if (isCtrl && key === 'b') {
             e.preventDefault();
             
-            if (appData.settings?.zenMode) {
-                if (!isZenTempExpanded) {
-                    // 1. 静默态 -> 唤醒
-                    wakeUpNavigation();
-                } else {
-                    // 2. 唤醒态 -> 切回标准模式
-                    toggleZenMode(false);
-                }
+            if (appData.settings?.zenMode && document.body.classList.contains('zen-silent')) {
+                // 静默态下 Ctrl+B 先唤醒视界
+                wakeUpNavigation();
             } else {
-                // 3. 标准模式 -> 进入禅意模式
-                toggleZenMode(true);
+                // 唤醒态或标准模式下，Ctrl+B 切换侧边栏 (调度面板)
+                const sidebar = document.getElementById('sidebar');
+                const isOpen = sidebar?.classList.contains('open');
+                toggleSidebar(!isOpen);
             }
             return;
         }
