@@ -70,7 +70,9 @@ const initAnnouncementsWatcher = () => {
 
 const checkAnnouncementsUpdate = async () => {
     try {
-        const res = await fetch('/api/announcements');
+        const res = await fetch('/api/announcements', {
+            headers: sysToken ? { 'Authorization': sysToken } : {}
+        });
         if (!res.ok) return;
         const { lastUpdate } = await res.json();
         
@@ -142,10 +144,12 @@ const refreshNoticeBadge = () => {
     try {
         if (!Array.isArray(cachedAnnouncements)) return;
         
-        const unreadCount = cachedAnnouncements.filter(notice => {
+        // Task 7.3: 统一计算逻辑。无论是否登录，都优先检查 D1 (is_read) 和本地 (localStorage)
+        let unreadCount = cachedAnnouncements.filter(notice => {
             try {
-                // Task 6.23: 优先使用后端返回的 is_read 状态，兼容 localStorage
-                if (notice.is_read !== undefined) return !notice.is_read;
+                // 如果后端返回了已读状态，优先使用后端状态
+                if (notice.is_read !== undefined && notice.is_read) return false;
+                // 否则检查本地 localStorage (支持游客持久化)
                 return !localStorage.getItem(`read_notice_${notice.id}`);
             } catch (e) { return true; }
         }).length;
@@ -184,7 +188,9 @@ const refreshNoticeBadge = () => {
 
 const initAnnouncements = async () => {
     try {
-        const res = await fetch('/api/announcements');
+        const res = await fetch('/api/announcements', {
+            headers: sysToken ? { 'Authorization': sysToken } : {}
+        });
         if (!res.ok) return;
         const { announcements, lastUpdate } = await res.json();
         
@@ -344,8 +350,20 @@ const handleAuthError = () => {
     sysToken = '';
     isAdmin = false;
     showToast("会话已过期，请重新登录", "#e67e22");
-    document.getElementById('auth-overlay').style.display = 'flex';
+    openLoginModal();
     init(true); // 回退到游客视图
+};
+
+// Task 7.2: 统一登录弹窗调用逻辑
+const openLoginModal = () => {
+    const overlay = document.getElementById('auth-overlay');
+    const tabLogin = document.getElementById('tab-login');
+    const editModal = document.getElementById('edit-modal');
+    
+    if (editModal) editModal.style.display = 'none';
+    if (overlay) overlay.style.display = 'flex';
+    // 强制切换到登录 Tab
+    if (tabLogin) tabLogin.click();
 };
 
 // 页面关闭前的紧急同步
@@ -2199,15 +2217,20 @@ window.openNoticeCenter = async () => {
 
         const unreadCount = announcements.filter(a => !(a.is_read || localStorage.getItem(`read_notice_${a.id}`))).length;
         const hideRead = localStorage.getItem('nav_hide_read_announcements') === 'true';
+        const isGuest = !sysToken;
 
         body.innerHTML = `
             <div class="notice-center-header">
                 <div class="notice-header-actions">
-                    <label class="toggle-hide-read">
-                        <input type="checkbox" ${hideRead ? 'checked' : ''} onchange="toggleHideRead(this.checked)"> 隐藏已读
+                    <label class="toggle-hide-read" ${isGuest ? 'style="opacity:0.5; cursor:not-allowed;" title="登录后可同步阅读状态"' : ''}>
+                        <input type="checkbox" ${hideRead ? 'checked' : ''} ${isGuest ? 'disabled' : 'onchange="toggleHideRead(this.checked)"'}> 隐藏已读
                     </label>
-                    ${unreadCount > 0 ? `<button class="btn-mark-all-read" onclick="markAllNoticesRead()">全部标记已读</button>` : ''}
+                    ${isGuest 
+                        ? `<button class="btn-mark-all-read guest-mode" onclick="openLoginModal()">登录同步状态</button>`
+                        : (unreadCount > 0 ? `<button class="btn-mark-all-read" onclick="markAllNoticesRead()">全部标记已读</button>` : '')
+                    }
                 </div>
+                ${isGuest ? `<div style="font-size: 11px; color: #f1c40f; margin-bottom: 5px;"><i class="ri-information-line"></i> 您当前以游客身份访问，阅读记录无法持久化</div>` : ''}
                 <div style="font-size: 12px; opacity: 0.5;">共 ${announcements.length} 条公告</div>
             </div>
             <div class="notice-list-container">
@@ -2272,7 +2295,7 @@ window.toggleNotice = async (el, id) => {
 
     el.classList.toggle('is-expanded');
 
-    // 如果是第一次展开且未读，标记为已读
+    // 如果是第一次展开且未读，标记为已读 (Task 7.3: 游客也可在本地标记已读)
     const isUnread = el.classList.contains('is-unread');
     if (!isExpanded && isUnread) {
         el.classList.remove('is-unread');
@@ -2280,12 +2303,12 @@ window.toggleNotice = async (el, id) => {
         const badge = el.querySelector('.badge-new');
         if (badge) badge.remove();
         
-        // 同步到后端和本地
+        // 记录到本地，消除红点
         localStorage.setItem(`read_notice_${id}`, 'true');
-        // 更新内存中的状态
         const notice = cachedAnnouncements.find(a => a.id == id);
         if (notice) notice.is_read = 1;
-        
+
+        // Task 7.4: 立即刷新全局 Badge
         refreshNoticeBadge();
         
         if (sysToken) {
@@ -2304,6 +2327,9 @@ window.toggleHideRead = (checked) => {
     localStorage.setItem('nav_hide_read_announcements', checked);
     const items = document.querySelectorAll('.notice-list-item.is-read');
     items.forEach(item => item.classList.toggle('hide-read', checked));
+    
+    // Task 6.31: 切换隐藏状态后同步刷新 Badge 状态 (仅针对已读项被过滤的情况)
+    refreshNoticeBadge();
 };
 
 window.markAllNoticesRead = async () => {
