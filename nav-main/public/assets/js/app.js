@@ -383,14 +383,30 @@ const toggleZenMode = (force) => {
     const newState = typeof force === 'boolean' ? force : !appData.settings.zenMode;
     appData.settings.zenMode = newState;
     
-    // 如果关闭禅意模式，确保侧边栏展开
-    if (!newState) isZenTempExpanded = true;
-    else isZenTempExpanded = false;
+    // 逻辑流转：进入禅意模式时默认静默，退出时默认展开
+    if (newState) {
+        isZenTempExpanded = false;
+        // 禅意模式下强制关闭侧边栏
+        toggleSidebar(false);
+    } else {
+        isZenTempExpanded = true;
+        // 回到标准模式时，根据图钉状态决定是否展开侧边栏
+        if (isSidebarPinned) toggleSidebar(true);
+    }
 
-    showToast(newState ? "已进入禅意模式 (Ctrl+B)" : "已回到标准模式", newState ? "#2c3e50" : "#3498db");
+    showToast(newState ? "已进入极简沉浸模式" : "已回到标准导航模式", newState ? "#2c3e50" : "#3498db");
+    
+    // 强制清理搜索状态
+    const sea = document.getElementById('sea-input');
+    if (sea) sea.value = '';
+    document.body.classList.remove('is-searching');
+
     renderNav();
     updateStyles();
+    
+    // 同步视觉实验室 UI
     if (document.getElementById('edit-modal').style.display === 'flex') openVisualLab();
+    
     syncConfigToCloud();
 };
 
@@ -729,14 +745,29 @@ const renderNav = () => {
             
             navItem.innerHTML = navHtml;
             navItem.onclick = () => {
+                if (activeCatId === cat.id) return;
+                
                 activeCatId = cat.id;
                 const isIsolated = appData.settings?.isolatedView || appData.settings?.zenMode;
                 
                 if (isIsolated) { 
                     isZenTempExpanded = true; 
                     document.body.classList.remove('zen-silent'); // 点击切换时必然唤醒
-                    renderNav(); 
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    
+                    // 增加切换时的淡出效果 (Task 5.3)
+                    const container = document.getElementById('grid-container');
+                    if (container) {
+                        container.style.opacity = '0';
+                        container.style.transform = 'translateY(10px)';
+                        setTimeout(() => {
+                            renderNav();
+                            container.style.opacity = '1';
+                            container.style.transform = 'translateY(0)';
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }, 150);
+                    } else {
+                        renderNav();
+                    }
                 }
                 else { 
                     document.getElementById('section-' + cat.id)?.scrollIntoView({ behavior: 'smooth' }); 
@@ -1106,19 +1137,20 @@ const initZenMode = () => {
     const btn = document.getElementById('zen-expand-btn');
     if (btn) btn.onclick = () => wakeUpNavigation();
 
-    // Task 4.6.1: 智能唤醒监听器
+    // Task 5.4: 智能唤醒引擎
     let moveDistance = 0;
+    let moveTimer = null;
     
-    // 将重置逻辑挂载到全局或闭包内，确保 wakeUpNavigation 也能触发它
     window.resetZenSleepTimer = () => {
         if (window.zenSleepTimer) clearTimeout(window.zenSleepTimer);
         if (appData.settings?.zenMode && isZenTempExpanded) {
             window.zenSleepTimer = setTimeout(() => {
-                // 如果搜索框没有焦点，才自动沉睡
-                if (document.activeElement?.id !== 'sea-input') {
+                // 如果搜索框没有焦点，且没有处于管理模式，才自动沉睡
+                if (document.activeElement?.id !== 'sea-input' && !isPageManagementMode) {
                     isZenTempExpanded = false;
                     updateStyles();
                     renderNav();
+                    showToast("进入静默态", "#2c3e50");
                 }
             }, 60000); // 1分钟无操作自动沉睡
         }
@@ -1126,16 +1158,27 @@ const initZenMode = () => {
 
     window.addEventListener('mousemove', (e) => {
         window.resetZenSleepTimer();
-        if (!document.body.classList.contains('zen-silent')) return;
+        if (!document.body.classList.contains('zen-silent')) {
+            moveDistance = 0;
+            return;
+        }
+
+        // 累计移动量，配合计时器：如果 2 秒内没有持续移动，重置距离
         moveDistance += Math.abs(e.movementX) + Math.abs(e.movementY);
-        if (moveDistance > 300) wakeUpNavigation(); // 累计移动 300px 唤醒
+        clearTimeout(moveTimer);
+        moveTimer = setTimeout(() => { moveDistance = 0; }, 2000);
+
+        if (moveDistance > 400) { // 稍微提高阈值以防误触
+            wakeUpNavigation();
+            moveDistance = 0;
+        }
     }, { passive: true });
 
     document.addEventListener('keydown', (e) => {
         window.resetZenSleepTimer();
         if (document.body.classList.contains('zen-silent')) {
-            // 按下任意键唤醒（排除功能键）
-            if (e.key.length === 1 || ['Enter', 'Space', 'Backspace'].includes(e.key)) {
+            // 排除单纯的功能键 (Ctrl/Shift/Alt)
+            if (e.key.length === 1 || ['Enter', 'Space', 'Backspace', 'ArrowDown'].includes(e.key)) {
                 wakeUpNavigation();
             }
         }
@@ -1144,8 +1187,8 @@ const initZenMode = () => {
     document.addEventListener('click', (e) => {
         window.resetZenSleepTimer();
         if (document.body.classList.contains('zen-silent')) {
-            // 排除交互元素
-            if (!e.target.closest('.search-wrapper, .sidebar, .modal')) {
+            // 只要点击非 Modal 区域即唤醒
+            if (!e.target.closest('.modal-content')) {
                 wakeUpNavigation();
             }
         }
@@ -2104,9 +2147,12 @@ const initGlobalEvents = () => {
 
     // 移动端手势唤醒 (Task 5.2: Gesture Engine)
     let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
     window.addEventListener('touchstart', (e) => {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
     }, { passive: true });
 
     window.addEventListener('touchend', (e) => {
@@ -2114,11 +2160,15 @@ const initGlobalEvents = () => {
         const touchEndY = e.changedTouches[0].clientY;
         const deltaX = touchEndX - touchStartX;
         const deltaY = touchEndY - touchStartY;
+        const deltaTime = Date.now() - touchStartTime;
 
-        // 1. Zen Mode 上滑唤醒 (已有逻辑增强)
-        if (isActuallyZen && touchStartY - touchEndY > 50 && Math.abs(deltaX) < 30) {
-            isZenTempExpanded = true;
-            renderNav();
+        // 1. Zen Mode 唤醒逻辑 (上滑唤醒)
+        if (document.body.classList.contains('zen-silent')) {
+            // 只要有明显的向上滑动且时间较短，即视为唤醒
+            if (deltaY < -50 && Math.abs(deltaX) < 40 && deltaTime < 300) {
+                wakeUpNavigation();
+                return;
+            }
         }
 
         // 2. 侧边栏侧滑逻辑 (Mobile Layout Only)
@@ -2190,20 +2240,21 @@ const initGlobalEvents = () => {
             return;
         }
 
-        // 3. Ctrl+B 切换禅意模式/侧边栏 (逃生通道)
+        // 3. Ctrl+B 视图调度 (核心快捷键)
         if (isCtrl && key === 'b') {
             e.preventDefault();
-            // 如果在静默态，Ctrl+B 优先唤醒并显示侧边栏
-            if (appData.settings?.zenMode && !isZenTempExpanded) {
-                isZenTempExpanded = true;
-                renderNav();
-                setTimeout(() => toggleSidebar(true), 100);
-            } else if (appData.settings?.zenMode && isZenTempExpanded) {
-                // 如果已唤醒，则切换禅意模式状态
-                toggleZenMode();
+            
+            if (appData.settings?.zenMode) {
+                if (!isZenTempExpanded) {
+                    // 1. 静默态 -> 唤醒
+                    wakeUpNavigation();
+                } else {
+                    // 2. 唤醒态 -> 切回标准模式
+                    toggleZenMode(false);
+                }
             } else {
-                // 标准模式下仅切换侧边栏
-                toggleSidebar();
+                // 3. 标准模式 -> 进入禅意模式
+                toggleZenMode(true);
             }
             return;
         }
@@ -2248,11 +2299,12 @@ const initGlobalEvents = () => {
             }
         }
 
-        // 8. Escape 一键复位 (Task 2.2)
+        // 8. Escape 一键复位 (复位搜索或回归静默态)
         if (e.key === 'Escape') { 
             const sea = document.getElementById('sea-input');
             const dropdown = document.getElementById('sea-dropdown');
 
+            // 1. 优先关闭所有 Modal
             const modals = document.querySelectorAll('.modal');
             let anyModalOpen = false;
             modals.forEach(m => {
@@ -2261,30 +2313,31 @@ const initGlobalEvents = () => {
                     anyModalOpen = true;
                 }
             });
-
             if (anyModalOpen) return;
 
-            // 如果侧边栏打开，优先关闭
+            // 2. 如果搜索框有内容，先清空搜索
+            if (sea && sea.value.trim() !== '') {
+                sea.value = '';
+                sea.dispatchEvent(new Event('input'));
+                return;
+            }
+
+            // 3. 如果侧边栏打开且不是固定态，则关闭
             const sidebar = document.getElementById('sidebar');
-            if (sidebar && sidebar.classList.contains('open')) {
+            if (sidebar && sidebar.classList.contains('open') && !isSidebarPinned) {
                 toggleSidebar(false);
                 return;
             }
 
-            // 如果是在展开态，回归极简态
-            if (isZenTempExpanded) {
+            // 4. 在禅意模式下，如果是唤醒态则回归静默态
+            if (appData.settings?.zenMode && isZenTempExpanded) {
                 isZenTempExpanded = false;
-                document.body.classList.remove('zen-silent-woken'); // 重置唤醒状态 (Task 4.6.1)
+                document.body.classList.remove('zen-silent-woken');
                 renderNav();
+                updateStyles();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
+                sea?.blur(); // 失去焦点以触发自动沉睡逻辑
                 return;
-            }
-
-            if (sea) {
-                sea.value = '';
-                sea.focus(); // 回归搜索聚焦状态
-                if (dropdown) dropdown.style.display = 'none';
-                document.body.classList.remove('is-searching'); 
             }
         }
     });

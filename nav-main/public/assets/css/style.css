@@ -575,8 +575,16 @@ body.zen-active.zen-silent .sidebar {
 body.zen-active.zen-silent .search-section {
     opacity: 1 !important;
     pointer-events: auto !important;
-    transform: translate(-50%, -50%) translateY(20vh) !important;
+    /* 极致居中：移除 20vh 的偏移，确保启动时处于屏幕正中央 */
+    transform: translate(-50%, -50%) !important;
+    z-index: 1000;
     transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 禅意模式展开态的搜索框位置 (还原到顶部) */
+body.zen-active:not(.zen-silent) .search-section {
+    transform: translate(-50%, 0) !important;
+    top: 60px; /* 留出一点顶部间距 */
 }
 
 body.zen-active:not(.zen-silent) .grid-container,
