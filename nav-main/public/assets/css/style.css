@@ -239,12 +239,19 @@ body.no-blur body.view-style-2 .card.has-bg {
     gap: 4px;
     margin-left: auto;
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transition: all 0.2s ease;
 }
 
+/* 仅在管理模式下且悬停时显示分类操作按钮 */
 body.page-manage-active .sidebar-nav-item:hover .nav-actions {
     display: flex;
     opacity: 1;
+    transform: translateX(-2px);
+}
+
+.exit-manage-btn:hover {
+    background: var(--primary) !important;
+    color: white !important;
 }
 
 .nav-action-btn {
@@ -276,28 +283,77 @@ body.page-manage-active .sidebar-nav-item:hover .nav-actions {
     top: 0;
     left: 0;
     right: 0;
-    height: 36px;
-    background: linear-gradient(90deg, #2c3e50, #2980b9);
+    height: 42px;
+    background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+    background-size: 200% 200%;
+    animation: gradientBG 10s ease infinite;
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 15px;
-    z-index: 5000;
-    font-size: 13px;
-    font-weight: 500;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    gap: 20px;
+    z-index: 9999;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+
+@keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
 .banner-exit-btn {
-    background: rgba(255,255,255,0.2);
-    border: 1px solid rgba(255,255,255,0.3);
+    background: #27ae60;
+    border: none;
     color: white;
-    padding: 2px 10px;
-    border-radius: 4px;
+    padding: 5px 15px;
+    border-radius: 20px;
     cursor: pointer;
-    font-size: 11px;
-    transition: all 0.2s ease;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.banner-exit-btn:hover {
+    background: #2ecc71;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* 页面管理激活态全局视觉增强 (Task 9.1) */
+body.page-manage-active .sidebar {
+    border-right: 2px solid var(--primary);
+}
+
+body.page-manage-active #grid-container {
+    padding-top: 60px; /* 为顶部工具栏留出空间 */
+    transition: padding 0.3s ease;
+}
+
+body.page-manage-active .card:hover {
+    outline: 2px dashed var(--primary);
+    outline-offset: 4px;
+}
+
+/* 隐藏误触项 (Task 9.3 & 9.5 专注模式) */
+body.page-manage-active .logout-btn {
+    display: none !important;
+}
+
+/* Task 9.5: 只有正在激活的管理按钮可见，隐藏同级其他工具按钮 (控制中心、实验室等) */
+body.page-manage-active .sidebar-admin-toolbar .toolbar-item:not(.active) {
+    display: none !important;
+}
+
+body.page-manage-active .sidebar-admin-toolbar {
+    justify-content: center; /* 居中显示仅剩的一个按钮 */
+    padding: 10px 0;
+}
 }
 
 .banner-exit-btn:hover {
@@ -440,6 +496,18 @@ body.page-manage-active .sidebar-nav-item {
     margin: 6px 8px;
     padding: 12px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Task 10.7.1: 管理模式图标旋转动效 */
+body.page-manage-active .toolbar-item.active .nav-icon i {
+    display: inline-block;
+    animation: icon-rotate 2s linear infinite;
+    color: var(--primary);
+}
+
+@keyframes icon-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 body.light-theme.page-manage-active .sidebar-nav-item {
@@ -2129,6 +2197,43 @@ body.light-theme .footer-info {
     font-size: 18px;
 }
 
+/* Task 11.1: 管理模式下网格掉落区视觉强化 */
+body.page-manage-active .nav-grid {
+    min-height: 120px;
+    border: 2px dashed rgba(57, 157, 255, 0.15);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin: 10px 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(57, 157, 255, 0.02);
+    position: relative;
+}
+
+/* Task 11.6: 拖拽悬停高亮 */
+body.page-manage-active .nav-grid.grid-active {
+    border-color: var(--primary);
+    background: rgba(57, 157, 255, 0.08);
+    box-shadow: inset 0 0 20px rgba(57, 157, 255, 0.1);
+    transform: scale(1.01);
+}
+
+/* 优化占位符 (Ghost) 样式 - 使其更有“坑位”感 */
+.card.sortable-ghost {
+    opacity: 0.2 !important;
+    background: var(--primary) !important;
+    border: 2px dashed var(--primary) !important;
+    box-shadow: none !important;
+}
+
+/* 全卡片热区提示 (排除新增按钮) */
+body.page-manage-active .card:not(.add-new-card) {
+    cursor: grab;
+}
+
+body.page-manage-active .card:not(.add-new-card):active {
+    cursor: grabbing;
+}
+
 /* ==================== 批量选择样式 ==================== */
 .card.selected {
     outline: 2px solid var(--primary);
@@ -2211,10 +2316,6 @@ body.page-manage-active .card .icon-wrapper::after {
     color: var(--primary);
     opacity: 0.8;
     pointer-events: none;
-}
-
-body.page-manage-active .card-admin-btns {
-    display: none !important;
 }
 
 .batch-info {
@@ -3448,7 +3549,8 @@ body.light-theme .local-result-item.active {
     z-index: 10;
 }
 
-.card:hover .card-admin-btns {
+/* 仅在管理模式下悬停显示编辑按钮 */
+body.page-manage-active .card:hover .card-admin-btns {
     display: flex;
 }
 

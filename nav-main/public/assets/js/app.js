@@ -423,6 +423,9 @@ const updateStyles = () => {
 
 // Task 4.2: 视觉实验室控制
 const openVisualLab = () => {
+    // Task 9.6: 互斥显示
+    closeAllModals();
+
     const modal = document.getElementById('edit-modal');
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
@@ -952,7 +955,8 @@ const renderNav = () => {
             sidebarNav.appendChild(navItem);
 
             // 视图隔离核心逻辑 (Task 4.5.1 & 4.6.3)
-            const isIsolatedView = appData.settings?.isolatedView || appData.settings?.zenMode;
+            // Task 11.4: 页面管理模式下强制显示所有分类，以支持跨分类拖拽
+            const isIsolatedView = (appData.settings?.isolatedView || appData.settings?.zenMode) && !isPageManagementMode;
             if (isIsolatedView && cat.id !== activeCatId) return;
 
             const section = document.createElement('div');
@@ -1132,14 +1136,22 @@ const renderTools = () => {
             appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length >= 100
         );
 
-        // 管理员模式视觉高亮切换 (Task 4.3 增强)
+        // 管理员模式视觉高亮切换 (Task 9.2 增强)
         if (isAdmin && isPageManagementMode) {
             if (adminBanner) {
                 adminBanner.style.display = 'flex';
                 adminBanner.innerHTML = `
-                    <i class="ri-shield-flash-line"></i>
-                    <span>当前处于页面管理模式 - 分类与书签支持跨分类拖拽和快捷管理</span>
-                    <button class="banner-exit-btn" onclick="togglePageManagement(false)">退出管理</button>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <i class="ri-tools-fill" style="font-size:18px;"></i>
+                        <span>页面管理模式已激活</span>
+                    </div>
+                    <div class="banner-hint" style="font-size:11px; opacity:0.9; font-weight:normal; display:flex; align-items:center; gap:5px;">
+                        <span>可拖拽图标或编辑分类</span>
+                        <span style="background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); margin-left:10px;">
+                            <i class="ri-keyboard-line" style="font-size:10px;"></i> Esc 退出
+                        </span>
+                    </div>
+                    <button class="banner-exit-btn" onclick="togglePageManagement(false)">保存并退出管理</button>
                 `;
             }
             document.body.classList.add('admin-mode');
@@ -1200,6 +1212,12 @@ const renderTools = () => {
                     <div class="sidebar-nav-item" onclick="doResetConfig()" style="font-size: 13px; padding: 6px 12px;">
                         <span class="nav-icon"><i class="ri-refresh-line"></i></span>
                         <span class="nav-label">重置模板</span>
+                    </div>
+                    <!-- 退出管理增强 -->
+                    <div class="sidebar-nav-item exit-manage-btn" onclick="togglePageManagement(false)" 
+                         style="font-size: 13px; padding: 8px 12px; margin-top: 10px; border-top: 1px solid var(--glass-border); color: var(--primary); font-weight: bold;">
+                        <span class="nav-icon"><i class="ri-checkbox-circle-line"></i></span>
+                        <span class="nav-label">保存并退出管理</span>
                     </div>
                 </div>
                 ` : ''}
@@ -1546,17 +1564,50 @@ const initSearch = () => {
     });
 };
 
+// Task 9.6: 全局模态状态清理函数
+const closeAllModals = () => {
+    // 1. 关闭常规弹窗并清空内容
+    const editModal = document.getElementById('edit-modal');
+    if (editModal) {
+        editModal.style.display = 'none';
+        const body = document.getElementById('edit-form-body');
+        if (body) body.innerHTML = ''; // 彻底清空残影
+    }
+
+    // 2. 关闭专家模式弹窗
+    const monacoModal = document.getElementById('monaco-modal');
+    if (monacoModal) monacoModal.style.display = 'none';
+
+    // 3. 关闭认证遮罩
+    const authOverlay = document.getElementById('auth-overlay');
+    if (authOverlay) authOverlay.style.display = 'none';
+};
+
 // ==================== 9. Task 3.3: 页面管理模式 (Page Management) ====================
 
 const togglePageManagement = (force) => {
     if (!isAdmin) return showToast("仅管理员可进入页面管理模式", "#e67e22");
 
+    // Task 10.6.2: 交互锁定逻辑 - 如果当前已是管理模式且尝试通过侧边栏点击（force 未定义），则不执行切换（关闭）
+    // 强制引导用户通过“保存并退出”按钮或 Esc 退出
+    if (isPageManagementMode && typeof force === 'undefined') {
+        return showToast("请点击顶部或下方的“保存并退出”按钮完成管理", "#3498db");
+    }
+
+    // Task 9.6: 进入管理模式前清理所有弹窗
+    closeAllModals();
+
     isPageManagementMode = typeof force === 'boolean' ? force : !isPageManagementMode;
     document.body.classList.toggle('page-manage-active', isPageManagementMode);
     
+    // Task 11.4: 必须先进行视图渲染，确保 DOM 节点存在
+    renderTools();
+    renderNav();
+
     if (isPageManagementMode) {
         selectedIds.clear();
-        showToast("进入页面管理模式：支持分类快捷编辑和书签跨分类拖拽", "#3498db");
+        showToast("进入管理模式：拖拽卡片重新排序，或点击分类图标编辑", "#3498db");
+        // 渲染后再初始化拖拽插件
         initSortable();
     } else {
         destroySortable();
@@ -1565,15 +1616,15 @@ const togglePageManagement = (force) => {
         // Task 4.8.2: 深度状态重置 (关闭可能打开的专家模式编辑器)
         const monacoModal = document.getElementById('monaco-modal');
         if (monacoModal) monacoModal.style.display = 'none';
-        showToast("已退出页面管理模式");
+        showToast("已保存并退出管理模式");
     }
-    
-    renderTools();
-    renderNav();
 };
 
 // Task 4.3: 分类管理函数
 const openCategoryEditModal = (catId) => {
+    // Task 9.6: 互斥显示
+    closeAllModals();
+
     const cat = appData.categories.find(c => c.id === catId);
     if (!cat) return;
 
@@ -1654,11 +1705,20 @@ const initSortable = () => {
 
         const sortable = new Sortable(grid, {
             group: 'shared-bookmarks',
-            animation: 150,
+            animation: 180,
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
-            handle: '.icon-wrapper',
-            onEnd: (evt) => handleSortEnd(evt, 'item')
+            filter: '.add-new-card', // 排除新增按钮参与排序 (Task 11.2)
+            preventOnFilter: true,
+            // Task 11.6: 动态高亮目标容器
+            onDragOver: (evt) => {
+                document.querySelectorAll('.nav-grid').forEach(g => g.classList.remove('grid-active'));
+                evt.to.classList.add('grid-active');
+            },
+            onEnd: (evt) => {
+                document.querySelectorAll('.nav-grid').forEach(g => g.classList.remove('grid-active'));
+                handleSortEnd(evt, 'item');
+            }
         });
         sortableInstances.push(sortable);
     });
@@ -1683,31 +1743,40 @@ const destroySortable = () => {
 
 const handleSortEnd = (evt, type) => {
     if (type === 'item') {
-        const fromCatId = evt.from.closest('.category-section').id.replace('section-', '');
-        const toCatId = evt.to.closest('.category-section').id.replace('section-', '');
+        const toGrid = evt.to;
+        const toCatId = toGrid.closest('.category-section').id.replace('section-', '');
         const itemId = evt.item.getAttribute('data-id');
 
-        console.log(`[Sort] Moved item ${itemId} from ${fromCatId} to ${toCatId}`);
+        console.log(`[Sort] Item ${itemId} dropped into category ${toCatId}`);
 
-        // 更新本地内存状态
-        const item = appData.items.find(i => i.id === itemId);
-        if (item) {
-            item.catId = toCatId;
-            item.cat_id = toCatId;
-        }
-
-        // 重新物理校准所有 items 顺序 (基于当前 DOM 顺序)
+        // 1. 获取目标卡片的所有 ID 顺序（按 DOM 实时顺序扫描）
+        // 这一步是关键：直接读取 DOM 顺序来校准内存，避免复杂的索引计算错误
         const newItemsOrder = [];
-        document.querySelectorAll('.nav-grid .card').forEach(card => {
-            const id = card.getAttribute('data-id');
-            const found = appData.items.find(i => i.id === id);
-            if (found) newItemsOrder.push(found);
-        });
         
-        // 补全不在 DOM 中的 items (如果有)
-        appData.items.forEach(i => {
-            if (!newItemsOrder.find(ni => ni.id === i.id)) newItemsOrder.push(i);
+        // 扫描所有分类的网格，按视觉顺序重新排列 appData.items
+        document.querySelectorAll('.nav-grid').forEach(grid => {
+            const gridCatId = grid.closest('.category-section').id.replace('section-', '');
+            if (gridCatId === 'VIRTUAL_FREQ') return;
+
+            grid.querySelectorAll('.card:not(.add-new-card)').forEach(card => {
+                const id = card.getAttribute('data-id');
+                const found = appData.items.find(i => i.id === id);
+                if (found) {
+                    // 更新 catId 归属 (跨分类核心逻辑)
+                    found.catId = gridCatId;
+                    found.cat_id = gridCatId;
+                    newItemsOrder.push(found);
+                }
+            });
         });
+
+        // 2. 补全不在 DOM 中的 items (如隐藏项或过滤掉的项)
+        appData.items.forEach(i => {
+            if (!newItemsOrder.find(ni => ni.id === i.id)) {
+                newItemsOrder.push(i);
+            }
+        });
+
         appData.items = newItemsOrder;
 
     } else if (type === 'category') {
@@ -1859,6 +1928,9 @@ const openBatchMoveModal = () => {
 // ==================== 10. Task 4.1: 管理员后台 (Admin Hub) ====================
 
 const openAdminHub = async () => {
+    // Task 9.6: 互斥显示
+    closeAllModals();
+
     const modal = document.getElementById('edit-modal');
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
@@ -2185,6 +2257,9 @@ window.toggleUserStatus = async (userId, currentStatus) => {
 
 // Task 6.8: 公告中心交互逻辑
 window.openNoticeCenter = async () => {
+    // Task 9.6: 互斥显示
+    closeAllModals();
+
     const modal = document.getElementById('edit-modal');
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
@@ -2385,6 +2460,9 @@ window.saveSiteConfig = async () => {
 let monacoEditor = null;
 
 const openJsonEditor = () => {
+    // Task 9.6: 互斥显示
+    closeAllModals();
+
     const modal = document.getElementById('edit-modal');
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
@@ -2469,6 +2547,13 @@ const exportConfig = () => {
 };
 
 const initGlobalEvents = () => {
+    // Task 9.4: 全局快捷键监听 (Esc 退出管理模式)
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isPageManagementMode) {
+            togglePageManagement(false);
+        }
+    });
+
     // 快捷导航按钮逻辑 (Task 4.2)
     const fabToTop = document.getElementById('scroll-to-top');
     const fabToBottom = document.getElementById('scroll-to-bottom');
@@ -2717,13 +2802,13 @@ const initGlobalEvents = () => {
             }
         }
 
-        // 8. Escape 一键复位 (复位搜索或回归静默态)
+        // 8. Escape 一键复位
         if (e.key === 'Escape') { 
             const sea = document.getElementById('sea-input');
             const dropdown = document.getElementById('sea-dropdown');
 
-            // 1. 优先关闭所有 Modal
-            const modals = document.querySelectorAll('.modal');
+            // 1. 优先关闭所有 Modal (Stack Layer 1)
+            const modals = document.querySelectorAll('.modal, #monaco-modal');
             let anyModalOpen = false;
             modals.forEach(m => {
                 if (window.getComputedStyle(m).display !== 'none') {
@@ -2733,7 +2818,14 @@ const initGlobalEvents = () => {
             });
             if (anyModalOpen) return;
 
-            // 2. 如果搜索框有内容，先清空搜索
+            // 2. 其次退出页面管理模式 (Stack Layer 2) - Task 10.6.3
+            if (isPageManagementMode) {
+                e.preventDefault();
+                togglePageManagement(false);
+                return;
+            }
+
+            // 3. 如果搜索框有内容，先清空搜索
             if (sea && sea.value.trim() !== '') {
                 sea.value = '';
                 sea.dispatchEvent(new Event('input'));
@@ -2764,6 +2856,9 @@ const initGlobalEvents = () => {
 // ==================== 7. Task 3.2: 魔法棒与编辑逻辑 ====================
 
 const openEditModal = (id) => {
+    // Task 9.6: 互斥显示
+    closeAllModals();
+
     const item = appData.items.find(i => i.id === id) || { id: '', title: '', url: '', icon: '', desc: '', cat_id: activeCatId };
     const modal = document.getElementById('edit-modal');
     const body = document.getElementById('edit-form-body');
