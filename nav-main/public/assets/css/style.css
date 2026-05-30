@@ -499,6 +499,86 @@ body.light-theme .zen-freq-item {
     border-color: rgba(0, 0, 0, 0.08);
 }
 
+/* Task 9.2: 云端同步子菜单样式 */
+.cloud-sync-btn {
+    position: relative;
+}
+
+.sync-submenu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background: var(--glass-card);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 8px;
+    min-width: 180px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 100;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    margin-bottom: 10px;
+    animation: menuSlideUp 0.3s ease;
+}
+
+.cloud-sync-btn:hover .sync-submenu,
+.cloud-sync-btn:focus-within .sync-submenu {
+    display: flex;
+}
+
+.sync-menu-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-main);
+    white-space: nowrap;
+}
+
+.sync-menu-item:hover {
+    background: var(--glass-hover);
+    color: var(--primary);
+}
+
+.sync-menu-item.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.sync-menu-header {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 6px 12px 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sync-divider {
+    height: 1px;
+    background: var(--glass-border);
+    margin: 4px 8px;
+}
+
+@keyframes menuSlideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 侧边栏折叠态适配 */
+body.sidebar-folded .sync-submenu {
+    left: 100%;
+    bottom: 0;
+    margin-bottom: 0;
+    margin-left: 10px;
+}
+
 body.light-theme .zen-menu-item:hover,
 body.light-theme .zen-freq-item:hover {
     background: var(--glass-hover);
@@ -2385,13 +2465,18 @@ input[type="radio"] {
 
 /* ==================== 页脚信息 ==================== */
 .footer-info {
-    margin-top: 50px;
-    padding-bottom: 20px;
+    margin-top: auto; /* Task 21.1: 关键！将页脚推至容器底部 */
+    padding: 50px 0 20px;
     text-align: center;
     color: rgba(255, 255, 255, 0.4);
     font-size: 11px;
     z-index: 50;
-    transition: opacity 0.3s ease;
+    transition: all 0.3s ease;
+}
+
+/* Task 21.2: 管理模式下强制隐藏页脚，避免干扰编辑交互 */
+body.admin-mode .footer-info {
+    display: none !important;
 }
 
 body.light-theme .footer-info {
@@ -3592,11 +3677,22 @@ body.zen-active .sidebar,
 body.zen-active .sidebar-toggle,
 body.zen-active .grid-container,
 body.zen-active .category-section-title,
-body.zen-active .footer-info,
 body.zen-active .quick-nav-group {
     opacity: 0;
     pointer-events: none;
     transform: translateY(30px);
+}
+
+/* Task 21.2: 禅意模式版权信息策略 - 仅在静默态隐藏 */
+body.zen-active .footer-info {
+    opacity: 0.8;
+    transform: translateY(0);
+}
+
+body.zen-active.zen-silent .footer-info {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
 }
 
 /* Task 33.1: 禅意模式下统一容器宽度与对齐 */
@@ -4131,6 +4227,12 @@ body.light-theme .notice-item {
     padding: 10px;
     text-align: left;
     border-bottom: 1px solid var(--glass-border);
+}
+
+.code-font {
+    font-family: monospace;
+    font-weight: bold;
+    color: var(--primary-color);
 }
 
 .role-badge, .status-badge {

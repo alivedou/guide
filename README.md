@@ -100,8 +100,14 @@ npm install
 | **数据重置** | `npm run clean` | 【慎用】清空本地所有测试数据 (KV & D1) |
 | **快速开发** | `npm run dev` | 使用 Node.js 运行，支持热重载，效率最高 |
 | **环境预览** | `npm run preview` | 模拟真实的 Pages 运行环境 (Wrangler) |
-| **初始化 DB** | `npm run db:init` | 初始化本地 D1 数据库结构 |
+| **数据库迁移** | `npm run db:migrate` | 初始化或更新本地 D1 数据库结构 |
 | **代码规范** | `npm run format` / `lint` | 自动格式化代码及质量检查 |
+
+> [!IMPORTANT]
+> **环境数据隔离说明**:
+> - **快速开发 (Node.js)**: 数据存储在根目录的 `local_d1.db` (数据库) 和 `local_kv/` (配置文件)。
+> - **环境预览 (Wrangler)**: 数据存储在 `.wrangler/` 隐藏目录下，与 Node 环境完全隔离。
+> - 如果您在 `npm run dev` 模式下删库，只需重启服务，系统会自动根据 `migrations/0000_init.sql` 进行自愈初始化。
 
 ### 3. 设置管理员密码（本地）
 复制根目录下的 `.env.example` 并重命名为 `.env`，定义 `TOKEN` 变量。程序默认在 `http://localhost:3000` 启动，并读取 `kv_mock.json`。

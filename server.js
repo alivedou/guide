@@ -16,6 +16,24 @@ const __dirname = path.dirname(__filename);
 const dbPath = path.join(__dirname, 'local_d1.db');
 const db = new Database(dbPath);
 
+// Task 19.1: 后端自愈 - 检查核心表是否存在，不存在则自动执行迁移
+const checkTables = () => {
+    try {
+        const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+        if (!row) {
+            console.log('[DB] Core tables missing, performing auto-initialization...');
+            const initSql = path.join(__dirname, 'migrations', '0000_init.sql');
+            if (fs.existsSync(initSql)) {
+                db.exec(fs.readFileSync(initSql, 'utf-8'));
+                console.log('[DB] 0000_init.sql applied successfully.');
+            }
+        }
+    } catch (e) {
+        console.error('[DB] Auto-check failed:', e.message);
+    }
+};
+checkTables();
+
 // 自动执行所有迁移文件 (Task 5.5.2)
 const migrationsDir = path.join(__dirname, 'migrations');
 if (fs.existsSync(migrationsDir)) {
@@ -113,6 +131,7 @@ const secret = new TextEncoder().encode(JWT_SECRET);
 
 // ====== Task 4.3: 登录防爆破模拟 ======
 const loginAttempts = new Map(); // IP -> { count, lockUntil }
+const registerAttempts = new Map(); // Task 11.4: 注册防爆破 IP -> { count, lockUntil }
 
 // ====== 鉴权中间件 ======
 const authenticate = async (req, res, next) => {
@@ -351,40 +370,42 @@ app.post('/api/auth/register', (req, res) => {
 
     const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
     const uuid = crypto.randomUUID();
+    const onboardingData = getOnboardingData();
 
     try {
-        const stats = db.prepare('SELECT COUNT(*) as count, MAX(uid) as maxUid FROM users').get();
-        const isFirstUser = stats.count === 0;
-        const role = isFirstUser ? 'admin' : 'user';
-        const nextUid = isFirstUser ? 10001 : (stats.maxUid || 10000) + 1;
-
-        // 策略拦截
-        if (!isFirstUser) {
-            if (config.requireInvitation) {
-                if (!inviteCode) return res.status(403).json({ error: '请提供邀请码' });
-                const invite = db.prepare('SELECT status FROM invitation_codes WHERE code = ? AND status = "unused"').get(inviteCode);
-                if (!invite) return res.status(403).json({ error: '无效或已被使用的邀请码' });
-            } else if (!config.allowOpenRegistration) {
-                return res.status(403).json({ error: '系统当前暂停注册，请联系管理员' });
-            }
-        }
-        
-        console.log(`[Auth] Creating user ${username} with role: ${role}`);
-
-        const onboardingData = getOnboardingData();
+        let finalRole = 'user';
 
         db.transaction(() => {
-            db.prepare('INSERT INTO users (id, uid, username, password_hash, role) VALUES (?, ?, ?, ?, ?)').run(uuid, nextUid, username, passwordHash, role);
-            
+            // Task 16.3: 在事务内部计算 UID 和角色，确保并发下的原子性
+            const stats = db.prepare('SELECT COUNT(*) as count, MAX(uid) as maxUid FROM users').get();
+            const isFirstUser = stats.count === 0;
+            finalRole = isFirstUser ? 'admin' : 'user';
+            const nextUid = isFirstUser ? 10001 : (stats.maxUid || 10000) + 1;
+
+            // Task 16.6: 策略预检（不涉及数据库写入）
+            if (!isFirstUser) {
+                if (config.requireInvitation && !inviteCode) throw new Error('INVITE_REQUIRED');
+                if (!config.requireInvitation && !config.allowOpenRegistration) throw new Error('REGISTRATION_PAUSED');
+            }
+
+            // Task 16.6: 先插入用户，确保满足 invitation_codes 的 used_by 外键约束
+            db.prepare('INSERT INTO users (id, uid, username, password_hash, role) VALUES (?, ?, ?, ?, ?)').run(uuid, nextUid, username, passwordHash, finalRole);
+
+            // Task 16.2 & 16.6: 事务内原子化校验与消耗邀请码
+            if (!isFirstUser && config.requireInvitation) {
+                console.log(`[Auth] Attempting to consume invite: ${inviteCode} for user: ${uuid}`);
+                const result = db.prepare(`UPDATE invitation_codes SET status = 'used', used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ? AND status = 'unused'`).run(uuid, inviteCode);
+                
+                if (result.changes === 0) {
+                    throw new Error('INVITE_INVALID'); // 抛出异常将导致上方 INSERT 自动回滚
+                }
+            }
+
             // 使用模板设置
             const s = onboardingData.settings || {};
             db.prepare('INSERT INTO user_settings (user_id, card_width, zen_mode, open_in_new_tab, hide_bg_mask) VALUES (?, ?, ?, ?, ?)').run(
                 uuid, s.cardWidth || 125, s.zenMode ? 1 : 0, s.openInNewTab ? 1 : 0, s.hideBgMask ? 1 : 0
             );
-            
-            if (!isFirstUser && inviteCode) {
-                db.prepare('UPDATE invitation_codes SET status = "used", used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ?').run(uuid, inviteCode);
-            }
 
             for (const cat of onboardingData.categories) {
                 const newCatId = crypto.randomUUID();
@@ -398,9 +419,41 @@ app.post('/api/auth/register', (req, res) => {
         })();
         
         syncUserToKV(uuid);
-        res.json({ success: true, role });
+        res.json({ success: true, role: finalRole });
     } catch (e) { 
-        res.status(400).json({ error: 'Username already exists or database error' }); 
+        console.error('[Auth] Registration error detail:', e);
+        
+        let errorMessage = '注册失败，请稍后重试';
+        let statusCode = 400;
+
+        // Task 16.2: 处理事务内抛出的业务错误
+        if (e.message === 'INVITE_REQUIRED') {
+            errorMessage = '该站点已开启强制邀请模式，请提供邀请码';
+            statusCode = 403;
+        } else if (e.message === 'INVITE_INVALID') {
+            errorMessage = '邀请码无效或已被他人抢先使用';
+            statusCode = 403;
+        } else if (e.message === 'REGISTRATION_PAUSED') {
+            errorMessage = '全站注册已关闭，仅限管理员手动开通';
+            statusCode = 403;
+        } else if (e.message.includes('UNIQUE constraint failed')) {
+            if (e.message.includes('users.username')) {
+                errorMessage = '该用户名已被占用，请更换';
+                statusCode = 409;
+            } else if (e.message.includes('users.uid')) {
+                errorMessage = '系统分配 ID 冲突，请重试';
+                statusCode = 409;
+            } else if (e.message.includes('users.id')) {
+                errorMessage = '系统生成 UUID 冲突，请重试';
+            }
+        } else if (e.message.includes('invitation_codes')) {
+            errorMessage = '邀请码处理异常';
+        }
+
+        res.status(statusCode).json({ 
+            error: errorMessage, 
+            details: process.env.NODE_ENV === 'development' ? e.message : undefined 
+        }); 
     }
 });
 
@@ -458,6 +511,14 @@ app.post('/api/auth/login', async (req, res) => {
     const ip = req.ip;
     console.log(`[Auth] Login attempt for user: ${username} from IP: ${ip}`);
 
+    // 获取动态安全配置 (Task 12.3)
+    const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+    let securityConfig = { maxLoginAttempts: 5, loginLockoutMin: 10 };
+    if (fs.existsSync(configPath)) {
+        const fullConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        if (fullConfig.security) securityConfig = { ...securityConfig, ...fullConfig.security };
+    }
+
     // 防爆破检查
     const attempt = loginAttempts.get(ip) || { count: 0, lockUntil: 0 };
     if (attempt.lockUntil > Date.now()) {
@@ -471,12 +532,12 @@ app.post('/api/auth/login', async (req, res) => {
     
     if (!user) {
         console.warn(`[Auth] User not found: ${username}`);
-        return recordLoginFailure(ip, res);
+        return recordLoginFailure(ip, res, securityConfig);
     }
 
     if (user.password_hash !== hash) {
         console.warn(`[Auth] Password mismatch for user: ${username}`);
-        return recordLoginFailure(ip, res);
+        return recordLoginFailure(ip, res, securityConfig);
     }
 
     // Task 5.5.2: 检查账号状态 (冻结逻辑)
@@ -512,19 +573,63 @@ app.post('/api/auth/login', async (req, res) => {
     });
 });
 
-// 辅助函数：记录登录失败
-function recordLoginFailure(ip, res) {
+// 辅助函数：记录登录失败 (Task 12.3: 支持动态配置)
+function recordLoginFailure(ip, res, config) {
     const attempt = loginAttempts.get(ip) || { count: 0, lockUntil: 0 };
     attempt.count++;
-    if (attempt.count >= 5) {
-        attempt.lockUntil = Date.now() + 10 * 60 * 1000;
-        console.log(`[Security] IP ${ip} locked for 10 mins due to failures`);
+    const maxAttempts = config?.maxLoginAttempts || 5;
+    const lockoutMs = (config?.loginLockoutMin || 10) * 60 * 1000;
+    
+    if (attempt.count >= maxAttempts) {
+        attempt.lockUntil = Date.now() + lockoutMs;
+        console.log(`[Security] IP ${ip} locked for ${config?.loginLockoutMin || 10} mins due to failures`);
     }
     loginAttempts.set(ip, attempt);
     return res.status(401).json({ error: '用户名或密码错误' });
 }
 
 // ====== Task 4.1: 管理员管控枢纽 (Admin Hub) ======
+
+// Task 12.4: 获取/更新全站安全配置
+app.get('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
+    const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+    let config = { 
+        siteTitle: 'CloudNav 导航',
+        allowOpenRegistration: true, 
+        requireInvitation: false,
+        security: {
+            maxLoginAttempts: 5,
+            loginLockoutMin: 10,
+            maxRegisterPerHour: 3,
+            registerLockoutHours: 24
+        }
+    };
+    if (fs.existsSync(configPath)) {
+        const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        config = { ...config, ...fileConfig };
+    }
+    res.json(config);
+});
+
+app.post('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
+    const newConfig = req.body;
+    const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+    
+    try {
+        let currentConfig = {};
+        if (fs.existsSync(configPath)) {
+            currentConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        }
+        
+        const finalConfig = { ...currentConfig, ...newConfig };
+        fs.writeFileSync(configPath, JSON.stringify(finalConfig, null, 2));
+        
+        console.log('[Admin] Site config updated by:', req.user.username);
+        res.json({ success: true, config: finalConfig });
+    } catch (e) {
+        res.status(500).json({ error: '保存配置失败', details: e.message });
+    }
+});
 
 app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
     try {

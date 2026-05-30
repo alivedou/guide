@@ -36,8 +36,10 @@ let themeMode = localStorage.getItem('nav_theme_mode') || 'auto';
 let simpleMode = localStorage.getItem('nav_simple_mode') === 'true';
 let currentEnginePrefix = localStorage.getItem('nav_search_prefix') || 'https://cn.bing.com/search?q=';
 let isDataDirty = false; // Task O+.1: 全局数据变更标记
+let lastSyncActionTime = 0; // Task 11.1: 云端同步冷却计时器
 let currentEditingAnnounceId = null; // Task 34.2: 正在编辑的公告 ID
 let lastFocusedElement = null; // Task 37.2: 记录弹窗前的焦点元素
+let adminData = { users: [], invitations: [], announcements: [] }; // Task 15.2: 管理员全站数据缓存
 
 // ==================== 1. 初始化入口 ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -66,23 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Task 6.6: 初始化公告更新监听
     initAnnouncementsWatcher();
 
-    // Task O.3: 页面卸载前保存设置
-    window.addEventListener('beforeunload', () => {
-        if (isDataDirty) {
-            // 注意：beforeunload 中 fetch 必须使用 keepalive 或同步请求（但不推荐）
-            if (sysToken) {
-                fetch('/api/config', {
-                    method: 'POST',
-                    headers: { 
-                        'Authorization': sysToken,
-                        'Content-Type': 'application/json' 
-                    },
-                    body: JSON.stringify(appData),
-                    keepalive: true
-                });
-            }
-        }
-    });
+    // Task 9.4: 启动自动备份调度检查 (延迟 10 秒执行，避开启动高峰)
+    setTimeout(checkAutoSyncSchedule, 10000);
 });
 
 // Task 6.6: 公告更新监听引擎
@@ -413,18 +400,6 @@ const openLoginModal = () => {
         document.getElementById('auth-username')?.focus();
     }, 100);
 };
-
-// 页面关闭前的紧急同步
-window.addEventListener('beforeunload', () => {
-    if (!sysToken || isAdmin) return;
-    const clicks = localStorage.getItem('nav_clicks_history');
-    if (clicks) {
-        const payload = JSON.stringify({ ...appData, clicks_history: JSON.parse(clicks) });
-        // 使用 Beacon API 确保请求在页面关闭后仍能发出
-        const blob = new Blob([payload], { type: 'application/json' });
-        navigator.sendBeacon('/api/config', blob);
-    }
-});
 
 const updateStyles = () => {
     // 1. 处理密度 (Task 4.2)
@@ -901,6 +876,20 @@ const doResetConfig = async () => {
     
     showLoader('正在恢复默认配置...');
     try {
+        if (!sysToken) {
+            // Task 20.5.3: 游客态重置逻辑
+            const res = await fetch('/api/config');
+            if (res.ok) {
+                appData = await res.json();
+                isDataDirty = false;
+                localStorage.setItem('nav_app_data', JSON.stringify(appData));
+                renderNav();
+                renderTools();
+                showToast("配置已恢复默认 (本地)", "#27ae60");
+                return;
+            }
+        }
+
         const res = await fetch('/api/config', {
             method: 'DELETE',
             headers: { 
@@ -974,6 +963,12 @@ const initAuthUI = () => {
         const inviteEl = document.getElementById('auth-invite-code');
         if (tip) tip.innerText = '还没有账号？点击上方“注册”开始';
         if (inviteEl) inviteEl.style.display = 'none'; // 登录模式隐藏邀请码
+        
+        // Task 16.4: 切换模式时清空表单，防止状态污染
+        ['auth-username', 'auth-password', 'auth-invite-code'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
         document.getElementById('auth-username')?.focus();
     });
 
@@ -986,6 +981,12 @@ const initAuthUI = () => {
         const inviteEl = document.getElementById('auth-invite-code');
         if (tip) tip.innerText = '已有账号？点击上方“登录”返回';
         if (inviteEl) inviteEl.style.display = 'block'; // 注册模式显示邀请码
+        
+        // Task 16.4: 切换模式时清混表单
+        ['auth-username', 'auth-password', 'auth-invite-code'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
         document.getElementById('auth-username')?.focus();
     });
 
@@ -1054,16 +1055,38 @@ const init = async (forceRender = false) => {
         
         const res = await Promise.race([fetchPromise, timeoutPromise]);
         
-        if (res.ok) {
+        // Task 19.2: 解析隔离 - 检查响应头是否为 JSON
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+            const errorText = await res.text();
+            console.error('[Init] Server returned non-JSON response:', errorText);
+            throw new Error('Server returned invalid data format');
+        }
+
+        // Task 18.3: 处理凭证失效 (401)
+        if (res.status === 401) {
+            console.warn('[Init] Token stale or database reset, cleaning up...');
+            handleAuthError(); // 自动清理失效信息
+            // 重新获取数据（此时以访客身份获取默认数据）
+            const guestRes = await fetch('/api/config');
+            if (guestRes.ok) {
+                appData = await guestRes.json();
+            } else {
+                throw new Error('Guest data fetch failed');
+            }
+        } else if (res.ok) {
             const data = await res.json();
             console.log('Config received:', data);
             
-            // 数据完整性校验
+            // Task 19.3: 渲染兜底 - 如果 data 缺失核心字段，使用默认兜底
             if (!data.categories || !data.items) {
-                throw new Error('Malformed data from server');
+                console.warn('[Init] Data incomplete, merging with defaultData');
+                appData = { ...MINIMAL_SAFE_DATA, ...data };
+                if (!appData.categories || appData.categories.length === 0) appData.categories = MINIMAL_SAFE_DATA.categories;
+                if (!appData.items) appData.items = [];
+            } else {
+                appData = data;
             }
-
-            appData = data;
             
             // Task 5.1: 同步最新的用户信息 (包含 UID)
             if (data.username && data.role) {
@@ -1102,27 +1125,33 @@ const init = async (forceRender = false) => {
             } catch(err) { console.error('Cache parse error'); }
         }
     } finally {
-        // 无论如何都要渲染并隐藏骨架屏
-        renderNav();
-        renderTools();
-        
-        // Task 20.2: 强制背景校验闭环
-        if (!appData.settings?.bgUrl) {
-            getBingWallpaper(); // 异步触发
-        }
-
-        updateStyles();
+        // Task 18.4: 无论发生什么，强制关闭骨架屏并渲染
         toggleSkeleton(false);
 
-        // Task 38.3: 同步云端搜索引擎设置
-        if (appData.settings?.searchEngine) {
-            if (typeof window.setSearchEngine === 'function') {
-                window.setSearchEngine(appData.settings.searchEngine, true);
+        try {
+            renderNav();
+            renderTools();
+            
+            // Task 20.2: 强制背景校验闭环
+            if (!appData.settings?.bgUrl) {
+                getBingWallpaper(); // 异步触发
             }
-        }
 
-        // Task 6.3: 在工具栏渲染完成后再初始化公告，防止铃铛图标被覆盖
-        initAnnouncements();
+            updateStyles();
+
+            // Task 38.3: 同步云端搜索引擎设置
+            if (appData.settings?.searchEngine) {
+                if (typeof window.setSearchEngine === 'function') {
+                    window.setSearchEngine(appData.settings.searchEngine, true);
+                }
+            }
+
+            // Task 6.3: 在工具栏渲染完成后再初始化公告
+            initAnnouncements();
+        } catch (renderError) {
+            console.error('[Init] Render crashed:', renderError);
+            showToast("渲染失败，请刷新重试", "#e74c3c");
+        }
     }
 };
 
@@ -1244,7 +1273,7 @@ const renderNav = () => {
             
             // 计算书签数量 (Task 4.5.2)
             const itemCount = appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
-            const countHtml = (isAdmin && isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') 
+            const countHtml = (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') 
                 ? `<span class="nav-count">${itemCount}</span>` 
                 : '';
 
@@ -1252,7 +1281,7 @@ const renderNav = () => {
             let navHtml = `<span class="nav-icon" title="">${cat.icon}</span><span class="nav-label">${cat.name}${countHtml}</span>`;
             
             // Task 4.3: 增加管理快捷按钮
-            if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ' && isAdmin) {
+            if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
                 navHtml += `
                     <div class="nav-actions">
                         <span class="nav-action-btn" title="编辑分类" onclick="event.stopPropagation(); openCategoryEditModal('${cat.id}')">
@@ -1332,7 +1361,7 @@ const renderNav = () => {
             // 健壮的过滤逻辑：同时支持 catId 和 cat_id (容错设计)
             const items = (cat.id === 'VIRTUAL_FREQ') 
                 ? appData.items.filter(i => freqIds.includes(i.id)) 
-                : appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id) && (isAdmin || !i.hidden));
+                : appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id) && (isPageManagementMode || isAdmin || !i.hidden));
                 
             items.forEach((item, idx) => {
                 const card = document.createElement('div');
@@ -1349,8 +1378,8 @@ const renderNav = () => {
                 
                 let html = buildCardHtml(item);
                 
-                // Admin 编辑入口 (Task 3.2)
-                if (isAdmin) {
+                // 编辑入口 (Task 3.2: 页面管理模式下对所有人开放，常规模式下仅限管理员)
+                if (isPageManagementMode || isAdmin) {
                     html += `<div class="card-admin-btns">
                         <button class="card-edit-btn" onclick="event.stopPropagation(); openEditModal('${item.id}')" title="编辑"><i class="ri-edit-line"></i></button>
                     </div>`;
@@ -1395,7 +1424,8 @@ const renderNav = () => {
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
                 const addCard = document.createElement('div');
                 const catItemCount = items.length;
-                const isCatFull = catItemCount >= 100;
+                const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
+                const isCatFull = catItemCount >= quota.maxItemsPerCategory;
 
                 addCard.className = `card add-new-card ${isCatFull ? 'disabled' : ''}`;
                 addCard.tabIndex = 0; // Task 30.2: 启用键盘焦点
@@ -1404,7 +1434,7 @@ const renderNav = () => {
                     <h3>${isCatFull ? '已满' : '新增书签'}</h3>
                 `;
                 addCard.onclick = () => {
-                    if (isCatFull) return showToast("该分类已达到 100 个书签上限", "#e74c3c");
+                    if (isCatFull) return showToast(`该分类已达到 ${quota.maxItemsPerCategory} 个书签上限`, "#e74c3c");
                     activeCatId = cat.id;
                     openEditModal('');
                 };
@@ -1421,15 +1451,16 @@ const renderNav = () => {
         });
 
         // Task 4.4: 侧边栏新增分类入口 (仅管理模式)
-        if (isPageManagementMode && isAdmin) {
+        if (isPageManagementMode) {
             const addCatBtn = document.createElement('div');
-            const isCatLimit = appData.categories.length >= 20;
+            const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
+            const isCatLimit = appData.categories.length >= quota.maxCategories;
             const sidebarNav = document.getElementById('sidebar-nav');
             if (sidebarNav) {
                 addCatBtn.className = `sidebar-nav-item add-cat-nav ${isCatLimit ? 'disabled' : ''}`;
                 addCatBtn.innerHTML = `<span class="nav-icon"><i class="ri-add-line"></i></span><span class="nav-label">${isCatLimit ? '分类已满' : '添加分类'}</span>`;
                 addCatBtn.onclick = () => {
-                    if (isCatLimit) return showToast("最多只能创建 20 个分类", "#e74c3c");
+                    if (isCatLimit) return showToast(`最多只能创建 ${quota.maxCategories} 个分类`, "#e74c3c");
                     const name = prompt("请输入新分类名称:");
                     if (name) {
                         const newCat = { id: 'cat_' + Date.now(), name, icon: '📂', hidden: false };
@@ -1483,10 +1514,13 @@ const renderNav = () => {
 };
 
 const renderTools = () => {
-    const area = document.getElementById('sidebar-admin-actions');
+    const area = document.getElementById('sidebar-admin-area');
     const userArea = document.getElementById('sidebar-user-section');
     const adminBanner = document.getElementById('admin-active-banner');
     if (!area || !userArea) return;
+
+    const themeIconMap = { 'auto': 'ri-computer-line', 'light': 'ri-sun-line', 'dark': 'ri-moon-line' };
+    const themeNameMap = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
     
     // Task 28.2: 渲染移动端快捷入口 (如果尚未存在)
     let mobileFab = document.getElementById('mobile-fab-visual');
@@ -1503,14 +1537,29 @@ const renderTools = () => {
         document.body.appendChild(mobileFab);
     }
     
-    // 如果已登录
-    if (sysToken) {
-        const info = currentUser || JSON.parse(localStorage.getItem('nav_current_user') || '{}');
+    // 1. 渲染用户信息区域
+    const info = sysToken 
+        ? (currentUser || JSON.parse(localStorage.getItem('nav_current_user') || '{}'))
+        : { username: '访客模式', role: 'guest', uid: null };
+
+    if (!sysToken) {
+        // 游客态显示登录引导
+        userArea.innerHTML = `
+            <div class="sidebar-user-card guest" onclick="showAuthModal()">
+                <div class="sidebar-user-info">
+                    <i class="ri-user-received-2-line"></i>
+                    <div class="user-meta-box">
+                        <span class="user-name">访客模式</span>
+                        <span class="user-uid">点击登录同步云端</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
         const userDisplayName = info.username || appData.username || '已登录用户';
         const displayUid = info.uid ? `<span class="user-uid">id: ${info.uid}</span>` : '';
         const roleBadge = isAdmin ? '<span class="admin-badge">ADMIN</span>' : (info.role === 'super_user' ? '<span class="admin-badge" style="background:#3498db">SUP</span>' : '');
         
-        // Task 7.2 & 8.5: 渲染顶部用户信息 (职责分离：左侧纯显示，右侧纯动作)
         userArea.innerHTML = `
             <div class="sidebar-user-card">
                 <div class="sidebar-user-info">
@@ -1525,153 +1574,467 @@ const renderTools = () => {
                 </button>
             </div>
         `;
+    }
 
-        // 2. 渲染底部管理工具
-        const themeIconMap = { 'auto': 'ri-computer-line', 'light': 'ri-sun-line', 'dark': 'ri-moon-line' };
-        const themeNameMap = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
-        
-        // 配额状态感知
-        const isAllFull = appData.categories.length > 0 && appData.categories.every(cat => 
-            appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length >= 100
-        );
+    // 2. 渲染底部管理工具
+    
+    // 配额状态感知 (Task 20.4)
+    const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
+    const isAllFull = appData.categories.length >= quota.maxCategories;
 
-        // Task 28.1: 基础设置入口（始终存在，在折叠态下作为齿轮锚点）
-        const settingsHubHtml = `
-            <div class="sidebar-nav-item toolbar-item" onclick="openVisualLab()" title="视觉实验室">
-                <div class="nav-icon"><i class="ri-settings-4-line"></i></div>
-                <span class="nav-label">视觉实验室</span>
-            </div>
-        `;
-
-        // 管理员模式视觉高亮切换 (Task 9.2 增强)
-        if (isAdmin && isPageManagementMode) {
-            if (adminBanner) {
-                adminBanner.style.display = 'flex';
-                adminBanner.innerHTML = `
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <i class="ri-tools-fill" style="font-size:18px;"></i>
-                        <span>页面管理中</span>
-                    </div>
-                    <div class="banner-hint" style="font-size:11px; opacity:0.9; font-weight:normal; display:flex; align-items:center; gap:5px;">
-                        <span>拖拽图标排序或点击分类编辑</span>
-                        <span style="background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); margin-left:10px;">
-                            <i class="ri-keyboard-line" style="font-size:10px;"></i> Esc 退出
-                        </span>
-                    </div>
-                    <button class="banner-exit-btn" onclick="togglePageManagement(false)">退出页面管理</button>
-                `;
-            }
-            document.body.classList.add('admin-mode');
-        } else {
-            if (adminBanner) adminBanner.style.display = 'none';
-            document.body.classList.remove('admin-mode');
+    // 管理员模式视觉高亮切换 (Task 9.2 增强)
+    if (isPageManagementMode) {
+        if (adminBanner) {
+            adminBanner.style.display = 'flex';
+            const isGuest = !sysToken;
+            
+            adminBanner.innerHTML = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <i class="ri-tools-fill" style="font-size:18px;"></i>
+                    <span>${isGuest ? '页面预览编辑中' : '页面管理中'}</span>
+                </div>
+                <div class="banner-hint" style="font-size:11px; opacity:0.9; font-weight:normal; display:flex; align-items:center; gap:5px;">
+                    <span>${isGuest ? '访客模式：修改仅本地生效' : '拖拽图标排序或点击分类编辑'}</span>
+                    ${isGuest ? `<span style="color:var(--primary);cursor:pointer;text-decoration:underline;margin-left:5px;" onclick="showAuthModal()">立即登录同步</span>` : ''}
+                    <span style="background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); margin-left:10px;">
+                        <i class="ri-keyboard-line" style="font-size:10px;"></i> Esc 退出
+                    </span>
+                </div>
+                <button class="banner-exit-btn" onclick="togglePageManagement(false)">退出页面管理</button>
+            `;
         }
-
-        area.innerHTML = `
-            <div class="sidebar-admin-container">
-                <!-- Task 4.12.1: 极简工具栏 -->
-                <div class="sidebar-admin-toolbar">
-                    <!-- 1. 页面管理 -->
-                    <div class="sidebar-nav-item toolbar-item ${isPageManagementMode ? 'active' : ''}" 
-                         onclick="togglePageManagement()" 
-                         tabindex="0"
-                         data-tooltip="页面管理">
-                        <span class="nav-icon"><i class="ri-layout-masonry-line"></i></span>
-                        <span class="nav-label">页面管理</span>
-                    </div>
-
-                    <!-- 2. 系统控制 (仅管理员) -->
-                    ${isAdmin ? `
-                    <div class="sidebar-nav-item toolbar-item" onclick="openAdminHub()" tabindex="0" data-tooltip="控制中心">
-                        <span class="nav-icon"><i class="ri-shield-user-line"></i></span>
-                    </div>` : ''}
-
-                    <!-- 3. 视觉实验室 (齿轮锚点) -->
-                    <div class="sidebar-nav-item toolbar-item" onclick="openVisualLab()" tabindex="0" data-tooltip="个性化设置">
-                        <span class="nav-icon"><i class="ri-settings-4-line"></i></span>
-                        <span class="nav-label">视觉实验室</span>
-                    </div>
-
-                    <!-- 4. 主题模式切换 (Task 29.2) -->
-                    <div class="sidebar-nav-item toolbar-item ${themeMode !== 'auto' ? 'active' : ''}" 
-                         onclick="toggleThemeMode()" 
-                         tabindex="0"
-                         data-tooltip="主题模式: ${themeNameMap[themeMode]}">
-                        <span class="nav-icon"><i class="${themeIconMap[themeMode]}"></i></span>
-                        <span class="nav-label">外观模式</span>
-                    </div>
-                </div>
-
-                <!-- 页面管理子菜单 (仅在管理模式下显示) -->
-                ${isPageManagementMode ? `
-                <div class="admin-tools-submenu">
-                    <div class="sidebar-nav-item ${isAllFull ? 'disabled' : ''}" 
-                         onclick="${isAllFull ? 'showToast(\'书签配额已满\', \'#e74c3c\')' : 'openEditModal(\'\')'}"
-                         style="font-size: 13px; padding: 6px 12px;">
-                        <span class="nav-icon"><i class="ri-add-circle-line"></i></span>
-                        <span class="nav-label">新增网址</span>
-                    </div>
-                    <div class="sidebar-nav-item" onclick="openJsonEditor()" style="font-size: 13px; padding: 6px 12px;">
-                        <span class="nav-icon"><i class="ri-code-s-slash-line"></i></span>
-                        <span class="nav-label">专家模式</span>
-                    </div>
-                    <div class="sidebar-nav-item" onclick="exportConfig()" style="font-size: 13px; padding: 6px 12px;">
-                        <span class="nav-icon"><i class="ri-download-2-line"></i></span>
-                        <span class="nav-label">备份导出</span>
-                    </div>
-                    <div class="sidebar-nav-item" onclick="document.getElementById('import-file').click()" style="font-size: 13px; padding: 6px 12px;">
-                        <span class="nav-icon"><i class="ri-upload-2-line"></i></span>
-                        <span class="nav-label">配置导入</span>
-                    </div>
-                    <div class="sidebar-nav-item" onclick="doResetConfig()" style="font-size: 13px; padding: 6px 12px;">
-                        <span class="nav-icon"><i class="ri-refresh-line"></i></span>
-                        <span class="nav-label">重置模板</span>
-                    </div>
-                    <!-- 退出管理增强 -->
-                    <div class="sidebar-nav-item exit-manage-btn" onclick="togglePageManagement(false)" 
-                         style="font-size: 13px; padding: 8px 12px; margin-top: 10px; border-top: 1px solid var(--glass-border); color: var(--primary); font-weight: bold;">
-                        <span class="nav-icon"><i class="ri-checkbox-circle-line"></i></span>
-                        <span class="nav-label">退出页面管理</span>
-                    </div>
-                </div>
-                ` : ''}
-            </div>
-        `;
+        document.body.classList.add('admin-mode');
     } else {
-        const themeIconMap = { 'auto': 'ri-computer-line', 'light': 'ri-sun-line', 'dark': 'ri-moon-line' };
-        const themeNameMap = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
+        if (adminBanner) adminBanner.style.display = 'none';
+        document.body.classList.remove('admin-mode');
+    }
 
-        // 未登录状态：顶部卡片化，职责分离 (Task 8.1 & 8.5)
-        userArea.innerHTML = `
-            <div class="sidebar-user-card guest-mode">
-                <div class="sidebar-user-info">
-                    <i class="ri-user-line"></i>
-                    <div class="user-meta-box">
-                        <span class="user-name">未登录用户</span>
-                        <span class="user-uid">访客模式</span>
+    // 角色能力判定 (Task 17.2)
+    const role = info.role;
+    const isLogged = !!sysToken;
+    const canManageUsers = (role === 'admin' || role === 'super_user');
+    const canConfigSystem = (role === 'admin');
+
+    // 统一按钮模板
+    const toolbarButtons = [
+        {
+            id: 'btn-page-manage',
+            icon: 'ri-layout-masonry-line',
+            label: '页面管理',
+            tooltip: '页面管理',
+            active: isPageManagementMode,
+            onclick: 'togglePageManagement()',
+            show: true
+        },
+        {
+            id: 'btn-admin-hub',
+            icon: 'ri-shield-user-line',
+            label: '用户管理',
+            tooltip: '用户管理中心',
+            onclick: 'openAdminHub()',
+            show: canManageUsers
+        },
+        {
+            id: 'btn-sys-config',
+            icon: 'ri-shield-keyhole-line',
+            label: '系统参数',
+            tooltip: '系统全站参数配置',
+            onclick: 'openSystemConfigHub()',
+            show: canConfigSystem
+        },
+        {
+            id: 'btn-visual-lab',
+            icon: 'ri-settings-4-line',
+            label: '视觉实验室',
+            tooltip: '个性化设置',
+            onclick: 'openVisualLab()',
+            show: true
+        },
+        {
+            id: 'btn-theme-toggle',
+            icon: themeIconMap[themeMode],
+            label: '外观模式',
+            tooltip: `主题模式: ${themeNameMap[themeMode]}`,
+            active: themeMode !== 'auto',
+            onclick: 'toggleThemeMode()',
+            show: true
+        },
+        {
+            id: 'btn-sync-center',
+            icon: 'ri-cloud-line',
+            label: '云端备份',
+            tooltip: '云端同步中心',
+            onclick: 'openSyncCenter()',
+            show: isLogged // Task 17.2: 仅登录用户可见
+        }
+    ];
+
+    area.innerHTML = `
+        <div class="sidebar-admin-container">
+            <div class="sidebar-admin-toolbar">
+                ${toolbarButtons.filter(b => b.show).map(b => `
+                    <div class="sidebar-nav-item toolbar-item ${b.active ? 'active' : ''}" 
+                         id="${b.id}"
+                         onclick="${b.onclick}" 
+                         tabindex="0"
+                         data-tooltip="${b.tooltip}">
+                        <span class="nav-icon"><i class="${b.icon}"></i></span>
+                        <span class="nav-label">${b.label}</span>
+                    </div>
+                `).join('')}
+            </div>
+
+            <!-- 页面管理子菜单 (仅在管理模式下显示) -->
+            ${isPageManagementMode ? `
+            <div class="admin-tools-submenu">
+                <div class="sidebar-nav-item" 
+                     onclick="openEditModal('')"
+                     style="font-size: 13px; padding: 6px 12px;">
+                    <span class="nav-icon"><i class="ri-add-circle-line"></i></span>
+                    <span class="nav-label">新增网址</span>
+                </div>
+                <div class="sidebar-nav-item" onclick="openJsonEditor()" style="font-size: 13px; padding: 6px 12px;">
+                    <span class="nav-icon"><i class="ri-code-s-slash-line"></i></span>
+                    <span class="nav-label">专家模式</span>
+                </div>
+                <div class="sidebar-nav-item" onclick="exportConfig()" style="font-size: 13px; padding: 6px 12px;">
+                    <span class="nav-icon"><i class="ri-download-2-line"></i></span>
+                    <span class="nav-label">备份导出</span>
+                </div>
+                <div class="sidebar-nav-item" onclick="document.getElementById('import-file').click()" style="font-size: 13px; padding: 6px 12px;">
+                    <span class="nav-icon"><i class="ri-upload-2-line"></i></span>
+                    <span class="nav-label">配置导入</span>
+                </div>
+                <div class="sidebar-nav-item" onclick="doResetConfig()" style="font-size: 13px; padding: 6px 12px;">
+                    <span class="nav-icon"><i class="ri-refresh-line"></i></span>
+                    <span class="nav-label">重置模板</span>
+                </div>
+                <!-- 退出管理增强 -->
+                <div class="sidebar-nav-item exit-manage-btn" onclick="togglePageManagement(false)" 
+                     style="font-size: 13px; padding: 8px 12px; margin-top: 10px; border-top: 1px solid var(--glass-border); color: var(--primary); font-weight: bold;">
+                    <span class="nav-icon"><i class="ri-checkbox-circle-line"></i></span>
+                    <span class="nav-label">保存并退出</span>
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    `;
+};
+
+// Task 10.1: 唤起云端备份中心 (风格对齐视觉实验室)
+window.openSyncCenter = () => {
+    lastFocusedElement = document.activeElement; // Task 37.2
+    closeAllModals(true);
+
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    
+    if (!modal || !body) return;
+
+    title.innerHTML = `<i class="ri-cloud-line"></i> 云端同步中心`;
+    
+    // 获取同步状态
+    const lastSync = localStorage.getItem('nav_last_cloud_sync');
+    const timeStr = lastSync ? new Date(parseInt(lastSync)).toLocaleString() : '从未备份';
+    const isOverdue = lastSync && (Date.now() - parseInt(lastSync) > 7 * 24 * 3600 * 1000);
+
+    body.innerHTML = `
+        <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-history-line"></i> 备份状态反馈</span>
+            <div style="background: var(--glass-card); padding: 12px; border-radius: 10px; border: 1px solid var(--glass-border);">
+                <p style="font-size: 13px; margin: 0; display:flex; justify-content: space-between; align-items: center;">
+                    <span>上次同步时间：</span>
+                    <b style="color: ${lastSync ? 'var(--primary-color)' : '#e74c3c'}">${timeStr}</b>
+                </p>
+                ${isOverdue ? `<p style="font-size: 11px; color: #e67e22; margin-top: 8px;"><i class="ri-error-warning-line"></i> 提示：您的云端备份已超过 7 天未更新，建议立即同步。</p>` : ''}
+            </div>
+        </div>
+        
+        <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-upload-cloud-2-line"></i> 数据同步操作</span>
+            <button class="tab-btn active" style="width:100%; height:42px; font-weight: bold; font-size: 14px; background: var(--primary-color);" onclick="manualSyncCloud(true)">
+                <i class="ri-cloud-upload-line"></i> 立即上传备份到云端
+            </button>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">说明：此操作将使用当前本地配置覆盖云端数据。支持跨设备同步。</p>
+        </div>
+
+        <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-timer-flash-line"></i> 自动化备份调度</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn ${!appData.settings?.syncInterval ? 'active' : ''}" onclick="setSyncInterval(0, true)">禁用</button>
+                <button class="tab-btn ${appData.settings?.syncInterval === 3 ? 'active' : ''}" onclick="setSyncInterval(3, true)">3天</button>
+                <button class="tab-btn ${appData.settings?.syncInterval === 7 ? 'active' : ''}" onclick="setSyncInterval(7, true)">7天</button>
+                <button class="tab-btn ${appData.settings?.syncInterval === 30 ? 'active' : ''}" onclick="setSyncInterval(30, true)">30天</button>
+            </div>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">推荐：开启自动备份可有效防止因浏览器清理缓存导致的数据丢失。</p>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+    confirmBtn.style.display = 'block';
+    confirmBtn.innerText = "完成并关闭";
+    confirmBtn.onclick = () => closeAllModals();
+};
+
+// Task 9.3: 手动同步云端逻辑
+window.manualSyncCloud = async (refreshUI = false) => {
+    if (!sysToken) return showToast("请先登录再进行备份", "#e67e22");
+
+    // 1. 数据合法性校验 (Data Validation)
+    if (!appData || !Array.isArray(appData.categories) || !Array.isArray(appData.items)) {
+        return showToast("本地数据结构异常，取消上传以保护云端数据", "#e74c3c");
+    }
+
+    if (appData.categories.length === 0 && !confirm("检测到本地没有分类数据，确定要清空云端备份吗？")) {
+        return;
+    }
+
+    showLoader('正在校验并备份至云端...');
+    
+    try {
+        // 2. 调用现有的云端同步逻辑
+        const res = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 
+                'Authorization': sysToken,
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify(appData)
+        });
+
+        if (res.status === 401) {
+            hideLoader();
+            return handleAuthError();
+        }
+        
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            // 3. 成功反馈与状态记录
+            isDataDirty = false;
+            const now = Date.now();
+            localStorage.setItem('nav_last_cloud_sync', now);
+            localStorage.setItem('nav_app_data', JSON.stringify(appData)); // 同步后也更新本地缓存
+            
+            showToast("云端数据同步完成，设置已安全备份", "#27ae60");
+            console.log('[Sync] Manual backup success at:', new Date(now).toLocaleString());
+            
+            // Task 10.3: 如果是在弹窗中操作，刷新弹窗内容显示最新时间
+            if (refreshUI) openSyncCenter();
+        } else {
+            throw new Error(data.error || "服务器拒绝保存");
+        }
+    } catch (e) {
+        console.error('[Sync] Manual backup failed:', e);
+        showToast(`备份失败: ${e.message}`, "#e74c3c");
+    } finally {
+        hideLoader();
+    }
+};
+
+// Task 9.4: 设置同步频率
+window.setSyncInterval = (days, refreshUI = false) => {
+    if (!appData.settings) appData.settings = {};
+    appData.settings.syncInterval = days;
+    localStorage.setItem('nav_app_data', JSON.stringify(appData));
+    
+    // 如果是弹窗模式，立即刷新弹窗以显示选中态，不再重新渲染侧边栏
+    if (refreshUI) openSyncCenter();
+    else renderTools(); 
+
+    showToast(days === 0 ? "已关闭自动备份" : `已设置为每 ${days} 天自动备份一次`);
+};
+
+// Task 12.2 & 13.2 & 14.1: 唤起全站系统参数配置中枢 (Tab 架构重构)
+window.openSystemConfigHub = async (defaultTab = 'brand') => {
+    if (!isAdmin) return;
+    lastFocusedElement = document.activeElement;
+    closeAllModals(true);
+    showLoader('正在读取全站配置...');
+
+    try {
+        const res = await fetch('/api/admin/site-config', {
+            headers: { 'Authorization': sysToken }
+        });
+        const config = await res.json();
+        hideLoader();
+
+        const modal = document.getElementById('edit-modal');
+        const title = document.getElementById('edit-title');
+        const body = document.getElementById('edit-form-body');
+        const confirmBtn = document.getElementById('btn-confirm-edit');
+        
+        if (!modal || !body) return;
+
+        title.innerHTML = `<i class="ri-settings-5-line"></i> 系统参数配置中心`;
+        const sec = config.security || { maxLoginAttempts: 5, loginLockoutMin: 10, maxRegisterPerHour: 3, registerLockoutHours: 24 };
+
+        body.innerHTML = `
+            <div class="admin-hub-tabs">
+                <button class="hub-tab ${defaultTab === 'brand' ? 'active' : ''}" onclick="switchSysTab('brand')">品牌与 SEO</button>
+                <button class="hub-tab ${defaultTab === 'policy' ? 'active' : ''}" onclick="switchSysTab('policy')">注册策略</button>
+                <button class="hub-tab ${defaultTab === 'security' ? 'active' : ''}" onclick="switchSysTab('security')">安全防护</button>
+            </div>
+
+            <!-- 区块 1: 品牌与 SEO -->
+            <div id="sys-pane-brand" class="hub-pane ${defaultTab === 'brand' ? 'active' : ''}">
+                <div class="admin-config-section">
+                    <div class="form-group">
+                        <label>站点标题</label>
+                        <input type="text" id="sys-site-title" value="${config.siteTitle || ''}" placeholder="CloudNav">
+                    </div>
+                    <div class="form-group">
+                        <label>Favicon URL</label>
+                        <input type="text" id="sys-favicon-url" value="${config.faviconUrl || ''}" placeholder="https://...">
+                    </div>
+                    <div class="form-group">
+                        <label>SEO 关键词</label>
+                        <input type="text" id="sys-seo-keywords" value="${config.seoKeywords || ''}" placeholder="以逗号分隔">
+                    </div>
+                    <div class="form-group">
+                        <label>SEO 描述</label>
+                        <textarea id="sys-seo-desc" rows="2" placeholder="站点描述信息...">${config.seoDescription || ''}</textarea>
                     </div>
                 </div>
-                <button class="sidebar-quick-logout" onclick="showAuthModal()" style="background: var(--primary-color); opacity: 0.8;" title="点击登录 / 注册">
-                    <i class="ri-login-box-line"></i>
-                </button>
             </div>
-        `;
-        area.innerHTML = `
-            <div class="sidebar-admin-container">
-                <div class="sidebar-admin-toolbar">
-                    <!-- Task 28.1: 访客齿轮锚点 -->
-                    <div class="sidebar-nav-item toolbar-item" onclick="openVisualLab()" tabindex="0" data-tooltip="视觉设置">
-                        <span class="nav-icon"><i class="ri-settings-4-line"></i></span>
-                        <span class="nav-label">视觉预览</span>
+            
+            <!-- 区块 2: 注册与准入 -->
+            <div id="sys-pane-policy" class="hub-pane ${defaultTab === 'policy' ? 'active' : ''}">
+                <div class="admin-config-section">
+                    <div class="form-group" style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <div>
+                            <div style="font-size:14px; color:white;">开放注册</div>
+                            <div style="font-size:11px; color:#888;">允许新用户直接注册账号</div>
+                        </div>
+                        <label class="switch-ui">
+                            <input type="checkbox" id="sys-allow-reg" ${config.allowOpenRegistration !== false ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
                     </div>
-                    <!-- Task 29.2: 访客主题切换 -->
-                    <div class="sidebar-nav-item toolbar-item" onclick="toggleThemeMode()" tabindex="0" data-tooltip="外观: ${themeNameMap[themeMode]}">
-                        <span class="nav-icon"><i class="${themeIconMap[themeMode]}"></i></span>
-                        <span class="nav-label">外观切换</span>
+                    <div class="form-group" style="display:flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size:14px; color:white;">强制要求邀请码</div>
+                            <div style="font-size:11px; color:#888;">注册时必须填写有效的邀请码</div>
+                        </div>
+                        <label class="switch-ui">
+                            <input type="checkbox" id="sys-require-invite" ${config.requireInvitation ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 区块 3: 安全防护 -->
+            <div id="sys-pane-security" class="hub-pane ${defaultTab === 'security' ? 'active' : ''}">
+                <div class="admin-config-section">
+                    <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
+                        <div class="form-group">
+                            <label>登录重试上限</label>
+                            <input type="number" id="sys-login-max" value="${sec.maxLoginAttempts}">
+                        </div>
+                        <div class="form-group">
+                            <label>登录锁定 (分)</label>
+                            <input type="number" id="sys-login-lock" value="${sec.loginLockoutMin}">
+                        </div>
+                    </div>
+                    <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div class="form-group">
+                            <label>IP 每小时注册限额</label>
+                            <input type="number" id="sys-reg-max" value="${sec.maxRegisterPerHour}">
+                        </div>
+                        <div class="form-group">
+                            <label>注册封禁时长 (时)</label>
+                            <input type="number" id="sys-reg-lock" value="${sec.registerLockoutHours}">
+                        </div>
                     </div>
                 </div>
             </div>
         `;
+        
+        modal.style.display = 'flex';
+        confirmBtn.style.display = 'block';
+        confirmBtn.innerText = "应用全站参数";
+        confirmBtn.onclick = () => saveSystemConfig();
+    } catch (e) {
+        hideLoader();
+        showToast("加载系统参数失败", "#e74c3c");
+    }
+};
+
+// Task 14.1: 系统参数 Tab 切换逻辑
+window.switchSysTab = (tab) => {
+    document.querySelectorAll('#edit-modal .hub-tab').forEach(el => {
+        el.classList.toggle('active', el.innerText.includes(tab === 'brand' ? '品牌' : (tab === 'policy' ? '策略' : '防护')));
+    });
+    document.querySelectorAll('#edit-modal .hub-pane').forEach(el => {
+        el.classList.remove('active');
+    });
+    const target = document.getElementById(`sys-pane-${tab}`);
+    if (target) target.classList.add('active');
+};
+
+const saveSystemConfig = async () => {
+    const payload = {
+        siteTitle: document.getElementById('sys-site-title').value.trim(),
+        faviconUrl: document.getElementById('sys-favicon-url').value.trim(),
+        seoKeywords: document.getElementById('sys-seo-keywords').value.trim(),
+        seoDescription: document.getElementById('sys-seo-desc').value.trim(),
+        allowOpenRegistration: document.getElementById('sys-allow-reg').checked,
+        requireInvitation: document.getElementById('sys-require-invite').checked,
+        security: {
+            maxLoginAttempts: parseInt(document.getElementById('sys-login-max').value),
+            loginLockoutMin: parseInt(document.getElementById('sys-login-lock').value),
+            maxRegisterPerHour: parseInt(document.getElementById('sys-reg-max').value),
+            registerLockoutHours: parseInt(document.getElementById('sys-reg-lock').value)
+        }
+    };
+
+    showLoader('正在下发全站策略...');
+    try {
+        const res = await fetch('/api/admin/site-config', {
+            method: 'POST',
+            headers: { 
+                'Authorization': sysToken,
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            showToast("全站参数已热更新生效", "#27ae60");
+            // Task 13.4: 立即重新拉取并应用最新的站点配置 (标题、SEO、Favicon 等)
+            initSiteConfig(); 
+            closeAllModals();
+        } else {
+            throw new Error("下发失败");
+        }
+    } catch (e) {
+        showToast("配置保存失败", "#e74c3c");
+    } finally {
+        hideLoader();
+    }
+};
+
+// Task 9.4: 周期性自动备份调度器
+const checkAutoSyncSchedule = async () => {
+    if (!sysToken) return;
+    
+    const intervalDays = appData.settings?.syncInterval || 0;
+    if (intervalDays <= 0) return;
+
+    const lastSync = parseInt(localStorage.getItem('nav_last_cloud_sync') || '0');
+    const now = Date.now();
+    const threshold = intervalDays * 24 * 60 * 60 * 1000;
+
+    if (now - lastSync > threshold) {
+        console.log(`[Sync] Auto-sync triggered. Interval: ${intervalDays} days. Last sync: ${new Date(lastSync).toLocaleDateString()}`);
+        
+        // 自动同步前进行静默检查：如果数据没变（isDataDirty 为 false），则仅更新时间戳而不发请求
+        // 或者简单起见，既然是自动备份，直接执行一次上传以确保云端是最新的
+        showToast(`自动备份中 (周期: ${intervalDays} 天)...`, "#3498db");
+        await manualSyncCloud();
     }
 };
 
@@ -2126,18 +2489,27 @@ const closeSearch = () => {
     if (dropdown) dropdown.style.display = 'none';
 };
 
-// Task 9.6 & O.3 & O++.1: 全局模态状态清理函数 (支持静默模式)
+// Task 9.6 & O.3 & O++.1 & 9.1 & 11.3: 全局模态状态清理函数 (支持静默模式)
 const closeAllModals = (silent = false) => {
-    // 0. 检查待同步的设置并执行同步 (仅在非静默模式、非管理模式且数据脏时触发)
-    // 页面管理模式下的同步由 togglePageManagement 退出时统一处理
-    if (!silent && isDataDirty && !isPageManagementMode) syncConfigToCloud();
-
-    // 1. 关闭常规弹窗并清空内容
+    // 1. 检查是否从备份中心退出，且有待同步的数据 (Task 11.3)
     const editModal = document.getElementById('edit-modal');
+    if (!silent && isDataDirty && editModal?.dataset.modalType === 'sync-center') {
+        // 退出备份中心时，如果数据脏，执行一次自动云端同步
+        manualSyncCloud(); 
+    }
+
+    // Task 9.1: 策略降级，针对常规设置不再自动同步云端，仅本地暂存
+    if (!silent && isDataDirty && !isPageManagementMode && editModal?.dataset.modalType !== 'sync-center') {
+        localStorage.setItem('nav_app_data', JSON.stringify(appData));
+        showToast("设置已保存至本地，建议及时备份至云端", "#f39c12");
+    }
+
+    // 2. 清理常规弹窗状态并隐藏
     if (editModal) {
         editModal.style.display = 'none';
+        delete editModal.dataset.modalType; // 清理标记
         const body = document.getElementById('edit-form-body');
-        if (body) body.innerHTML = ''; // 彻底清空残影
+        if (body) body.innerHTML = ''; 
     }
 
     // 2. 关闭专家模式弹窗
@@ -2158,8 +2530,8 @@ const closeAllModals = (silent = false) => {
 // ==================== 9. Task 3.3: 页面管理模式 (Page Management) ====================
 
 const togglePageManagement = (force) => {
-    if (!isAdmin) return showToast("仅管理员可进入页面管理模式", "#e67e22");
-
+    // Task 17.3: 允许所有角色进入页面管理模式，移除 isAdmin 硬拦截
+    
     // Task 10.6.2: 交互锁定逻辑 - 如果当前已是管理模式且尝试通过侧边栏点击（force 未定义），则不执行切换（关闭）
     // 强制引导用户通过“保存并退出”按钮或 Esc 退出
     if (isPageManagementMode && typeof force === 'undefined') {
@@ -2183,8 +2555,13 @@ const togglePageManagement = (force) => {
         initSortable();
     } else {
         destroySortable();
-        // Task O+.3: 退出管理模式时同步
-        if (isDataDirty) syncConfigToCloud();
+        // Task 9.1: 策略降级，退出管理模式时仅本地保存
+        if (isDataDirty) {
+            localStorage.setItem('nav_app_data', JSON.stringify(appData));
+            showToast("已自动保存到本地，记得手动备份到云端", "#f39c12");
+        } else {
+            showToast("已退出管理模式");
+        }
         
         selectedIds.clear();
         updateBatchBar();
@@ -2390,7 +2767,14 @@ const updateBatchBar = () => {
 };
 
 const syncConfigToCloud = async () => {
-    if (!sysToken) return;
+    if (!sysToken) {
+        // Task 20.5.3: 游客态分流处理
+        console.log('[Sync] Guest mode detected, saving to localStorage...');
+        localStorage.setItem('nav_app_data', JSON.stringify(appData));
+        isDataDirty = false;
+        showToast("设置已暂存至本地 (登录后可同步至云端)", "#3498db");
+        return;
+    }
     console.log('[Sync] Saving changes to cloud...');
     isDataDirty = false; // 同步开始即视为正在清理标记
     try {
@@ -2528,22 +2912,22 @@ const openAdminHub = async (defaultTab = 'users') => {
     confirmBtn.style.display = 'none'; // 后台采用即时操作
 
     try {
-        const [usersRes, configRes, inviteRes, announceRes] = await Promise.all([
+        const [usersRes, inviteRes, announceRes] = await Promise.all([
             fetch('/api/admin/users', { headers: { 'Authorization': sysToken } }),
-            fetch('/api/admin/site-config'),
             fetch('/api/admin/invitations', { headers: { 'Authorization': sysToken } }),
             fetch('/api/admin/announcements', { headers: { 'Authorization': sysToken } })
         ]);
         
         const { users } = await usersRes.json();
-        const config = await configRes.json();
         const { invitations } = await inviteRes.json();
         const { announcements } = await announceRes.json();
+
+        // Task 15.2: 同步到内存状态
+        adminData = { users, invitations, announcements };
 
         body.innerHTML = `
             <div class="admin-hub-tabs">
                 <button class="hub-tab ${defaultTab === 'users' ? 'active' : ''}" data-tab="users" onclick="switchHubTab('users')">用户管理</button>
-                <button class="hub-tab ${defaultTab === 'config' ? 'active' : ''}" data-tab="config" onclick="switchHubTab('config')">全站设置</button>
                 <button class="hub-tab ${defaultTab === 'invites' ? 'active' : ''}" data-tab="invites" onclick="switchHubTab('invites')">邀请管理</button>
                 <button class="hub-tab ${defaultTab === 'announcements' ? 'active' : ''}" data-tab="announcements" onclick="switchHubTab('announcements')">公告管理</button>
             </div>
@@ -2574,56 +2958,6 @@ const openAdminHub = async (defaultTab = 'users') => {
                     </tbody>
                 </table>
             </div>
-            <div id="hub-content-config" class="hub-pane ${defaultTab === 'config' ? 'active' : ''}">
-                <div class="admin-config-section">
-                    <div class="sidebar-group-title" style="padding-left:0; margin-bottom:10px; opacity:0.8;">🌐 品牌与 SEO 设置</div>
-                    <div class="form-row" style="display:flex; gap:10px;">
-                        <div class="form-group" style="flex:1">
-                            <label>站点标题</label>
-                            <input type="text" id="admin-site-title" value="${config.siteTitle || ''}" placeholder="CloudNav">
-                        </div>
-                        <div class="form-group" style="flex:1">
-                            <label>Favicon URL</label>
-                            <input type="text" id="admin-favicon-url" value="${config.faviconUrl || ''}" placeholder="https://...">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>SEO 关键词</label>
-                        <input type="text" id="admin-site-keywords" value="${config.seoKeywords || ''}" placeholder="关键词, 以逗号分隔">
-                    </div>
-                    <div class="form-group">
-                        <label>SEO 描述</label>
-                        <textarea id="admin-site-desc" rows="2" placeholder="站点描述信息...">${config.seoDescription || ''}</textarea>
-                    </div>
-                </div>
-
-                <div class="admin-config-section" style="margin-top:20px; border-top:1px solid var(--glass-border); padding-top:15px;">
-                    <div class="sidebar-group-title" style="padding-left:0; margin-bottom:10px; opacity:0.8;">🛡️ 注册与准入策略</div>
-                    <div class="strategy-panel" style="background:rgba(255,255,255,0.05); padding:15px; border-radius:10px;">
-                        <div class="form-group" style="display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <div style="font-size:14px; color:white;">开放注册</div>
-                                <div style="font-size:11px; color:#888;">允许新用户直接注册账号</div>
-                            </div>
-                            <label class="switch-ui">
-                                <input type="checkbox" id="admin-allow-reg" ${config.allowOpenRegistration !== false ? 'checked' : ''}>
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <div class="form-group" style="display:flex; justify-content:space-between; align-items:center; margin-top:15px;">
-                            <div>
-                                <div style="font-size:14px; color:white;">强制邀请码</div>
-                                <div style="font-size:11px; color:#888;">注册时必须填写有效的邀请码</div>
-                            </div>
-                            <label class="switch-ui">
-                                <input type="checkbox" id="admin-require-invite" ${config.requireInvitation ? 'checked' : ''}>
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <button class="tab-btn active" style="width:100%; margin-top:20px; font-weight:bold; height:40px;" onclick="saveSiteConfig()">保存全站配置</button>
-            </div>
             <div id="hub-content-invites" class="hub-pane ${defaultTab === 'invites' ? 'active' : ''}">
                 <div style="display:flex; gap:10px; margin-bottom:15px;">
                     <button class="tab-btn active" onclick="generateInvites(1)">生成 1 个</button>
@@ -2636,11 +2970,12 @@ const openAdminHub = async (defaultTab = 'users') => {
                         <tbody>
                             ${invitations.map(i => `
                                 <tr>
-                                    <td style="font-family: monospace;">${i.code}</td>
+                                    <td class="code-font">${i.code}</td>
                                     <td><span class="status-badge ${i.status}">${i.status}</span></td>
                                     <td>${i.used_by_name || '-'}</td>
-                                    <td>
-                                        ${i.status === 'unused' ? `<button class="action-link" onclick="deleteInvite('${i.code}')">删除</button>` : '-'}
+                                    <td style="display: flex; gap: 8px;">
+                                        <button class="action-link" onclick="copySingleInvite('${i.code}')">复制</button>
+                                        ${i.status === 'unused' ? `<button class="action-link" style="color: #e74c3c;" onclick="deleteInvite('${i.code}')">删除</button>` : '-'}
                                     </td>
                                 </tr>
                             `).join('')}
@@ -2869,14 +3204,18 @@ window.formatMonacoJson = () => {
 };
 
 window.copyUnusedInvites = () => {
-    const cells = document.querySelectorAll('#hub-content-invites td[style*="monospace"]');
-    const unused = [];
-    cells.forEach(cell => {
-        const status = cell.nextElementSibling.innerText;
-        if (status === 'unused') unused.push(cell.innerText);
-    });
-    if (unused.length === 0) return showToast("没有可用的邀请码", "#e67e22");
-    navigator.clipboard.writeText(unused.join('\n')).then(() => showToast("已复制到剪贴板"));
+    // Task 15.2: 改为从内存数据读取，彻底解耦 DOM
+    const allInvites = adminData.invitations || [];
+    const unused = allInvites.filter(i => i.status === 'unused').map(i => i.code);
+        
+    if (allInvites.length === 0) return showToast("当前没有任何邀请码", "#e67e22");
+    if (unused.length === 0) return showToast("所有邀请码均已被使用", "#e67e22");
+    
+    navigator.clipboard.writeText(unused.join('\n')).then(() => showToast(`已复制 ${unused.length} 个未使用邀请码`));
+};
+
+window.copySingleInvite = (code) => {
+    navigator.clipboard.writeText(code).then(() => showToast("邀请码已复制"));
 };
 
 window.toggleUserStatus = async (userId, currentStatus) => {
@@ -3097,29 +3436,7 @@ window.markAllNoticesRead = async () => {
     openNoticeCenter(); // 刷新列表状态
 };
 
-window.saveSiteConfig = async () => {
-    const config = {
-        siteTitle: document.getElementById('admin-site-title').value,
-        faviconUrl: document.getElementById('admin-favicon-url').value,
-        seoKeywords: document.getElementById('admin-site-keywords').value,
-        seoDescription: document.getElementById('admin-site-desc').value,
-        allowOpenRegistration: document.getElementById('admin-allow-reg').checked,
-        requireInvitation: document.getElementById('admin-require-invite').checked
-    };
-
-    try {
-        const res = await fetch('/api/admin/site-config', {
-            method: 'POST',
-            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify(config)
-        });
-        if (res.ok) {
-            showToast("全站配置已更新，正在应用...");
-            initSiteConfig();
-            openAdminHub('config');
-        }
-    } catch (e) { showToast("保存失败", "#e74c3c"); }
-};
+// Task 13.3: 移除冗余的 saveSiteConfig (已由 saveSystemConfig 接管)
 
 // ==================== 11. Task 3.5: JSON 专家模式 & 导入导出 ====================
 
@@ -3176,10 +3493,11 @@ const openJsonEditor = () => {
             if (!parsed.categories || !parsed.items) throw new Error("缺少核心字段 (categories/items)");
             
             // Task 4.3: 专家模式配额校验
-            if (parsed.categories.length > 20) throw new Error("分类数量超出上限 (20)");
+            const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
+            if (parsed.categories.length > quota.maxCategories) throw new Error(`分类数量超出上限 (${quota.maxCategories})`);
             for (const cat of parsed.categories) {
                 const count = parsed.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
-                if (count > 100) throw new Error(`分类 [${cat.name}] 下的书签数量 (${count}) 超出上限 (100)`);
+                if (count > quota.maxItemsPerCategory) throw new Error(`分类 [${cat.name}] 下的书签数量 (${count}) 超出上限 (${quota.maxItemsPerCategory})`);
             }
 
             appData = parsed;
@@ -3269,10 +3587,11 @@ const initGlobalEvents = () => {
                     if (!parsed.categories || !parsed.items) throw new Error("非法的 CloudNav 配置格式");
                     
                     // Task 4.3: 导入配额校验
-                    if (parsed.categories.length > 20) throw new Error("分类数量超出上限 (20)");
+                    const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
+                    if (parsed.categories.length > quota.maxCategories) throw new Error(`分类数量超出上限 (${quota.maxCategories})`);
                     for (const cat of parsed.categories) {
                         const count = parsed.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
-                        if (count > 100) throw new Error(`分类 [${cat.name}] 下的书签数量 (${count}) 超出上限 (100)`);
+                        if (count > quota.maxItemsPerCategory) throw new Error(`分类 [${cat.name}] 下的书签数量 (${count}) 超出上限 (${quota.maxItemsPerCategory})`);
                     }
 
                     if (!confirm("导入将覆盖当前所有配置，确定继续吗？")) return;

@@ -30,7 +30,7 @@ export async function onRequest(context) {
       const { payload } = await jose.jwtVerify(token, secret);
       
       // 检查用户状态
-      const user = await env.DB.prepare('SELECT id, username, role, status, uid FROM users WHERE id = ?').bind(payload.id).first();
+      const user = await env.DB.prepare('SELECT id, username, role, status, uid, has_invite FROM users WHERE id = ?').bind(payload.id).first();
       
       if (user) {
         if (user.status === 'frozen') {
@@ -42,7 +42,8 @@ export async function onRequest(context) {
           id: user.id,
           username: user.username,
           role: user.role || 'user',
-          uid: user.uid
+          uid: user.uid,
+          hasInvite: !!user.has_invite
         };
       }
     } catch (e) {

@@ -26,6 +26,6 @@
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.3",
-    "wrangler": "^3.114.17"
+    "wrangler": "^4.95.0"
   }
 }

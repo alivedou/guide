@@ -25,8 +25,23 @@ export async function onRequestPost(context) {
   try {
     const { count } = await request.json();
     const batch = [];
+    
+    // Task 15.4: 升级为加密安全随机生成算法 (强制包含数字)
+    const generateSecureCode = (length = 8) => {
+      const charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; 
+      let code = "";
+      while (true) {
+        const array = new Uint8Array(length);
+        crypto.getRandomValues(array);
+        code = Array.from(array, byte => charset[byte % charset.length]).join('');
+        // 确保生成的邀请码中至少包含一个数字
+        if (/[2-9]/.test(code)) break;
+      }
+      return code;
+    };
+
     for (let i = 0; i < (count || 1); i++) {
-      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const code = generateSecureCode();
       batch.push(env.DB.prepare('INSERT INTO invitation_codes (code, creator_id) VALUES (?, ?)').bind(code, admin.id));
     }
     await env.DB.batch(batch);

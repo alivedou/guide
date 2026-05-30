@@ -16,9 +16,9 @@ export async function onRequestPost(context) {
   const { request, env, data } = context;
   const admin = data.user;
   
-  // 已经在中间件校验了 admin/super_user 权限
-  try {
-    return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
+  // Task 17.4: 严格校验 admin 权限，super_user 不可修改系统参数
+  if (admin.role !== 'admin') {
+    return new Response(JSON.stringify({ error: "Forbidden", message: "仅系统管理员可修改全站参数" }), { status: 403 });
   }
 
   try {

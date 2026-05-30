@@ -12,6 +12,23 @@ const CONFIG = {
   bingApi: "https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1"
 };
 
+const QUOTA_CONFIG = {
+  guest: { maxCategories: 5, maxItemsPerCategory: 10 },
+  user: { maxCategories: 8, maxItemsPerCategory: 15 },
+  invited_user: { maxCategories: 10, maxItemsPerCategory: 20 },
+  super_user: { maxCategories: 15, maxItemsPerCategory: 30 },
+  admin: { maxCategories: 100, maxItemsPerCategory: 500 }
+};
+
+function getQuota(user) {
+  if (user.role === 'admin') return QUOTA_CONFIG.admin;
+  if (user.role === 'super_user') return QUOTA_CONFIG.super_user;
+  if (user.id && user.role === 'user') {
+    return user.hasInvite ? QUOTA_CONFIG.invited_user : QUOTA_CONFIG.user;
+  }
+  return QUOTA_CONFIG.guest;
+}
+
 function formatCNTime(date) {
   const d = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -69,6 +86,8 @@ export async function onRequestGet(context) {
       dataObj.items = dataObj.items.filter(i => !i.hidden);
     }
 
+    const quota = getQuota(authUser);
+
     return new Response(JSON.stringify({
       ...dataObj,
       isAdmin,
@@ -76,6 +95,7 @@ export async function onRequestGet(context) {
       uid: authUser.uid,
       username: authUser.username,
       role: userRole,
+      quota,
       lastUpdated: dataObj.lastUpdated || formatCNTime(new Date())
     }), { headers });
   } catch (err) {
@@ -96,13 +116,18 @@ export async function onRequestPost(context) {
 
   const userId = authUser.id;
   const kvKey = `user_config:${userId}`;
+  const quota = getQuota(authUser);
+
   try {
     const newData = await request.json();
     const { categories, items, settings } = newData;
     
-    // Task 4.3: 资源配额校验
-    if (categories && categories.length > 20) {
-      return new Response(JSON.stringify({ error: "分类数量已达到上限 (20)", code: "ERR_QUOTA_EXCEEDED" }), { status: 403 });
+    // 动态资源配额校验
+    if (categories && categories.length > quota.maxCategories) {
+      return new Response(JSON.stringify({ 
+        error: `分类数量已达到上限 (${quota.maxCategories})`, 
+        code: "ERR_QUOTA_EXCEEDED" 
+      }), { status: 403 });
     }
 
     // 统计每个分类下的书签数量
@@ -111,8 +136,11 @@ export async function onRequestPost(context) {
       for (const item of items) {
         const cId = item.catId || item.cat_id;
         catCounts[cId] = (catCounts[cId] || 0) + 1;
-        if (catCounts[cId] > 100) {
-          return new Response(JSON.stringify({ error: "单个分类下的书签不能超过 100 个", code: "ERR_QUOTA_EXCEEDED" }), { status: 403 });
+        if (catCounts[cId] > quota.maxItemsPerCategory) {
+          return new Response(JSON.stringify({ 
+            error: `单个分类下的书签不能超过 ${quota.maxItemsPerCategory} 个`, 
+            code: "ERR_QUOTA_EXCEEDED" 
+          }), { status: 403 });
         }
       }
     }

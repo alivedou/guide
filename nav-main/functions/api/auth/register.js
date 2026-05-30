@@ -50,12 +50,13 @@ export async function onRequestPost(context) {
 
     // 3. 事务级写入 D1
     const queries = [
-      env.DB.prepare('INSERT INTO users (id, uid, username, password_hash, role) VALUES (?, ?, ?, ?, ?)').bind(uuid, nextUid, username, passwordHash, role),
+      env.DB.prepare('INSERT INTO users (id, uid, username, password_hash, role, has_invite) VALUES (?, ?, ?, ?, ?, ?)').bind(uuid, nextUid, username, passwordHash, role, inviteCode ? 1 : 0),
       env.DB.prepare('INSERT INTO user_settings (user_id) VALUES (?)').bind(uuid)
     ];
 
     if (!isFirstUser && inviteCode) {
-      queries.push(env.DB.prepare('UPDATE invitation_codes SET status = "used", used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ?').bind(uuid, inviteCode));
+      // Task 16.5: 修正 SQL 语法，使用单引号表示字符串常量
+      queries.push(env.DB.prepare("UPDATE invitation_codes SET status = 'used', used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ?").bind(uuid, inviteCode));
     }
 
     await env.DB.batch(queries);
