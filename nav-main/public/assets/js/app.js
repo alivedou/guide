@@ -39,7 +39,50 @@ let isDataDirty = false; // Task O+.1: 全局数据变更标记
 let lastSyncActionTime = 0; // Task 11.1: 云端同步冷却计时器
 let currentEditingAnnounceId = null; // Task 34.2: 正在编辑的公告 ID
 let lastFocusedElement = null; // Task 37.2: 记录弹窗前的焦点元素
-let adminData = { users: [], invitations: [], announcements: [] }; // Task 15.2: 管理员全站数据缓存
+let adminData = { users: [], invitations: [], announcements: [], logs: [] }; // Task 15.2: 管理员全站数据缓存
+
+// ==================== Task 22.1: 全局语义化同步反馈引擎 ====================
+const SyncUI = {
+    // 1. 话术矩阵 (根据操作类型分流)
+    messages: {
+        'AUTH': { loading: '正在建立安全连接...', success: '验证成功，欢迎回来！' },
+        'ADMIN_CONFIG': { loading: '正在下发全站策略至云端...', success: '全站参数已热更新，立即生效' },
+        'USER_MANAGE': { loading: '正在同步权限变更...', success: '用户权限已成功下发至 D1' },
+        'INVITE_GEN': { loading: '正在通过安全算法生成凭证...', success: '邀请码生成成功' },
+        'INVITE_DEL': { loading: '正在作废此邀请凭证...', success: '已成功移除该邀请码' },
+        'ANNOUNCE_SAVE': { loading: '正在全站下发通知条幅...', success: '公告发布成功，已对全员可见' },
+        'ANNOUNCE_DEL': { loading: '正在清理该公告记录...', success: '公告已成功下架' },
+        'LAYOUT_SAVE': () => {
+            const isGuest = !sysToken;
+            return {
+                loading: isGuest ? '正在保存修改至本地...' : '正在同步个人数据至云端...',
+                success: isGuest ? '保存成功！登录后可永久同步至云端' : '云端备份成功，设置已安全同步'
+            };
+        },
+        'BACKUP_MANUAL': { loading: '正在执行手动云端备份...', success: '备份完成，你的数据已在云端安全存档' },
+        'CLIPBOARD': { loading: '正在准备数据...', success: '内容已加密复制至剪贴板' }
+    },
+
+    // 2. 统一动作包装器
+    async perform(actionKey, task) {
+        let msg = this.messages[actionKey];
+        // 如果是函数则执行获取对象 (用于区分角色话术)
+        if (typeof msg === 'function') msg = msg();
+        
+        showLoader(msg.loading);
+        try {
+            const result = await task();
+            showToast(msg.success, "#27ae60");
+            return result;
+        } catch (e) {
+            console.error(`[SyncUI] Action ${actionKey} failed:`, e);
+            showToast(e.message || "操作失败", "#e74c3c");
+            throw e;
+        } finally {
+            hideLoader();
+        }
+    }
+};
 
 // ==================== 1. 初始化入口 ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -780,8 +823,7 @@ const doLogin = async () => {
     const p = document.getElementById('auth-password').value.trim();
     if (!u || !p) return showToast("请填写用户名和密码", "#e67e22");
 
-    showLoader('正在验证身份...');
-    try {
+    await SyncUI.perform('AUTH', async () => {
         const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -790,33 +832,29 @@ const doLogin = async () => {
         const data = await res.json();
         
         if (res.status === 429) {
-            return showToast(data.error || "尝试次数过多，请稍后再试", "#e74c3c");
+            throw new Error(data.error || "尝试次数过多，请稍后再试");
         }
 
-        if (data.success) {
-            sysToken = 'Bearer ' + data.token;
-            localStorage.setItem('nav_token', sysToken);
-            
-            // Task 5.1: 立即持久化完整的用户信息
-            currentUser = { 
-                id: data.user.id,
-                uid: data.user.uid,
-                username: data.user.username, 
-                role: data.user.role 
-            };
-            localStorage.setItem('nav_current_user', JSON.stringify(currentUser));
-
-            document.getElementById('auth-overlay').style.display = 'none';
-            showToast(`欢迎回来，${data.user.username}`);
-            await init(true);
-        } else {
-            showToast(data.error || "登录失败", "#e74c3c");
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || "登录失败");
         }
-    } catch (err) {
-        showToast("登录请求失败", "#e74c3c");
-    } finally {
-        hideLoader();
-    }
+
+        sysToken = 'Bearer ' + data.token;
+        localStorage.setItem('nav_token', sysToken);
+        
+        // Task 5.1: 立即持久化完整的用户信息
+        currentUser = { 
+            id: data.user.id,
+            uid: data.user.uid,
+            username: data.user.username, 
+            role: data.user.role 
+        };
+        localStorage.setItem('nav_current_user', JSON.stringify(currentUser));
+
+        document.getElementById('auth-overlay').style.display = 'none';
+        // 此处不需要 showToast，SyncUI 会自动显示成功提示
+        await init(true);
+    });
 };
 
 const doRegister = async () => {
@@ -827,13 +865,9 @@ const doRegister = async () => {
     const p = passEl.value.trim();
     const i = inviteEl?.value.trim() || '';
 
-    if (!u || !p) {
-        showToast("请填写完整信息", "#e67e22");
-        return;
-    }
+    if (!u || !p) return showToast("请填写完整信息", "#e67e22");
 
-    console.log('Registering user:', u);
-    try {
+    await SyncUI.perform('AUTH', async () => {
         const res = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -841,23 +875,17 @@ const doRegister = async () => {
         });
         
         const data = await res.json();
-        console.log('Register response:', data);
-
-        if (res.ok && data.success) {
-            showToast("注册成功！即将切换到登录", "#2ecc71");
-            setTimeout(() => {
-                const loginTab = document.getElementById('tab-login');
-                if (loginTab) loginTab.click();
-                passEl.value = ''; // 清空密码框
-                if (inviteEl) inviteEl.value = '';
-            }, 1000);
-        } else {
-            showToast(data.error || "注册失败", "#e74c3c");
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || "注册失败");
         }
-    } catch (err) {
-        console.error('Register API Error:', err);
-        showToast("无法连接到服务器，请检查网络", "#e74c3c");
-    }
+
+        setTimeout(() => {
+            const loginTab = document.getElementById('tab-login');
+            if (loginTab) loginTab.click();
+            passEl.value = ''; // 清空密码框
+            if (inviteEl) inviteEl.value = '';
+        }, 1000);
+    });
 };
 
 const doLogout = async () => {
@@ -1791,10 +1819,7 @@ window.manualSyncCloud = async (refreshUI = false) => {
         return;
     }
 
-    showLoader('正在校验并备份至云端...');
-    
-    try {
-        // 2. 调用现有的云端同步逻辑
+    await SyncUI.perform('BACKUP_MANUAL', async () => {
         const res = await fetch('/api/config', {
             method: 'POST',
             headers: { 
@@ -1815,23 +1840,15 @@ window.manualSyncCloud = async (refreshUI = false) => {
             // 3. 成功反馈与状态记录
             isDataDirty = false;
             const now = Date.now();
-            localStorage.setItem('nav_last_cloud_sync', now);
-            localStorage.setItem('nav_app_data', JSON.stringify(appData)); // 同步后也更新本地缓存
+            localStorage.setItem('nav_last_cloud_sync', now.toString());
+            localStorage.setItem('nav_app_data', JSON.stringify(appData));
             
-            showToast("云端数据同步完成，设置已安全备份", "#27ae60");
-            console.log('[Sync] Manual backup success at:', new Date(now).toLocaleString());
-            
-            // Task 10.3: 如果是在弹窗中操作，刷新弹窗内容显示最新时间
-            if (refreshUI) openSyncCenter();
+            // 使用同步后回调逻辑，由 SyncUI 自动弹出成功提示
+            if (refreshUI && typeof openSyncCenter === 'function') openSyncCenter();
         } else {
             throw new Error(data.error || "服务器拒绝保存");
         }
-    } catch (e) {
-        console.error('[Sync] Manual backup failed:', e);
-        showToast(`备份失败: ${e.message}`, "#e74c3c");
-    } finally {
-        hideLoader();
-    }
+    });
 };
 
 // Task 9.4: 设置同步频率
@@ -1923,6 +1940,13 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                             <span class="slider"></span>
                         </label>
                     </div>
+                    <div class="form-group">
+                        <label>超级用户邀请码总量配额</label>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <input type="number" id="sys-su-quota" value="${config.superUserInviteQuota || 10}" style="flex:1;">
+                            <span style="font-size:11px; color:#888;">(累积生成上限)</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1983,6 +2007,7 @@ const saveSystemConfig = async () => {
         seoDescription: document.getElementById('sys-seo-desc').value.trim(),
         allowOpenRegistration: document.getElementById('sys-allow-reg').checked,
         requireInvitation: document.getElementById('sys-require-invite').checked,
+        superUserInviteQuota: parseInt(document.getElementById('sys-su-quota').value) || 10,
         security: {
             maxLoginAttempts: parseInt(document.getElementById('sys-login-max').value),
             loginLockoutMin: parseInt(document.getElementById('sys-login-lock').value),
@@ -1991,8 +2016,7 @@ const saveSystemConfig = async () => {
         }
     };
 
-    showLoader('正在下发全站策略...');
-    try {
+    await SyncUI.perform('ADMIN_CONFIG', async () => {
         const res = await fetch('/api/admin/site-config', {
             method: 'POST',
             headers: { 
@@ -2003,18 +2027,14 @@ const saveSystemConfig = async () => {
         });
 
         if (res.ok) {
-            showToast("全站参数已热更新生效", "#27ae60");
             // Task 13.4: 立即重新拉取并应用最新的站点配置 (标题、SEO、Favicon 等)
             initSiteConfig(); 
             closeAllModals();
         } else {
-            throw new Error("下发失败");
+            const data = await res.json();
+            throw new Error(data.error || "下发失败");
         }
-    } catch (e) {
-        showToast("配置保存失败", "#e74c3c");
-    } finally {
-        hideLoader();
-    }
+    });
 };
 
 // Task 9.4: 周期性自动备份调度器
@@ -2498,10 +2518,14 @@ const closeAllModals = (silent = false) => {
         manualSyncCloud(); 
     }
 
-    // Task 9.1: 策略降级，针对常规设置不再自动同步云端，仅本地暂存
+    // Task 22.3: 常规设置面板关闭时的同步逻辑（复用 LAYOUT_SAVE 提示）
     if (!silent && isDataDirty && !isPageManagementMode && editModal?.dataset.modalType !== 'sync-center') {
-        localStorage.setItem('nav_app_data', JSON.stringify(appData));
-        showToast("设置已保存至本地，建议及时备份至云端", "#f39c12");
+        SyncUI.perform('LAYOUT_SAVE', async () => {
+            localStorage.setItem('nav_app_data', JSON.stringify(appData));
+            // 常规设置通常只保存本地，若要同步云端可在此添加逻辑，但维持现状
+            await new Promise(r => setTimeout(r, 300));
+            isDataDirty = false;
+        });
     }
 
     // 2. 清理常规弹窗状态并隐藏
@@ -2555,10 +2579,34 @@ const togglePageManagement = (force) => {
         initSortable();
     } else {
         destroySortable();
-        // Task 9.1: 策略降级，退出管理模式时仅本地保存
+        // Task 22.3: 统一接入 SyncUI 逻辑，高权用户/普通用户退出管理模式时执行云端/本地同步
         if (isDataDirty) {
-            localStorage.setItem('nav_app_data', JSON.stringify(appData));
-            showToast("已自动保存到本地，记得手动备份到云端", "#f39c12");
+            SyncUI.perform('LAYOUT_SAVE', async () => {
+                // 保存到本地是通用的
+                localStorage.setItem('nav_app_data', JSON.stringify(appData));
+                
+                if (sysToken) {
+                    // 已登录用户：尝试同步到云端
+                    const res = await fetch('/api/config', {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': sysToken,
+                            'Content-Type': 'application/json' 
+                        },
+                        body: JSON.stringify(appData)
+                    });
+                    if (res.ok) {
+                        isDataDirty = false;
+                        localStorage.setItem('nav_last_cloud_sync', Date.now().toString());
+                    } else {
+                        throw new Error("云端同步失败，修改已保存至本地");
+                    }
+                } else {
+                    // 游客：仅保存到本地，模拟一个小延迟增强交互感
+                    await new Promise(r => setTimeout(r, 500));
+                    isDataDirty = false;
+                }
+            });
         } else {
             showToast("已退出管理模式");
         }
@@ -2568,7 +2616,6 @@ const togglePageManagement = (force) => {
         // Task 4.8.2: 深度状态重置 (关闭可能打开的专家模式编辑器)
         const monacoModal = document.getElementById('monaco-modal');
         if (monacoModal) monacoModal.style.display = 'none';
-        showToast("已退出管理模式");
     }
 };
 
@@ -2912,24 +2959,27 @@ const openAdminHub = async (defaultTab = 'users') => {
     confirmBtn.style.display = 'none'; // 后台采用即时操作
 
     try {
-        const [usersRes, inviteRes, announceRes] = await Promise.all([
+        const [usersRes, inviteRes, announceRes, auditRes] = await Promise.all([
             fetch('/api/admin/users', { headers: { 'Authorization': sysToken } }),
             fetch('/api/admin/invitations', { headers: { 'Authorization': sysToken } }),
-            fetch('/api/admin/announcements', { headers: { 'Authorization': sysToken } })
+            fetch('/api/admin/announcements', { headers: { 'Authorization': sysToken } }),
+            fetch('/api/admin/audit-logs', { headers: { 'Authorization': sysToken } })
         ]);
         
         const { users } = await usersRes.json();
         const { invitations } = await inviteRes.json();
         const { announcements } = await announceRes.json();
+        const { logs } = await auditRes.json();
 
         // Task 15.2: 同步到内存状态
-        adminData = { users, invitations, announcements };
+        adminData = { users, invitations, announcements, logs };
 
         body.innerHTML = `
             <div class="admin-hub-tabs">
                 <button class="hub-tab ${defaultTab === 'users' ? 'active' : ''}" data-tab="users" onclick="switchHubTab('users')">用户管理</button>
                 <button class="hub-tab ${defaultTab === 'invites' ? 'active' : ''}" data-tab="invites" onclick="switchHubTab('invites')">邀请管理</button>
                 <button class="hub-tab ${defaultTab === 'announcements' ? 'active' : ''}" data-tab="announcements" onclick="switchHubTab('announcements')">公告管理</button>
+                <button class="hub-tab ${defaultTab === 'audit' ? 'active' : ''}" data-tab="audit" onclick="switchHubTab('audit')">审计日志</button>
             </div>
             <div id="hub-content-users" class="hub-pane ${defaultTab === 'users' ? 'active' : ''}">
                 <table class="admin-table">
@@ -3036,6 +3086,24 @@ const openAdminHub = async (defaultTab = 'users') => {
                     </table>
                 </div>
             </div>
+            <div id="hub-content-audit" class="hub-pane ${defaultTab === 'audit' ? 'active' : ''}">
+                <div style="max-height: 450px; overflow-y: auto;">
+                    <table class="admin-table">
+                        <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>详情</th><th>IP</th></tr></thead>
+                        <tbody>
+                            ${logs.map(l => `
+                                <tr>
+                                    <td style="font-size:11px; white-space:nowrap;">${new Date(l.created_at).toLocaleString()}</td>
+                                    <td style="font-weight:bold;">${l.operator_name || 'System'}</td>
+                                    <td><span class="status-badge" style="background:rgba(255,255,255,0.1); color:#fff; border:none;">${l.action}</span></td>
+                                    <td style="font-size:11px; max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${l.details || ''}">${l.details || '-'}</td>
+                                    <td style="font-size:10px; color:#888;">${l.ip}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         `;
     } catch (e) {
         body.innerHTML = `<div class="error-text">加载失败: ${e.message}</div>`;
@@ -3048,32 +3116,31 @@ window.switchHubTab = (tab) => {
 };
 
 window.generateInvites = async (count) => {
-    try {
+    await SyncUI.perform('INVITE_GEN', async () => {
         const res = await fetch('/api/admin/invitations', {
             method: 'POST',
             headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
             body: JSON.stringify({ count })
         });
-        if (res.ok) {
-            showToast(`成功生成 ${count} 个邀请码`);
-            openAdminHub('invites');
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || '生成失败');
         }
-    } catch (e) { showToast("生成失败", "#e74c3c"); }
+        openAdminHub('invites');
+    });
 };
 
 window.deleteInvite = async (code) => {
     if (!confirm("确定要删除此邀请码吗？")) return;
-    try {
+    await SyncUI.perform('INVITE_DEL', async () => {
         const res = await fetch('/api/admin/invitations', {
             method: 'DELETE',
             headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
             body: JSON.stringify({ code })
         });
-        if (res.ok) {
-            showToast("删除成功");
-            openAdminHub('invites');
-        }
-    } catch (e) { showToast("删除失败", "#e74c3c"); }
+        if (!res.ok) throw new Error("删除失败");
+        openAdminHub('invites');
+    });
 };
 
 window.updateUserAdmin = async (userId, payload) => {
@@ -3081,20 +3148,16 @@ window.updateUserAdmin = async (userId, payload) => {
     if (adminPassword === null) return;
     if (!adminPassword) return showToast("请输入密码", "#e67e22");
 
-    try {
+    await SyncUI.perform('USER_MANAGE', async () => {
         const res = await fetch('/api/admin/users', {
             method: 'PATCH',
             headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId, ...payload, adminPassword })
         });
         const data = await res.json();
-        if (res.ok) {
-            showToast("操作成功");
-            openAdminHub('users');
-        } else {
-            showToast(data.error || "操作失败", "#e74c3c");
-        }
-    } catch (e) { showToast("请求失败", "#e74c3c"); }
+        if (!res.ok) throw new Error(data.error || "同步失败");
+        openAdminHub('users');
+    });
 };
 
 window.saveAnnouncement = async () => {
@@ -3111,45 +3174,31 @@ window.saveAnnouncement = async () => {
     if (!payload.title || !payload.content) return showToast("标题和内容不能为空", "#e67e22");
     if (!sysToken) return showToast("登录已失效，请重新登录", "#e74c3c");
 
-    try {
+    await SyncUI.perform('ANNOUNCE_SAVE', async () => {
         const res = await fetch('/api/admin/announcements', {
             method: isEdit ? 'PATCH' : 'POST',
             headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
         const data = await res.json();
-        if (res.ok) {
-            showToast(isEdit ? "公告已更新" : "公告已发布");
-            // 重置状态与表单 (无论成功失败都应确保逻辑闭环，但通常成功后才重置)
-            cancelEditAnnounce();
-            // 刷新列表
-            openAdminHub('announcements');
-            // Task 6.6: 即时刷新前端公告状态
-            initAnnouncements();
-        } else {
-            // Task: 优先显示后端返回的详细错误
-            showToast(data.error || "操作失败", "#e74c3c");
-        }
-    } catch (e) { 
-        console.error('[Admin] Save Announcement Error:', e);
-        showToast("请求失败，请检查网络", "#e74c3c"); 
-    }
+        if (!res.ok) throw new Error(data.error || "发布失败");
+        cancelEditAnnounce();
+        openAdminHub('announcements');
+        initAnnouncements();
+    });
 };
 
 window.deleteAnnouncement = async (id) => {
     if (!confirm("确定要删除这条公告吗？")) return;
-    try {
+    await SyncUI.perform('ANNOUNCE_DEL', async () => {
         const res = await fetch('/api/admin/announcements', {
             method: 'DELETE',
             headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
             body: JSON.stringify({ id })
         });
-        if (res.ok) {
-            showToast("已删除");
-            openAdminHub('announcements');
-        }
-    } catch (e) { showToast("删除失败", "#e74c3c"); }
+        if (!res.ok) throw new Error("下架失败");
+        openAdminHub('announcements');
+    });
 };
 
 window.editAnnouncement = (a) => {
@@ -3203,7 +3252,7 @@ window.formatMonacoJson = () => {
     }
 };
 
-window.copyUnusedInvites = () => {
+window.copyUnusedInvites = async () => {
     // Task 15.2: 改为从内存数据读取，彻底解耦 DOM
     const allInvites = adminData.invitations || [];
     const unused = allInvites.filter(i => i.status === 'unused').map(i => i.code);
@@ -3211,28 +3260,30 @@ window.copyUnusedInvites = () => {
     if (allInvites.length === 0) return showToast("当前没有任何邀请码", "#e67e22");
     if (unused.length === 0) return showToast("所有邀请码均已被使用", "#e67e22");
     
-    navigator.clipboard.writeText(unused.join('\n')).then(() => showToast(`已复制 ${unused.length} 个未使用邀请码`));
+    await SyncUI.perform('CLIPBOARD', async () => {
+        await navigator.clipboard.writeText(unused.join('\n'));
+    });
 };
 
-window.copySingleInvite = (code) => {
-    navigator.clipboard.writeText(code).then(() => showToast("邀请码已复制"));
+window.copySingleInvite = async (code) => {
+    await SyncUI.perform('CLIPBOARD', async () => {
+        await navigator.clipboard.writeText(code);
+    });
 };
 
 window.toggleUserStatus = async (userId, currentStatus) => {
     const newStatus = currentStatus === 'active' ? 'frozen' : 'active';
     if (!confirm(`确定要将该用户设为 ${newStatus} 吗？`)) return;
 
-    try {
+    await SyncUI.perform('USER_MANAGE', async () => {
         const res = await fetch('/api/admin/users', {
             method: 'PATCH',
             headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId, status: newStatus })
         });
-        if (res.ok) {
-            showToast("状态更新成功");
-            openAdminHub('users'); // 刷新并停留在用户管理
-        }
-    } catch (e) { showToast("操作失败", "#e74c3c"); }
+        if (!res.ok) throw new Error("操作失败");
+        openAdminHub('users'); // 刷新并停留在用户管理
+    });
 };
 
 // Task 6.8: 公告中心交互逻辑

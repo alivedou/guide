@@ -459,6 +459,21 @@ app.post('/api/auth/register', (req, res) => {
 
 // ====== Task 4.4: 邀请码管理 API ======
 
+app.get('/api/admin/audit-logs', authenticate, adminOnly, (req, res) => {
+    try {
+        const logs = db.prepare(`
+            SELECT al.*, u.username as operator_name 
+            FROM audit_logs al
+            LEFT JOIN users u ON al.user_id = u.id
+            ORDER BY al.created_at DESC
+            LIMIT 100
+        `).all();
+        res.json({ success: true, logs });
+    } catch (e) {
+        res.status(500).json({ error: '获取审计日志失败', details: e.message });
+    }
+});
+
 app.get('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
     try {
         const list = db.prepare(`
@@ -476,6 +491,29 @@ app.get('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
 app.post('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
     const { count } = req.body;
     try {
+        // Task 21.5: 针对 super_user 实现总量配额校验
+        if (req.user.role === 'super_user') {
+            const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
+            let quota = 10; // 默认值
+            if (fs.existsSync(configPath)) {
+                const fullConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                if (fullConfig.superUserInviteQuota !== undefined) {
+                    quota = fullConfig.superUserInviteQuota;
+                }
+            }
+
+            // 查询该用户已生成的邀请码总数
+            const currentCount = db.prepare('SELECT COUNT(*) as total FROM invitation_codes WHERE creator_id = ?').get(req.user.id).total;
+            const requestCount = count || 1;
+
+            if (currentCount + requestCount > quota) {
+                return res.status(403).json({ 
+                    error: '生成失败：超过邀请码分配额度', 
+                    details: `当前已生成 ${currentCount} 个，剩余额度 ${Math.max(0, quota - currentCount)} 个。请联系管理员调配。` 
+                });
+            }
+        }
+
         db.transaction(() => {
             for (let i = 0; i < (count || 1); i++) {
                 const code = Math.random().toString(36).substring(2, 10).toUpperCase();
