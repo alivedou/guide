@@ -2847,14 +2847,25 @@ const openCategoryEditModal = (catId) => {
 
     title.innerText = "编辑分类";
     body.innerHTML = `
-        <div class="form-row">
+        <div class="form-group">
             <label><i class="ri-font-size"></i> 分类名称</label>
             <input type="text" id="edit-cat-name" value="${cat.name}" placeholder="如：社交媒体">
         </div>
-        <div class="form-row">
-            <label><i class="ri-image-line"></i> 分类图标 (Emoji)</label>
-            <input type="text" id="edit-cat-icon" value="${cat.icon}" placeholder="如：🌐">
+        <div class="form-group">
+            <label><i class="ri-image-line"></i> 分类图标</label>
+            <div class="category-icon-editor" style="display: flex; align-items: center; gap: 15px;">
+                <div id="cat-icon-preview" class="icon-preview-box" onclick="toggleEmojiPicker()" title="点击切换图标" 
+                     style="width: 48px; height: 48px; background: rgba(255,255,255,0.05); border: 1px dashed var(--glass-border); 
+                            border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer;">
+                    ${cat.icon || '📂'}
+                </div>
+                <button class="tab-btn active" onclick="toggleEmojiPicker()" style="margin: 0;">
+                    <i class="ri-emotion-line"></i> 选择图标
+                </button>
+                <input type="hidden" id="edit-cat-icon" value="${cat.icon || '📂'}">
+            </div>
         </div>
+        ${getEmojiPickerHTML()}
     `;
     
     modal.style.display = 'flex';
@@ -2879,6 +2890,114 @@ const openCategoryEditModal = (catId) => {
         showToast("分类修改已本地暂存", "#3498db");
         renderNav();
     };
+};
+
+/**
+ * ==========================================
+ * Emoji 选择器逻辑
+ * ==========================================
+ */
+const getEmojiPickerHTML = () => `
+    <div id="emoji-picker-container" class="emoji-picker-container">
+        <div class="emoji-search-wrapper">
+            <i class="ri-search-line"></i>
+            <input type="text" id="emoji-search-input" placeholder="输入关键词搜索图标..." oninput="searchEmojis(this.value)">
+        </div>
+        <div class="emoji-picker-tabs" id="emoji-picker-tabs"></div>
+        <div class="emoji-grid" id="emoji-grid"></div>
+    </div>
+`;
+
+window.toggleEmojiPicker = () => {
+    const container = document.getElementById('emoji-picker-container');
+    if (!container) return;
+    
+    const isVisible = container.style.display === 'flex';
+    container.style.display = isVisible ? 'none' : 'flex';
+    
+    if (!isVisible) {
+        initEmojiPicker();
+    }
+};
+
+window.initEmojiPicker = (activeCategory = 'officeAndBookmarks', searchQuery = '') => {
+    const tabsContainer = document.getElementById('emoji-picker-tabs');
+    const gridContainer = document.getElementById('emoji-grid');
+    
+    if (!tabsContainer || !gridContainer) return;
+
+    // 渲染 Tab (搜索时隐藏 Tab 以腾出空间)
+    const categories = {
+        officeAndBookmarks: '📂 办公',
+        natureAndTravel: '🌍 自然',
+        objectsAndSymbols: '💡 物品',
+        activitiesAndSports: '⚽ 活动',
+        random: '🎲 随机'
+    };
+
+    if (searchQuery) {
+        tabsContainer.style.display = 'none';
+    } else {
+        tabsContainer.style.display = 'flex';
+        tabsContainer.innerHTML = Object.entries(categories).map(([key, label]) => `
+            <button class="emoji-tab-btn ${key === activeCategory ? 'active' : ''}" 
+                    onclick="event.stopPropagation(); initEmojiPicker('${key}')">${label}</button>
+        `).join('');
+    }
+
+    // 渲染网格
+    let emojis = [];
+    try {
+        if (searchQuery) {
+            emojis = window.emojiPool.searchEmojisByKeyword(searchQuery);
+        } else if (activeCategory === 'random') {
+            emojis = window.emojiPool.getRandomEmojis(32);
+        } else {
+            emojis = window.emojiPool.EMOJI_CATEGORIES[activeCategory] || [];
+        }
+    } catch (e) {
+        console.error('[Emoji] Render error:', e);
+        emojis = ['⚠️', '❓'];
+    }
+    
+    if (emojis.length === 0) {
+        gridContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 30px; text-align: center; color: var(--text-dim); font-size: 13px;">
+            未找到相关图标
+        </div>`;
+    } else {
+        gridContainer.innerHTML = emojis.map(emoji => `
+            <div class="emoji-item" title="点击选择" onclick="event.stopPropagation(); selectEmoji('${emoji}')">${emoji}</div>
+        `).join('');
+    }
+};
+
+window.searchEmojis = (query) => {
+    // 防抖处理：避免频繁输入导致的性能问题
+    clearTimeout(window.emojiSearchTimer);
+    window.emojiSearchTimer = setTimeout(() => {
+        initEmojiPicker(null, query);
+    }, 200);
+};
+
+window.selectEmoji = (emoji) => {
+    // 兼容分类图标和网址图标编辑框 (Task 3.2: 增加 edit-icon 支持)
+    const iconInput = document.getElementById('edit-cat-icon') || document.getElementById('edit-icon');
+    if (iconInput) {
+        iconInput.value = emoji;
+        // Task CR.3: 如果存在预览框，同步更新预览
+        const previewBox = document.getElementById('cat-icon-preview');
+        if (previewBox) previewBox.innerText = emoji;
+
+        // 触发一次 input 事件，确保如果有其他联动逻辑可以感知
+        iconInput.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // 选中后自动收起面板并显示成功反馈
+        const container = document.getElementById('emoji-picker-container');
+        if (container) {
+            container.style.display = 'none';
+            showToast(`已选择图标 ${emoji}`, "#27ae60");
+        }
+    }
 };
 
 const toggleCategoryVisibility = (catId) => {
@@ -5124,7 +5243,9 @@ const openEditModal = (id) => {
             <input type="text" id="edit-title-input" value="${item.title}" placeholder="网站名称">
         </div>
         <div class="form-row">
-            <label><i class="ri-image-line"></i> 图标</label>
+            <label><i class="ri-image-line"></i> 图标
+                <button class="emoji-picker-trigger" onclick="toggleEmojiPicker()"><i class="ri-emotion-line"></i> 选择图标</button>
+            </label>
             <div style="display:flex; gap:8px; width:100%; align-items:center;">
                 <input type="text" id="edit-icon" value="${item.icon}" placeholder="Emoji 或 图片 URL">
                 <div id="edit-icon-preview" class="preview-container">
@@ -5132,6 +5253,7 @@ const openEditModal = (id) => {
                 </div>
             </div>
         </div>
+        ${getEmojiPickerHTML()}
         <div class="form-row">
             <label><i class="ri-text-snippet"></i> 描述</label>
             <textarea id="edit-desc" rows="2" placeholder="可选描述" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#fff; padding:8px;">${item.desc || ''}</textarea>

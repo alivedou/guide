@@ -60,7 +60,6 @@ self.addEventListener('fetch', event => {
   // 图标请求特殊处理 (Cache First)
   const isIconApi = [
     'api.iowen.cn', 
-    'favicon.qqsuu.cn', 
     'www.google.com', 
     'icons.duckduckgo.com',
     'favicon.ico'
