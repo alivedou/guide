@@ -4679,3 +4679,197 @@ body.admin-mode .sidebar-toggle {
 .quick-nav-group.active {
     opacity: 1;
 }
+
+/* ==================== Task UM.2: 用户管理 Dashboard 增强样式 ==================== */
+
+/* 1. 搜索与筛选面板 */
+.admin-search-panel {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    margin-bottom: 15px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.admin-search-header {
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.admin-search-header:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.admin-search-body {
+    padding: 15px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    border-top: 1px solid var(--glass-border);
+}
+
+.admin-search-body.collapsed {
+    display: none;
+}
+
+/* 2. 表格视觉优化 */
+.admin-table-container {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid var(--glass-border);
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.admin-table th {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 12px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--glass-border);
+    white-space: nowrap;
+}
+
+.admin-table td {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--glass-border);
+    color: var(--text);
+    vertical-align: middle;
+}
+
+.admin-table tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* 3. 分页组件 */
+.admin-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px 5px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.pagination-info {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.page-btn {
+    min-width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 12px;
+}
+
+.page-btn:hover:not(:disabled) {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.page-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.page-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+/* 4. 多选模式适配 */
+.admin-table th.col-checkbox,
+.admin-table td.col-checkbox {
+    width: 40px;
+    text-align: center;
+    padding: 12px 0;
+}
+
+.admin-table tr.selected {
+    background: rgba(57, 157, 255, 0.1) !important;
+}
+
+.user-batch-bar {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--primary);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    z-index: 2500;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.user-batch-bar.visible {
+    transform: translateX(-50%) translateY(0);
+}
+
+.batch-action-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 6px 15px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.batch-action-btn:hover {
+    background: white;
+    color: var(--primary);
+}
+
+/* 状态标签增强 */
+.status-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.active { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+.status-badge.frozen { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+.status-badge.pending { background: rgba(241, 196, 15, 0.2); color: #f1c40f; }
+
+/* 亮色模式适配 */
+body.light-theme .admin-search-panel { background: rgba(0, 0, 0, 0.02); }
+body.light-theme .admin-table th { background: rgba(0, 0, 0, 0.03); }
+body.light-theme .admin-table tr:hover { background: rgba(0, 0, 0, 0.01); }
+body.light-theme .page-btn { background: rgba(0, 0, 0, 0.04); }

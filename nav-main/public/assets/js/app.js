@@ -1,8 +1,12 @@
-/**
- * ==========================================
- * app.js - CloudNav Phase 2 & 3 (Core)
- * ==========================================
- */
+// Task SYNC.GUARD.2: 获取核心数据指纹（仅包含分类和网址内容）
+const getCoreDataFingerprint = (data) => {
+    if (!data) return '';
+    return JSON.stringify({
+        c: data.categories || [],
+        i: data.items || [],
+        s: data.settings || {} // 包含设置，但不包含像 isAdmin 这种运行时状态
+    });
+};
 
 // ==================== 全局状态 ====================
 let appData = { 
@@ -19,6 +23,7 @@ let isAdmin = false;
 let isZenTempExpanded = true;
 let isActuallyZen = false;
 let isRendering = false; // 渲染防抖锁
+let lastSyncFingerprint = ''; // Task SYNC.GUARD.2: 数据指纹，用于过滤无效同步
 let isPageManagementMode = false; // 页面管理模式开关 (Task 3.3)
 let zenMoveAccumulator = 0; // 禅意模式位移累加器 (Task 11.1)
 let lastMouseX = 0;
@@ -39,7 +44,30 @@ let isDataDirty = false; // Task O+.1: 全局数据变更标记
 let lastSyncActionTime = 0; // Task 11.1: 云端同步冷却计时器
 let currentEditingAnnounceId = null; // Task 34.2: 正在编辑的公告 ID
 let lastFocusedElement = null; // Task 37.2: 记录弹窗前的焦点元素
-let adminData = { users: [], invitations: [], announcements: [], logs: [] }; // Task 15.2: 管理员全站数据缓存
+let adminUserFilters = { page: 1, pageSize: 20, keyword: '', status: '' }; // Task UM.3: 管理员用户筛选
+let adminSelectedUserIds = new Set(); // Task UM.4: 选中的用户 ID
+let adminAnnounceFilters = { page: 1, pageSize: 20, keyword: '', status: '', type: '' }; // Task AN.3: 公告筛选
+let adminSelectedAnnounceIds = new Set(); // Task AN.3: 选中的公告 ID
+let adminInviteFilters = { page: 1, pageSize: 20, keyword: '', status: '' }; // Task STD.2: 邀请码筛选
+let adminSelectedInviteIds = new Set(); // Task STD.2: 选中的邀请码
+let adminAuditFilters = { page: 1, pageSize: 20, keyword: '', actionType: '' }; // Task STD.3: 审计日志筛选
+let adminData = { users: [], invitations: [], announcements: [], logs: [], pagination: {} }; // 管理员全站数据缓存
+
+// Task AL.1: 审计日志动作语义化映射
+const AuditActionMap = {
+    'LOGIN': { label: '安全登录', color: '#2ecc71' },
+    'CREATE_USER': { label: '创建用户', color: '#3498db' },
+    'DELETE_USER': { label: '危险：物理删除', color: '#e74c3c' },
+    'CHANGE_USER_STATUS': { label: '状态切换', color: '#f39c12' },
+    'CHANGE_USER_ROLE': { label: '权限变更', color: '#9b59b6' },
+    'RESET_PASSWORD': { label: '重置密码', color: '#e67e22' },
+    'UPDATE_SITE_CONFIG': { label: '配置修改', color: '#e74c3c' },
+    'CREATE_ANNOUNCEMENT': { label: '发布公告', color: '#3498db' },
+    'UPDATE_ANNOUNCEMENT': { label: '编辑公告', color: '#f39c12' },
+    'DELETE_ANNOUNCEMENT': { label: '下架公告', color: '#95a5a6' },
+    'BATCH_GENERATE_INVITATIONS': { label: '批量生成邀请码', color: '#1abc9c' },
+    'DELETE_INVITATION': { label: '作废邀请码', color: '#95a5a6' }
+};
 
 // ==================== Task 22.1: 全局语义化同步反馈引擎 ====================
 const SyncUI = {
@@ -55,8 +83,8 @@ const SyncUI = {
         'LAYOUT_SAVE': () => {
             const isGuest = !sysToken;
             return {
-                loading: isGuest ? '正在保存修改至本地...' : '正在同步个人数据至云端...',
-                success: isGuest ? '保存成功！登录后可永久同步至云端' : '云端备份成功，设置已安全同步'
+                loading: isGuest ? '正在保存修改至本地...' : '正在暂存修改至本地...',
+                success: isGuest ? '保存成功！登录后可实现多设备同步' : '已暂存至本地，退出登录时将自动同步'
             };
         },
         'BACKUP_MANUAL': { loading: '正在执行手动云端备份...', success: '备份完成，你的数据已在云端安全存档' },
@@ -76,7 +104,10 @@ const SyncUI = {
             return result;
         } catch (e) {
             console.error(`[SyncUI] Action ${actionKey} failed:`, e);
-            showToast(e.message || "操作失败", "#e74c3c");
+            // Task EXIT.1: 区分普通错误与引导性警告
+            const toastColor = e.isWarning ? "#e67e22" : "#e74c3c";
+            showToast(e.message || "操作失败", toastColor);
+            // 如果是警告，我们可能不想让调用者认为任务彻底失败了，但在目前的 Promise 链中 throw 是必要的
             throw e;
         } finally {
             hideLoader();
@@ -889,6 +920,34 @@ const doRegister = async () => {
 };
 
 const doLogout = async () => {
+    // Task SYNC.3: 退出登录拦截与强制同步
+    if (sysToken && isDataDirty && appData.settings?.autoSyncOnLogout !== false) {
+        // Task SYNC.GUARD.2: 实质性修改指纹校验
+        const currentFingerprint = getCoreDataFingerprint(appData);
+        if (currentFingerprint === lastSyncFingerprint) {
+            console.log('[SyncGuard] No substantial changes detected, skipping logout sync.');
+            isDataDirty = false; // 既然内容一致，直接重置标记
+        } else {
+            // Task SYNC.GUARD.1: 冷却时间拦截
+            const lastSync = parseInt(localStorage.getItem('nav_last_cloud_sync') || '0');
+            const cooldownMs = 5 * 60 * 1000;
+            const isCooling = (Date.now() - lastSync) < cooldownMs;
+
+            if (isCooling) {
+                showToast("本地修改已暂存，因同步太频繁，云端备份已跳过", "#e67e22");
+            } else {
+                try {
+                    await manualSyncCloud();
+                    isDataDirty = false;
+                } catch (e) {
+                    if (!confirm(`云端同步失败：${e.message}\n仍要退出登录吗？(未同步的内容将仅保留在此浏览器中)`)) {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     localStorage.removeItem('nav_token');
     localStorage.removeItem('nav_current_user'); // Task 39.4
     sysToken = '';
@@ -1140,6 +1199,9 @@ const init = async (forceRender = false) => {
             
             isAdmin = appData.isAdmin;
             localStorage.setItem('nav_app_data', JSON.stringify(appData));
+            
+            // Task SYNC.GUARD.2: 初始化同步指纹
+            lastSyncFingerprint = getCoreDataFingerprint(appData);
         } else {
             throw new Error(`Server returned ${res.status}`);
         }
@@ -1297,16 +1359,25 @@ const renderNav = () => {
         cats.forEach(cat => {
             const navItem = document.createElement('div');
             navItem.className = `sidebar-nav-item ${activeCatId === cat.id ? 'active' : ''} ${cat.hidden ? 'is-hidden-cat' : ''}`;
+            navItem.dataset.id = cat.id; // Task CAT.1: 增加 ID 绑定
             navItem.tabIndex = 0; // Task 30.2: 启用键盘焦点
             
+            if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
+                navItem.classList.add('sortable-cat'); // Task CAT.1: 标记可排序
+            }
+
             // 计算书签数量 (Task 4.5.2)
             const itemCount = appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
             const countHtml = (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') 
                 ? `<span class="nav-count">${itemCount}</span>` 
                 : '';
 
-            // 基础内容
-            let navHtml = `<span class="nav-icon" title="">${cat.icon}</span><span class="nav-label">${cat.name}${countHtml}</span>`;
+            // 基础内容 (Task CAT.1: 增加拖拽手柄)
+            const dragHandleHtml = (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') 
+                ? `<span class="drag-handle" style="margin-right: 6px; cursor: move; opacity: 0.5;"><i class="ri-drag-move-2-line"></i></span>`
+                : '';
+
+            let navHtml = `${dragHandleHtml}<span class="nav-icon" title="">${cat.icon}</span><span class="nav-label">${cat.name}${countHtml}</span>`;
             
             // Task 4.3: 增加管理快捷按钮
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
@@ -1452,7 +1523,7 @@ const renderNav = () => {
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
                 const addCard = document.createElement('div');
                 const catItemCount = items.length;
-                const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
+                const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
                 const isCatFull = catItemCount >= quota.maxItemsPerCategory;
 
                 addCard.className = `card add-new-card ${isCatFull ? 'disabled' : ''}`;
@@ -1460,6 +1531,7 @@ const renderNav = () => {
                 addCard.innerHTML = `
                     <div class="icon-wrapper"><i class="ri-add-line"></i></div>
                     <h3>${isCatFull ? '已满' : '新增书签'}</h3>
+                    <p style="font-size: 10px; opacity: 0.6; margin-top: 4px;">(${catItemCount}/${quota.maxItemsPerCategory})</p>
                 `;
                 addCard.onclick = () => {
                     if (isCatFull) return showToast(`该分类已达到 ${quota.maxItemsPerCategory} 个书签上限`, "#e74c3c");
@@ -1481,12 +1553,17 @@ const renderNav = () => {
         // Task 4.4: 侧边栏新增分类入口 (仅管理模式)
         if (isPageManagementMode) {
             const addCatBtn = document.createElement('div');
-            const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
-            const isCatLimit = appData.categories.length >= quota.maxCategories;
+            const catCount = appData.categories.length;
+            const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
+            const isCatLimit = catCount >= quota.maxCategories;
             const sidebarNav = document.getElementById('sidebar-nav');
             if (sidebarNav) {
                 addCatBtn.className = `sidebar-nav-item add-cat-nav ${isCatLimit ? 'disabled' : ''}`;
-                addCatBtn.innerHTML = `<span class="nav-icon"><i class="ri-add-line"></i></span><span class="nav-label">${isCatLimit ? '分类已满' : '添加分类'}</span>`;
+                addCatBtn.innerHTML = `
+                    <span class="nav-icon"><i class="ri-add-line"></i></span>
+                    <span class="nav-label">${isCatLimit ? '分类已满' : '添加分类'}</span>
+                    <span style="font-size: 10px; opacity: 0.5; margin-left: auto; padding-right: 10px;">${catCount}/${quota.maxCategories}</span>
+                `;
                 addCatBtn.onclick = () => {
                     if (isCatLimit) return showToast(`最多只能创建 ${quota.maxCategories} 个分类`, "#e74c3c");
                     const name = prompt("请输入新分类名称:");
@@ -1585,7 +1662,9 @@ const renderTools = () => {
         `;
     } else {
         const userDisplayName = info.username || appData.username || '已登录用户';
-        const displayUid = info.uid ? `<span class="user-uid">id: ${info.uid}</span>` : '';
+        const displayUid = info.uid 
+            ? `<span class="user-uid" title="完整内部 ID: ${info.id}">id: ${info.uid}</span>` 
+            : `<span class="user-uid">id: ${info.id?.substring(0, 8) || '---'}</span>`;
         const roleBadge = isAdmin ? '<span class="admin-badge">ADMIN</span>' : (info.role === 'super_user' ? '<span class="admin-badge" style="background:#3498db">SUP</span>' : '');
         
         userArea.innerHTML = `
@@ -1607,7 +1686,7 @@ const renderTools = () => {
     // 2. 渲染底部管理工具
     
     // 配额状态感知 (Task 20.4)
-    const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
+    const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
     const isAllFull = appData.categories.length >= quota.maxCategories;
 
     // 管理员模式视觉高亮切换 (Task 9.2 增强)
@@ -1725,6 +1804,13 @@ const renderTools = () => {
                     <span class="nav-icon"><i class="ri-code-s-slash-line"></i></span>
                     <span class="nav-label">专家模式</span>
                 </div>
+                <!-- Task EXIT.5: 增加立即同步按钮，保持菜单内样式一致 -->
+                ${sysToken ? `
+                <div class="sidebar-nav-item" onclick="manualSyncCloud(false)" style="font-size: 13px; padding: 6px 12px;">
+                    <span class="nav-icon"><i class="ri-cloud-upload-line"></i></span>
+                    <span class="nav-label">立即同步</span>
+                </div>
+                ` : ''}
                 <div class="sidebar-nav-item" onclick="exportConfig()" style="font-size: 13px; padding: 6px 12px;">
                     <span class="nav-icon"><i class="ri-download-2-line"></i></span>
                     <span class="nav-label">备份导出</span>
@@ -1751,6 +1837,8 @@ const renderTools = () => {
 
 // Task 10.1: 唤起云端备份中心 (风格对齐视觉实验室)
 window.openSyncCenter = () => {
+    if (!sysToken) return showToast("请先登录再使用云端同步功能", "#e67e22");
+    
     lastFocusedElement = document.activeElement; // Task 37.2
     closeAllModals(true);
 
@@ -1766,37 +1854,56 @@ window.openSyncCenter = () => {
     // 获取同步状态
     const lastSync = localStorage.getItem('nav_last_cloud_sync');
     const timeStr = lastSync ? new Date(parseInt(lastSync)).toLocaleString() : '从未备份';
-    const isOverdue = lastSync && (Date.now() - parseInt(lastSync) > 7 * 24 * 3600 * 1000);
+    const isOverdue = lastSync && (Date.now() - parseInt(lastSync) > (appData.settings?.syncInterval || 7) * 24 * 3600 * 1000);
+
+    // 计算冷却时间 (Task節流.3)
+    const cooldownMs = 5 * 60 * 1000;
+    const remaining = lastSync ? Math.max(0, cooldownMs - (Date.now() - parseInt(lastSync))) : 0;
+    const isCooling = remaining > 0;
+    const coolMin = Math.ceil(remaining / 60000);
+
+    // Task SYNC.REFACTOR.3: 手动模式下的脏数据提醒
+    const showDirtyHint = isDataDirty && appData.settings?.autoSyncOnLogout === false && !isCooling;
 
     body.innerHTML = `
         <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-history-line"></i> 备份状态反馈</span>
-            <div style="background: var(--glass-card); padding: 12px; border-radius: 10px; border: 1px solid var(--glass-border);">
+            <div style="background: var(--glass-card); padding: 12px; border-radius: 10px; border: 1px solid var(--glass-border); position: relative;">
                 <p style="font-size: 13px; margin: 0; display:flex; justify-content: space-between; align-items: center;">
                     <span>上次同步时间：</span>
                     <b style="color: ${lastSync ? 'var(--primary-color)' : '#e74c3c'}">${timeStr}</b>
                 </p>
-                ${isOverdue ? `<p style="font-size: 11px; color: #e67e22; margin-top: 8px;"><i class="ri-error-warning-line"></i> 提示：您的云端备份已超过 7 天未更新，建议立即同步。</p>` : ''}
+                ${isOverdue ? `<p style="font-size: 11px; color: #e67e22; margin-top: 8px;"><i class="ri-error-warning-line"></i> 提示：您的云端备份已超过 ${appData.settings?.syncInterval || 7} 天未更新，建议立即同步。</p>` : ''}
+                ${isDataDirty ? `<p style="font-size: 11px; color: var(--primary-color); margin-top: 8px;"><i class="ri-edit-line"></i> 检测到本地有未同步的修改。</p>` : ''}
             </div>
         </div>
         
         <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-upload-cloud-2-line"></i> 数据同步操作</span>
-            <button class="tab-btn active" style="width:100%; height:42px; font-weight: bold; font-size: 14px; background: var(--primary-color);" onclick="manualSyncCloud(true)">
-                <i class="ri-cloud-upload-line"></i> 立即上传备份到云端
-            </button>
-            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">说明：此操作将使用当前本地配置覆盖云端数据。支持跨设备同步。</p>
+            <span class="visual-option-label"><i class="ri-upload-cloud-2-line"></i> 立即执行同步</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn ${isCooling ? 'hidden-item' : 'active'} ${showDirtyHint ? 'pulse-primary' : ''}" 
+                        style="flex:1; justify-content: center; height:42px; position: relative;" 
+                        onclick="${isCooling ? '' : 'manualSyncCloud(true)'}">
+                    <i class="ri-cloud-upload-line"></i> ${isCooling ? `冷却中 (${coolMin}min)` : '上传到云端'}
+                    ${showDirtyHint ? '<span class="status-dot-active" style="position:absolute; top:8px; right:12px;"></span>' : ''}
+                </button>
+            </div>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">说明：此操作将使用当前本地配置覆盖云端数据。${isCooling ? '<span style="color:#e67e22;">为保护服务器资源，手动备份有 5 分钟冷却时间。</span>' : ''}</p>
         </div>
 
         <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-timer-flash-line"></i> 自动化备份调度</span>
+            <span class="visual-option-label"><i class="ri-timer-flash-line"></i> 云端备份模式</span>
             <div class="visual-btn-group">
-                <button class="tab-btn ${!appData.settings?.syncInterval ? 'active' : ''}" onclick="setSyncInterval(0, true)">禁用</button>
-                <button class="tab-btn ${appData.settings?.syncInterval === 3 ? 'active' : ''}" onclick="setSyncInterval(3, true)">3天</button>
-                <button class="tab-btn ${appData.settings?.syncInterval === 7 ? 'active' : ''}" onclick="setSyncInterval(7, true)">7天</button>
-                <button class="tab-btn ${appData.settings?.syncInterval === 30 ? 'active' : ''}" onclick="setSyncInterval(30, true)">30天</button>
+                <button class="tab-btn ${!appData.settings?.syncInterval ? 'active' : ''}" onclick="setSyncMode(0)">手动模式</button>
+                <button class="tab-btn ${appData.settings?.syncInterval === 3 ? 'active' : ''}" onclick="setSyncMode(3)">每 3 天</button>
+                <button class="tab-btn ${appData.settings?.syncInterval === 7 ? 'active' : ''}" onclick="setSyncMode(7)">每 7 天</button>
+                <button class="tab-btn ${appData.settings?.syncInterval === 30 ? 'active' : ''}" onclick="setSyncMode(30)">每 30 天</button>
             </div>
-            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">推荐：开启自动备份可有效防止因浏览器清理缓存导致的数据丢失。</p>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">
+                ${appData.settings?.autoSyncOnLogout !== false 
+                    ? '<i class="ri-checkbox-circle-line" style="color:var(--success-color)"></i> 当前已开启退出登录时自动增量备份。' 
+                    : '<i class="ri-information-line"></i> 当前为全手动维护，建议定期备份以防数据丢失。'}
+            </p>
         </div>
     `;
     
@@ -1809,6 +1916,15 @@ window.openSyncCenter = () => {
 // Task 9.3: 手动同步云端逻辑
 window.manualSyncCloud = async (refreshUI = false) => {
     if (!sysToken) return showToast("请先登录再进行备份", "#e67e22");
+
+    // Task節流.2: 手动备份冷却逻辑 (5 分钟)
+    const lastSync = parseInt(localStorage.getItem('nav_last_cloud_sync') || '0');
+    const cooldownMs = 5 * 60 * 1000;
+    const remaining = cooldownMs - (Date.now() - lastSync);
+    if (remaining > 0) {
+        const min = Math.ceil(remaining / 60000);
+        return showToast(`操作频繁：手动备份冷却中，请 ${min} 分钟后再试`, "#e67e22");
+    }
 
     // 1. 数据合法性校验 (Data Validation)
     if (!appData || !Array.isArray(appData.categories) || !Array.isArray(appData.items)) {
@@ -1843,6 +1959,9 @@ window.manualSyncCloud = async (refreshUI = false) => {
             localStorage.setItem('nav_last_cloud_sync', now.toString());
             localStorage.setItem('nav_app_data', JSON.stringify(appData));
             
+            // Task SYNC.GUARD.2 & 3: 更新同步指纹并重置状态
+            lastSyncFingerprint = getCoreDataFingerprint(appData);
+            
             // 使用同步后回调逻辑，由 SyncUI 自动弹出成功提示
             if (refreshUI && typeof openSyncCenter === 'function') openSyncCenter();
         } else {
@@ -1851,17 +1970,20 @@ window.manualSyncCloud = async (refreshUI = false) => {
     });
 };
 
-// Task 9.4: 设置同步频率
-window.setSyncInterval = (days, refreshUI = false) => {
+// Task SYNC.REFACTOR.1: 逻辑层整合 - 统一同步模式管理
+window.setSyncMode = (days) => {
     if (!appData.settings) appData.settings = {};
     appData.settings.syncInterval = days;
+    // 逻辑合并：如果天数 > 0，自动视为开启退出同步；如果为 0（手动模式），则关闭
+    appData.settings.autoSyncOnLogout = (days > 0);
+    
     localStorage.setItem('nav_app_data', JSON.stringify(appData));
     
-    // 如果是弹窗模式，立即刷新弹窗以显示选中态，不再重新渲染侧边栏
-    if (refreshUI) openSyncCenter();
-    else renderTools(); 
-
-    showToast(days === 0 ? "已关闭自动备份" : `已设置为每 ${days} 天自动备份一次`);
+    // 刷新 UI
+    openSyncCenter();
+    
+    const msg = days === 0 ? "已切换为手动维护模式" : `已设置为 ${days} 天自动提醒备份`;
+    showToast(msg);
 };
 
 // Task 12.2 & 13.2 & 14.1: 唤起全站系统参数配置中枢 (Tab 架构重构)
@@ -1893,6 +2015,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                 <button class="hub-tab ${defaultTab === 'brand' ? 'active' : ''}" onclick="switchSysTab('brand')">品牌与 SEO</button>
                 <button class="hub-tab ${defaultTab === 'policy' ? 'active' : ''}" onclick="switchSysTab('policy')">注册策略</button>
                 <button class="hub-tab ${defaultTab === 'security' ? 'active' : ''}" onclick="switchSysTab('security')">安全防护</button>
+                <button class="hub-tab ${defaultTab === 'roles' ? 'active' : ''}" onclick="switchSysTab('roles')">角色授权</button>
             </div>
 
             <!-- 区块 1: 品牌与 SEO -->
@@ -1975,6 +2098,22 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                     </div>
                 </div>
             </div>
+
+            <!-- 区块 4: 角色授权 (Task UM.8.4 & Task AC.3) -->
+            <div id="sys-pane-roles" class="hub-pane ${defaultTab === 'roles' ? 'active' : ''}">
+                <div class="admin-config-section">
+                    <div style="font-size:12px; color:#f1c40f; margin-bottom:12px; background:rgba(241,196,15,0.1); padding:8px; border-radius:6px; line-height:1.4; display:flex; justify-content:space-between; align-items:center;">
+                        <span><i class="ri-error-warning-line"></i> 提示：只有首席管理员 (Root) 可提拔 Admin。</span>
+                        <span id="admin-quota-badge" style="background:#f1c40f; color:#000; padding:2px 8px; border-radius:10px; font-weight:bold; font-size:11px;">名额加载中...</span>
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="sys-role-search-kw" placeholder="输入用户名搜索以调整权限..." oninput="handleSysRoleSearch(this.value)">
+                    </div>
+                    <div id="sys-role-search-results" style="max-height: 250px; overflow-y: auto;">
+                        <div style="text-align:center; padding:20px; color:#666; font-size:13px;">请输入关键字开始搜索...</div>
+                    </div>
+                </div>
+            </div>
         `;
         
         modal.style.display = 'flex';
@@ -1990,13 +2129,93 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
 // Task 14.1: 系统参数 Tab 切换逻辑
 window.switchSysTab = (tab) => {
     document.querySelectorAll('#edit-modal .hub-tab').forEach(el => {
-        el.classList.toggle('active', el.innerText.includes(tab === 'brand' ? '品牌' : (tab === 'policy' ? '策略' : '防护')));
+        el.classList.toggle('active', 
+            (tab === 'brand' && el.innerText.includes('品牌')) ||
+            (tab === 'policy' && el.innerText.includes('策略')) ||
+            (tab === 'security' && el.innerText.includes('防护')) ||
+            (tab === 'roles' && el.innerText.includes('角色'))
+        );
     });
     document.querySelectorAll('#edit-modal .hub-pane').forEach(el => {
         el.classList.remove('active');
     });
     const target = document.getElementById(`sys-pane-${tab}`);
     if (target) target.classList.add('active');
+};
+
+// Task UM.8.4: 角色授权搜索逻辑
+window.handleSysRoleSearch = debounce(async (kw) => {
+    const resultsDiv = document.getElementById('sys-role-search-results');
+    if (!kw.trim()) {
+        resultsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#666; font-size:13px;">请输入关键字开始搜索...</div>';
+        return;
+    }
+    
+    resultsDiv.innerHTML = '<div style="text-align:center; padding:20px;"><div class="global-spinner" style="width:20px; height:20px; border-width:2px; margin:0 auto;"></div></div>';
+    
+    try {
+        const res = await fetch(`/api/admin/users?keyword=${encodeURIComponent(kw)}&pageSize=50`, {
+            headers: { 'Authorization': sysToken }
+        });
+        const data = await res.json();
+        
+        if (data.users && data.users.length > 0) {
+            const isRoot = (currentUser?.id === '1' || currentUser?.uid === 10001);
+            const adminCount = data.adminCount || 0;
+            const quotaBadge = document.getElementById('admin-quota-badge');
+            if (quotaBadge) {
+                quotaBadge.innerText = `管理员名额: ${adminCount} / 5`;
+                quotaBadge.style.background = adminCount >= 5 ? '#e74c3c' : '#f1c40f';
+                quotaBadge.style.color = adminCount >= 5 ? '#fff' : '#000';
+            }
+
+            resultsDiv.innerHTML = `
+                <table class="admin-table">
+                    <tbody>
+                        ${data.users.map(u => {
+                            const isAdminFull = adminCount >= 5 && u.role !== 'admin';
+                            return `
+                                <tr>
+                                    <td><b>${escapeHTML(u.username)}</b><br><small style="opacity:0.5">${u.uid}</small></td>
+                                    <td style="text-align:right">
+                                        <select onchange="updateUserRoleConfirm('${u.id}', this.value)" style="width:auto; height:32px; padding:0 10px;">
+                                            <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+                                            <option value="super_user" ${u.role === 'super_user' ? 'selected' : ''}>Super User</option>
+                                            ${(isRoot || u.role === 'admin') ? `
+                                                <option value="admin" ${u.role === 'admin' ? 'selected' : ''} 
+                                                    ${(!isRoot || isAdminFull) ? 'disabled' : ''}>
+                                                    Admin ${isAdminFull ? '(名额已满)' : ''}
+                                                </option>` : ''}
+                                        </select>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        } else {
+            resultsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">未找到用户</div>';
+        }
+    } catch (e) {
+        resultsDiv.innerHTML = `<div style="text-align:center; padding:20px; color:#e74c3c;">加载失败: ${e.message}</div>`;
+    }
+}, 400);
+
+window.updateUserRoleConfirm = async (userId, newRole) => {
+    const adminPassword = prompt(`⚠️ 正在将该用户角色变更为 [${newRole.toUpperCase()}]，请输入您的管理员密码确认操作：`);
+    if (!adminPassword) return;
+
+    await SyncUI.perform('USER_MANAGE', async () => {
+        const res = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, role: newRole, adminPassword })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "授权失败");
+        showToast("角色已成功变更", "#2ecc71");
+    });
 };
 
 const saveSystemConfig = async () => {
@@ -2511,21 +2730,16 @@ const closeSearch = () => {
 
 // Task 9.6 & O.3 & O++.1 & 9.1 & 11.3: 全局模态状态清理函数 (支持静默模式)
 const closeAllModals = (silent = false) => {
-    // 1. 检查是否从备份中心退出，且有待同步的数据 (Task 11.3)
     const editModal = document.getElementById('edit-modal');
-    if (!silent && isDataDirty && editModal?.dataset.modalType === 'sync-center') {
-        // 退出备份中心时，如果数据脏，执行一次自动云端同步
-        manualSyncCloud(); 
-    }
+    const modalType = editModal?.dataset.modalType;
 
-    // Task 22.3: 常规设置面板关闭时的同步逻辑（复用 LAYOUT_SAVE 提示）
-    if (!silent && isDataDirty && !isPageManagementMode && editModal?.dataset.modalType !== 'sync-center') {
-        SyncUI.perform('LAYOUT_SAVE', async () => {
-            localStorage.setItem('nav_app_data', JSON.stringify(appData));
-            // 常规设置通常只保存本地，若要同步云端可在此添加逻辑，但维持现状
-            await new Promise(r => setTimeout(r, 300));
-            isDataDirty = false;
-        });
+    // 1. 逻辑分流：仅当是个性化设置(Visual)或页面管理退出时，才执行“暂存引导”
+    // 注意：admin-hub 和 system-config 拥有自己的独立即时保存按钮，此处不干预
+    const isPersonalSettings = (modalType === 'visual-lab' || !isPageManagementMode);
+    const isAdminAction = (modalType === 'admin-hub' || modalType === 'system-config' || modalType === 'sync-center');
+
+    if (!silent && isDataDirty && !isAdminAction) {
+        handleDataSaveOnExit();
     }
 
     // 2. 清理常规弹窗状态并隐藏
@@ -2549,6 +2763,31 @@ const closeAllModals = (silent = false) => {
         lastFocusedElement.focus();
         lastFocusedElement = null;
     }
+
+    // Task UM.4: 关闭所有弹窗时隐藏管理员批量操作栏
+    const adminBar = document.getElementById('admin-user-batch-bar');
+    if (adminBar) adminBar.classList.remove('visible');
+};
+
+// Task EXIT.4: 统一退出暂存逻辑 (针对个人偏好设置)
+const handleDataSaveOnExit = async () => {
+    if (!isDataDirty) return;
+    
+    await SyncUI.perform('LAYOUT_SAVE', async () => {
+        // 仅保存到本地 localStorage
+        localStorage.setItem('nav_app_data', JSON.stringify(appData));
+        await new Promise(r => setTimeout(r, 400));
+        
+        if (!sysToken) {
+            isDataDirty = false;
+            throw { message: "已保存至本地。登录后可启用云端同步，实现多设备同步。", isWarning: true };
+        } else {
+            const autoSync = appData.settings?.autoSyncOnLogout !== false;
+            if (!autoSync) {
+                throw { message: "已暂存本地。请记得手动同步或开启退出自动同步", isWarning: true };
+            }
+        }
+    });
 };
 
 // ==================== 9. Task 3.3: 页面管理模式 (Page Management) ====================
@@ -2579,37 +2818,8 @@ const togglePageManagement = (force) => {
         initSortable();
     } else {
         destroySortable();
-        // Task 22.3: 统一接入 SyncUI 逻辑，高权用户/普通用户退出管理模式时执行云端/本地同步
-        if (isDataDirty) {
-            SyncUI.perform('LAYOUT_SAVE', async () => {
-                // 保存到本地是通用的
-                localStorage.setItem('nav_app_data', JSON.stringify(appData));
-                
-                if (sysToken) {
-                    // 已登录用户：尝试同步到云端
-                    const res = await fetch('/api/config', {
-                        method: 'POST',
-                        headers: { 
-                            'Authorization': sysToken,
-                            'Content-Type': 'application/json' 
-                        },
-                        body: JSON.stringify(appData)
-                    });
-                    if (res.ok) {
-                        isDataDirty = false;
-                        localStorage.setItem('nav_last_cloud_sync', Date.now().toString());
-                    } else {
-                        throw new Error("云端同步失败，修改已保存至本地");
-                    }
-                } else {
-                    // 游客：仅保存到本地，模拟一个小延迟增强交互感
-                    await new Promise(r => setTimeout(r, 500));
-                    isDataDirty = false;
-                }
-            });
-        } else {
-            showToast("已退出管理模式");
-        }
+        // Task 22.3: 统一接入自动保存与引导逻辑 (Task EXIT.4)
+        handleDataSaveOnExit();
         
         selectedIds.clear();
         updateBatchBar();
@@ -2735,7 +2945,8 @@ const initSortable = () => {
         const catSortable = new Sortable(sidebarNav, {
             animation: 150,
             ghostClass: 'sortable-ghost',
-            handle: '.nav-icon',
+            handle: '.drag-handle', // Task CAT.2: 使用专用手柄触发
+            draggable: '.sortable-cat', // Task CAT.2: 仅允许特定项参与排序
             onEnd: (evt) => handleSortEnd(evt, 'category')
         });
         sortableInstances.push(catSortable);
@@ -2788,12 +2999,22 @@ const handleSortEnd = (evt, type) => {
     } else if (type === 'category') {
         console.log('[Sort] Categories reordered');
         const newCatOrder = [];
-        document.querySelectorAll('.sidebar-nav-item').forEach(nav => {
-            const label = nav.querySelector('.nav-label')?.innerText;
-            const found = appData.categories.find(c => c.name === label);
+        // Task CAT.3: 使用 data-id 精确匹配
+        document.querySelectorAll('.sidebar-nav-item.sortable-cat').forEach(nav => {
+            const id = nav.getAttribute('data-id');
+            const found = appData.categories.find(c => c.id === id);
             if (found) newCatOrder.push(found);
         });
+        
+        // 补全不在 DOM 中的分类 (如有)
+        appData.categories.forEach(c => {
+            if (!newCatOrder.find(nc => nc.id === c.id)) {
+                newCatOrder.push(c);
+            }
+        });
+        
         appData.categories = newCatOrder;
+        renderNav(); // Task CAT.3: 分类排序后立即刷新主视图顺序
     }
 
     isDataDirty = true;
@@ -2958,21 +3179,39 @@ const openAdminHub = async (defaultTab = 'users') => {
     modal.style.display = 'flex';
     confirmBtn.style.display = 'none'; // 后台采用即时操作
 
+    // 初始化筛选状态
+    adminUserFilters = { page: 1, pageSize: 20, keyword: '', status: '' };
+    adminSelectedUserIds.clear();
+    adminAnnounceFilters = { page: 1, pageSize: 20, keyword: '', status: '', type: '' };
+    adminSelectedAnnounceIds.clear();
+    adminInviteFilters = { page: 1, pageSize: 20, keyword: '', status: '' };
+    adminSelectedInviteIds.clear();
+    adminAuditFilters = { page: 1, pageSize: 20, keyword: '', actionType: '' };
+    updateAdminBatchBar();
+    updateAnnounceBatchBar();
+    updateInviteBatchBar();
+
     try {
         const [usersRes, inviteRes, announceRes, auditRes] = await Promise.all([
-            fetch('/api/admin/users', { headers: { 'Authorization': sysToken } }),
-            fetch('/api/admin/invitations', { headers: { 'Authorization': sysToken } }),
-            fetch('/api/admin/announcements', { headers: { 'Authorization': sysToken } }),
-            fetch('/api/admin/audit-logs', { headers: { 'Authorization': sysToken } })
+            fetch(`/api/admin/users?page=1&pageSize=20`, { headers: { 'Authorization': sysToken } }),
+            fetch(`/api/admin/invitations?page=1&pageSize=20`, { headers: { 'Authorization': sysToken } }),
+            fetch(`/api/admin/announcements?page=1&pageSize=20`, { headers: { 'Authorization': sysToken } }),
+            fetch(`/api/admin/audit-logs?page=1&pageSize=20`, { headers: { 'Authorization': sysToken } })
         ]);
         
-        const { users } = await usersRes.json();
-        const { invitations } = await inviteRes.json();
-        const { announcements } = await announceRes.json();
-        const { logs } = await auditRes.json();
+        const userData = await usersRes.json();
+        const inviteData = await inviteRes.json();
+        const announceData = await announceRes.json();
+        const auditData = await auditRes.json();
 
-        // Task 15.2: 同步到内存状态
-        adminData = { users, invitations, announcements, logs };
+        // 同步到内存状态 (Task 15.2 & UM.1 & STD.1)
+        adminData = { 
+            users: userData.users || [], 
+            invitations: inviteData.invitations || [], 
+            announcements: announceData.announcements || [], 
+            logs: auditData.logs || [],
+            pagination: userData.pagination || {}
+        };
 
         body.innerHTML = `
             <div class="admin-hub-tabs">
@@ -2982,126 +3221,170 @@ const openAdminHub = async (defaultTab = 'users') => {
                 <button class="hub-tab ${defaultTab === 'audit' ? 'active' : ''}" data-tab="audit" onclick="switchHubTab('audit')">审计日志</button>
             </div>
             <div id="hub-content-users" class="hub-pane ${defaultTab === 'users' ? 'active' : ''}">
-                <table class="admin-table">
-                    <thead><tr><th>用户名</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
-                    <tbody>
-                        ${users.map(u => `
-                            <tr>
-                                <td>${u.username}</td>
-                                <td>
-                                    <select onchange="updateUserAdmin('${u.id}', { role: this.value })" ${u.role === 'admin' ? 'disabled' : ''}>
-                                        <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
-                                        <option value="super_user" ${u.role === 'super_user' ? 'selected' : ''}>Super User</option>
-                                        <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
-                                    </select>
-                                </td>
-                                <td><span class="status-badge ${u.status}">${u.status}</span></td>
-                                <td>
-                                    ${u.role === 'admin' ? '-' : `
-                                        <button class="action-link" onclick="updateUserAdmin('${u.id}', { status: '${u.status === 'active' ? 'frozen' : 'active'}' })">
-                                            ${u.status === 'active' ? '冻结' : '解冻'}
-                                        </button>
-                                    `}
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                <!-- Task UM.3: 折叠式搜索/筛选面板 -->
+                <div class="admin-search-panel">
+                    <div class="admin-search-header" onclick="toggleAdminSearch()">
+                        <span style="font-size: 13px; font-weight: bold;"><i class="ri-search-line"></i> 搜索与筛选面板</span>
+                        <i id="admin-search-arrow" class="ri-arrow-down-s-line"></i>
+                    </div>
+                    <div id="admin-search-body" class="admin-search-body collapsed">
+                        <div class="form-group" style="margin-bottom:0">
+                            <label>关键字检索</label>
+                            <input type="text" id="admin-user-kw" placeholder="搜索用户名 / UID..." oninput="handleAdminUserSearch(this.value)">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0">
+                            <label>状态筛选</label>
+                            <select id="admin-user-status" onchange="handleAdminUserFilter('status', this.value)">
+                                <option value="">全部状态</option>
+                                <option value="active">活跃 (Active)</option>
+                                <option value="frozen">冻结 (Frozen)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="admin-users-table-container">
+                    ${renderAdminUserTableHTML(userData.users || [])}
+                </div>
             </div>
             <div id="hub-content-invites" class="hub-pane ${defaultTab === 'invites' ? 'active' : ''}">
-                <div style="display:flex; gap:10px; margin-bottom:15px;">
-                    <button class="tab-btn active" onclick="generateInvites(1)">生成 1 个</button>
-                    <button class="tab-btn active" onclick="generateInvites(5)">生成 5 个</button>
-                    <button class="tab-btn" onclick="copyUnusedInvites()">复制未使用</button>
+                <div style="display:flex; gap:10px; margin-bottom:15px; align-items:center;">
+                    <div style="display:flex; gap:8px;">
+                        <button class="tab-btn active" onclick="generateInvites(1)">+ 1</button>
+                        <button class="tab-btn active" onclick="generateInvites(5)">+ 5</button>
+                    </div>
+                    <button class="tab-btn" onclick="copyUnusedInvites()"><i class="ri-file-copy-line"></i> 复制未使用</button>
                 </div>
-                <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--glass-border); border-radius: 8px;">
-                    <table class="admin-table">
-                        <thead><tr><th>邀请码</th><th>状态</th><th>使用者</th><th>操作</th></tr></thead>
-                        <tbody>
-                            ${invitations.map(i => `
-                                <tr>
-                                    <td class="code-font">${i.code}</td>
-                                    <td><span class="status-badge ${i.status}">${i.status}</span></td>
-                                    <td>${i.used_by_name || '-'}</td>
-                                    <td style="display: flex; gap: 8px;">
-                                        <button class="action-link" onclick="copySingleInvite('${i.code}')">复制</button>
-                                        ${i.status === 'unused' ? `<button class="action-link" style="color: #e74c3c;" onclick="deleteInvite('${i.code}')">删除</button>` : '-'}
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+
+                <div class="admin-search-panel">
+                    <div class="admin-search-header" onclick="toggleInviteSearch()">
+                        <span style="font-size: 13px; font-weight: bold;"><i class="ri-search-line"></i> 邀请码搜索</span>
+                        <i id="invite-search-arrow" class="ri-arrow-down-s-line"></i>
+                    </div>
+                    <div id="invite-search-body" class="admin-search-body collapsed">
+                        <div class="form-row" style="display:grid; grid-template-columns: 2fr 1fr; gap:10px;">
+                            <input type="text" id="invite-search-kw" placeholder="搜索邀请码/使用者..." oninput="handleAdminInviteSearch(this.value)">
+                            <select id="invite-filter-status" onchange="handleAdminInviteFilter('status', this.value)">
+                                <option value="">全部状态</option>
+                                <option value="unused">未使用</option>
+                                <option value="used">已使用</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="admin-invite-table-container" style="margin-top:15px;">
+                    ${renderAdminInviteTableHTML(inviteData.invitations || [], inviteData.pagination)}
+                </div>
+
+                <!-- 批量操作栏 (Task STD.2) -->
+                <div id="admin-invite-batch-bar" class="admin-batch-bar">
+                    <span id="invite-batch-count">已选中 0 项</span>
+                    <div style="display:flex; gap:10px;">
+                        <button class="batch-btn danger" onclick="batchInviteAction('delete')">批量下架</button>
+                    </div>
                 </div>
             </div>
             <div id="hub-content-announcements" class="hub-pane ${defaultTab === 'announcements' ? 'active' : ''}">
-                <div class="admin-announce-editor">
-                    <div class="form-group">
-                        <label>公告标题</label>
-                        <input type="text" id="announce-title" placeholder="请输入标题">
+                <div class="admin-announce-editor" style="padding:12px; background:rgba(255,255,255,0.03); border:1px dashed var(--glass-border); border-radius:8px;">
+                    <div style="font-size:12px; font-weight:bold; margin-bottom:10px; color:#fff; display:flex; justify-content:space-between; align-items:center;">
+                        <span><i class="ri-edit-line"></i> 发布新公告 / 修改公告</span>
+                        <button class="action-link" id="btn-toggle-editor" onclick="toggleAnnounceEditor()">收起编辑器</button>
                     </div>
-                    <div class="form-group">
-                        <label>公告内容</label>
-                        <textarea id="announce-content" rows="3" placeholder="请输入公告内容"></textarea>
-                    </div>
-                    <div class="form-row" style="display:flex; gap:15px; margin-bottom:10px;">
-                        <div class="form-group" style="flex:1">
-                            <label>类型</label>
-                            <select id="announce-type">
-                                <option value="quiet">Quiet (静默铃铛)</option>
-                                <option value="important">Important (顶部条幅)</option>
-                            </select>
+                    <div id="announce-editor-fields">
+                        <div class="form-group">
+                            <input type="text" id="announce-title" placeholder="请输入公告标题...">
                         </div>
-                        <div class="form-group" style="flex:1">
-                            <label>过期时间</label>
-                            <input type="datetime-local" id="announce-expire">
+                        <div class="form-group">
+                            <textarea id="announce-content" rows="3" placeholder="请输入公告详细内容..."></textarea>
                         </div>
-                    </div>
-                    <div class="form-group">
-                        <label style="display:flex; align-items:center; gap:5px; cursor:pointer;">
-                            <input type="checkbox" id="announce-top"> 置顶公告
-                        </label>
-                    </div>
-                    <div id="announce-actions" style="display:flex; gap:10px; margin-top:10px;">
-                        <button id="btn-save-announce" class="tab-btn active" style="flex:1;" onclick="saveAnnouncement()">发布公告</button>
-                        <button id="btn-cancel-announce" class="tab-btn" style="flex:1; display:none;" onclick="cancelEditAnnounce()">取消修改</button>
+                        <div class="form-row" style="display:flex; gap:15px; margin-bottom:10px;">
+                            <div class="form-group" style="flex:1">
+                                <label style="font-size:11px; opacity:0.7">展示层级</label>
+                                <select id="announce-type">
+                                    <option value="quiet">Quiet (右下角静默铃铛)</option>
+                                    <option value="important">Important (全屏顶部条幅)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label style="font-size:11px; opacity:0.7">过期时间 (可选)</label>
+                                <input type="datetime-local" id="announce-expire">
+                            </div>
+                        </div>
+                        <div class="form-group" style="display:flex; align-items:center; gap:15px;">
+                            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px;">
+                                <input type="checkbox" id="announce-top"> 置顶公告
+                            </label>
+                            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px;">
+                                <input type="checkbox" id="announce-is-draft"> 存为草稿
+                            </label>
+                        </div>
+                        <div id="announce-actions" style="display:flex; gap:10px; margin-top:10px;">
+                            <button id="btn-save-announce" class="tab-btn active" style="flex:1;" onclick="saveAnnouncement()">发布公告</button>
+                            <button id="btn-cancel-announce" class="tab-btn" style="flex:1; display:none;" onclick="cancelEditAnnounce()">取消修改</button>
+                        </div>
                     </div>
                 </div>
-                <hr style="border:0; border-top:1px solid var(--glass-border); margin:15px 0;">
-                <div style="max-height: 200px; overflow-y: auto;">
-                    <table class="admin-table">
-                        <thead><tr><th>标题</th><th>类型</th><th>状态</th><th>操作</th></tr></thead>
-                        <tbody>
-                            ${announcements.map(a => `
-                                <tr>
-                                    <td>${a.title}</td>
-                                    <td>${a.type}</td>
-                                    <td>${a.status}</td>
-                                    <td>
-                                        <button class="action-link" onclick="editAnnouncement(${JSON.stringify(a).replace(/"/g, '&quot;')})">修改</button>
-                                        <button class="action-link danger" style="margin-left:8px;" onclick="deleteAnnouncement(${a.id})">删除</button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+
+                <div class="admin-search-panel" style="margin-top:15px;">
+                    <div class="admin-search-header" onclick="toggleAnnounceSearch()">
+                        <span style="font-size: 13px; font-weight: bold;"><i class="ri-search-line"></i> 公告搜索与筛选</span>
+                        <i id="announce-search-arrow" class="ri-arrow-down-s-line"></i>
+                    </div>
+                    <div id="announce-search-body" class="admin-search-body collapsed">
+                        <div class="form-group" style="margin-bottom:0">
+                            <input type="text" id="announce-search-kw" placeholder="标题/内容搜索..." oninput="handleAdminAnnounceSearch(this.value)">
+                        </div>
+                        <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+                            <select id="announce-filter-status" onchange="handleAdminAnnounceFilter('status', this.value)">
+                                <option value="">全部状态</option>
+                                <option value="published">已发布</option>
+                                <option value="draft">草稿</option>
+                            </select>
+                            <select id="announce-filter-type" onchange="handleAdminAnnounceFilter('type', this.value)">
+                                <option value="">全部类型</option>
+                                <option value="quiet">静默 (Quiet)</option>
+                                <option value="important">重要 (Important)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="admin-announce-table-container" style="margin-top:15px;">
+                    ${renderAdminAnnounceTableHTML(announceData.announcements || [], announceData.pagination)}
+                </div>
+                
+                <!-- 批量操作栏 (Task AN.3) -->
+                <div id="admin-announce-batch-bar" class="admin-batch-bar">
+                    <span id="announce-batch-count">已选中 0 项</span>
+                    <div style="display:flex; gap:10px;">
+                        <button class="batch-btn" onclick="batchAnnounceAction('publish')">一键发布</button>
+                        <button class="batch-btn" onclick="batchAnnounceAction('archive')">一键归档</button>
+                        <button class="batch-btn danger" onclick="batchAnnounceAction('delete')">批量删除</button>
+                    </div>
                 </div>
             </div>
             <div id="hub-content-audit" class="hub-pane ${defaultTab === 'audit' ? 'active' : ''}">
-                <div style="max-height: 450px; overflow-y: auto;">
-                    <table class="admin-table">
-                        <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>详情</th><th>IP</th></tr></thead>
-                        <tbody>
-                            ${logs.map(l => `
-                                <tr>
-                                    <td style="font-size:11px; white-space:nowrap;">${new Date(l.created_at).toLocaleString()}</td>
-                                    <td style="font-weight:bold;">${l.operator_name || 'System'}</td>
-                                    <td><span class="status-badge" style="background:rgba(255,255,255,0.1); color:#fff; border:none;">${l.action}</span></td>
-                                    <td style="font-size:11px; max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${l.details || ''}">${l.details || '-'}</td>
-                                    <td style="font-size:10px; color:#888;">${l.ip}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+                <div class="admin-search-panel" style="margin-bottom:15px;">
+                    <div class="admin-search-header" onclick="toggleAuditSearch()">
+                        <span style="font-size: 13px; font-weight: bold;"><i class="ri-search-line"></i> 日志高级检索</span>
+                        <i id="audit-search-arrow" class="ri-arrow-down-s-line"></i>
+                    </div>
+                    <div id="audit-search-body" class="admin-search-body collapsed">
+                        <div class="form-row" style="display:grid; grid-template-columns: 2fr 1fr; gap:10px;">
+                            <input type="text" id="audit-search-kw" placeholder="操作人/IP/详情搜索..." oninput="handleAdminAuditSearch(this.value)">
+                            <select id="audit-filter-action" onchange="handleAdminAuditFilter('actionType', this.value)">
+                                <option value="">全部动作类型</option>
+                                ${Object.keys(AuditActionMap).map(key => `
+                                    <option value="${key}">${AuditActionMap[key].label}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="admin-audit-table-container">
+                    ${renderAdminAuditTableHTML(auditData.logs || [], auditData.pagination)}
                 </div>
             </div>
         `;
@@ -3110,9 +3393,751 @@ const openAdminHub = async (defaultTab = 'users') => {
     }
 };
 
+// Task UM.3: 搜索与筛选交互函数
+window.toggleAdminSearch = () => {
+    const body = document.getElementById('admin-search-body');
+    const arrow = document.getElementById('admin-search-arrow');
+    if (!body || !arrow) return;
+    const isCollapsed = body.classList.toggle('collapsed');
+    arrow.className = isCollapsed ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line';
+};
+
+const performAdminUserSearch = async () => {
+    const container = document.getElementById('admin-users-table-container');
+    if (container) container.style.opacity = '0.5';
+    
+    try {
+        const query = new URLSearchParams({
+            page: adminUserFilters.page,
+            pageSize: adminUserFilters.pageSize,
+            keyword: adminUserFilters.keyword,
+            status: adminUserFilters.status
+        });
+        const res = await fetch(`/api/admin/users?${query.toString()}`, {
+            headers: { 'Authorization': sysToken }
+        });
+        const data = await res.json();
+        if (data.success) {
+            adminData.users = data.users;
+            adminData.pagination = data.pagination;
+            if (container) {
+                container.innerHTML = renderAdminUserTableHTML(data.users);
+                container.style.opacity = '1';
+            }
+        }
+    } catch (e) {
+        showToast("加载用户失败: " + e.message, "#e74c3c");
+    }
+};
+
+window.handleAdminUserSearch = debounce((val) => {
+    adminUserFilters.keyword = val.trim();
+    adminUserFilters.page = 1; // 重置页码
+    performAdminUserSearch();
+}, 400);
+
+window.handleAdminUserFilter = (type, val) => {
+    adminUserFilters[type] = val;
+    adminUserFilters.page = 1;
+    performAdminUserSearch();
+};
+
+// Task AN.3: 公告管理交互逻辑 (复用 UM 模块思路)
+window.toggleAnnounceSearch = () => {
+    const body = document.getElementById('announce-search-body');
+    const arrow = document.getElementById('announce-search-arrow');
+    if (!body || !arrow) return;
+    const isCollapsed = body.classList.toggle('collapsed');
+    arrow.className = isCollapsed ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line';
+};
+
+window.toggleAnnounceEditor = () => {
+    const fields = document.getElementById('announce-editor-fields');
+    const btn = document.getElementById('btn-toggle-editor');
+    if (!fields || !btn) return;
+    const isHidden = fields.style.display === 'none';
+    fields.style.display = isHidden ? 'block' : 'none';
+    btn.innerText = isHidden ? '展开编辑器' : '收起编辑器';
+};
+
+const performAdminAnnounceSearch = async () => {
+    const container = document.getElementById('admin-announce-table-container');
+    if (container) container.style.opacity = '0.5';
+    
+    try {
+        const query = new URLSearchParams({
+            page: adminAnnounceFilters.page,
+            pageSize: adminAnnounceFilters.pageSize,
+            keyword: adminAnnounceFilters.keyword,
+            status: adminAnnounceFilters.status,
+            type: adminAnnounceFilters.type
+        });
+        const res = await fetch(`/api/admin/announcements?${query.toString()}`, {
+            headers: { 'Authorization': sysToken }
+        });
+        const data = await res.json();
+        if (data.success) {
+            adminData.announcements = data.announcements;
+            adminData.pagination = data.pagination;
+            if (container) {
+                container.innerHTML = renderAdminAnnounceTableHTML(data.announcements, data.pagination);
+                container.style.opacity = '1';
+                updateAnnounceBatchBar();
+            }
+        }
+    } catch (e) {
+        showToast("加载公告失败: " + e.message, "#e74c3c");
+    }
+};
+
+window.handleAdminAnnounceSearch = debounce((val) => {
+    adminAnnounceFilters.keyword = val.trim();
+    adminAnnounceFilters.page = 1;
+    performAdminAnnounceSearch();
+}, 400);
+
+window.handleAdminAnnounceFilter = (type, val) => {
+    adminAnnounceFilters[type] = val;
+    adminAnnounceFilters.page = 1;
+    performAdminAnnounceSearch();
+};
+
+window.handleAdminAnnouncePageChange = (page) => {
+    adminAnnounceFilters.page = page;
+    performAdminAnnounceSearch();
+};
+
+window.handleAdminAnnouncePageSizeChange = (size) => {
+    adminAnnounceFilters.pageSize = parseInt(size);
+    adminAnnounceFilters.page = 1;
+    performAdminAnnounceSearch();
+};
+
+const renderAdminAnnounceTableHTML = (list, pagination) => {
+    const isAllSelected = list.length > 0 && list.every(a => adminSelectedAnnounceIds.has(a.id.toString()));
+    const { total, page, pageSize } = pagination || { total: 0, page: 1, pageSize: 20 };
+    const totalPages = Math.ceil(total / pageSize);
+
+    return `
+        <div class="admin-table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th class="col-checkbox">
+                            <input type="checkbox" ${isAllSelected ? 'checked' : ''} onchange="toggleAdminAnnounceSelectAll(this.checked)">
+                        </th>
+                        <th>标题</th>
+                        <th>类型</th>
+                        <th>状态</th>
+                        <th>发布人</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:30px; opacity:0.5;">未找到匹配的公告</td></tr>' : 
+                      list.map(a => `
+                        <tr class="${adminSelectedAnnounceIds.has(a.id.toString()) ? 'selected' : ''}">
+                            <td class="col-checkbox">
+                                <input type="checkbox" ${adminSelectedAnnounceIds.has(a.id.toString()) ? 'checked' : ''} onchange="toggleAdminAnnounceSelect('${a.id}', this.checked)">
+                            </td>
+                            <td>
+                                <div style="display:flex; flex-direction:column;">
+                                    <span style="font-weight:bold;">${a.is_top ? '<i class="ri-pushpin-fill" style="color:#f1c40f"></i> ' : ''}${escapeHTML(a.title)}</span>
+                                    <span style="font-size:10px; opacity:0.5; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHTML(a.content)}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge" style="background:${a.type === 'important' ? 'rgba(231,76,60,0.1)' : 'rgba(52,152,219,0.1)'}; color:${a.type === 'important' ? '#e74c3c' : '#3498db'}">
+                                    ${a.type === 'important' ? '重要' : '静默'}
+                                </span>
+                            </td>
+                            <td><span class="status-badge ${a.status}">${a.status === 'published' ? '已发布' : (a.status === 'draft' ? '草稿' : '已归档')}</span></td>
+                            <td><small style="opacity:0.7">${a.creator_name || 'System'}</small></td>
+                            <td>
+                                <div style="display:flex; gap:8px;">
+                                    <button class="action-link" onclick="editAnnouncement(${JSON.stringify(a).replace(/"/g, '&quot;')})" title="编辑">
+                                        <i class="ri-edit-line"></i>
+                                    </button>
+                                    <button class="action-link danger" onclick="deleteAnnouncement(${a.id})" title="删除">
+                                        <i class="ri-delete-bin-line"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="admin-pagination">
+            <div class="pagination-info">
+                共 <b>${total}</b> 条，每页 
+                <select style="width:auto; padding:2px 5px; height:24px; font-size:11px;" onchange="handleAdminAnnouncePageSizeChange(this.value)">
+                    <option value="20" ${pageSize === 20 ? 'selected' : ''}>20</option>
+                    <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
+                    <option value="100" ${pageSize === 100 ? 'selected' : ''}>100</option>
+                </select>
+            </div>
+            <div class="pagination-controls">
+                <button class="page-btn" ${page <= 1 ? 'disabled' : ''} onclick="handleAdminAnnouncePageChange(${page - 1})"><i class="ri-arrow-left-s-line"></i></button>
+                <span style="font-size:12px;">${page} / ${totalPages || 1}</span>
+                <button class="page-btn" ${page >= totalPages ? 'disabled' : ''} onclick="handleAdminAnnouncePageChange(${page + 1})"><i class="ri-arrow-right-s-line"></i></button>
+            </div>
+        </div>
+    `;
+};
+
+window.toggleAdminAnnounceSelect = (id, checked) => {
+    if (checked) adminSelectedAnnounceIds.add(id.toString());
+    else adminSelectedAnnounceIds.delete(id.toString());
+    
+    const container = document.getElementById('admin-announce-table-container');
+    if (container) {
+        container.innerHTML = renderAdminAnnounceTableHTML(adminData.announcements, adminData.pagination);
+    }
+    updateAnnounceBatchBar();
+};
+
+window.toggleAdminAnnounceSelectAll = (checked) => {
+    if (checked) {
+        adminData.announcements.forEach(a => adminSelectedAnnounceIds.add(a.id.toString()));
+    } else {
+        adminSelectedAnnounceIds.clear();
+    }
+    const container = document.getElementById('admin-announce-table-container');
+    if (container) {
+        container.innerHTML = renderAdminAnnounceTableHTML(adminData.announcements, adminData.pagination);
+    }
+    updateAnnounceBatchBar();
+};
+
+window.updateAnnounceBatchBar = () => {
+    const bar = document.getElementById('admin-announce-batch-bar');
+    const countSpan = document.getElementById('announce-batch-count');
+    if (!bar || !countSpan) return;
+
+    if (adminSelectedAnnounceIds.size > 0) {
+        countSpan.innerHTML = `已选中 <b>${adminSelectedAnnounceIds.size}</b> 条公告`;
+        bar.classList.add('visible');
+    } else {
+        bar.classList.remove('visible');
+    }
+};
+
+window.batchAnnounceAction = async (action) => {
+    if (adminSelectedAnnounceIds.size === 0) return;
+    
+    const ids = Array.from(adminSelectedAnnounceIds);
+    let msg = "";
+    if (action === 'delete') msg = `确定要批量删除这 ${ids.length} 条公告吗？此操作不可撤销！`;
+    else if (action === 'publish') msg = `确定要批量发布这 ${ids.length} 条公告吗？`;
+    else if (action === 'archive') msg = `确定要批量归档这 ${ids.length} 条公告吗？`;
+    
+    if (msg && !confirm(msg)) return;
+
+    await SyncUI.perform('ADMIN_ANNOUNCE', async () => {
+        // 依次处理或批量处理 (目前后端暂未提供批量接口，采用循环或批量更新 API)
+        // 为了演示效果，这里先用循环，生产环境建议增加批量 API
+        for (const id of ids) {
+            if (action === 'delete') {
+                await fetch('/api/admin/announcements', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+            } else {
+                await fetch('/api/admin/announcements', {
+                    method: 'PATCH',
+                    headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, status: action === 'publish' ? 'published' : 'archived' })
+                });
+            }
+        }
+        showToast("批量操作完成", "#2ecc71");
+        adminSelectedAnnounceIds.clear();
+        performAdminAnnounceSearch();
+    });
+};
+
+// Task STD.2: 邀请管理交互逻辑
+window.toggleInviteSearch = () => {
+    const body = document.getElementById('invite-search-body');
+    const arrow = document.getElementById('invite-search-arrow');
+    if (!body || !arrow) return;
+    const isCollapsed = body.classList.toggle('collapsed');
+    arrow.className = isCollapsed ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line';
+};
+
+const performAdminInviteSearch = async () => {
+    const container = document.getElementById('admin-invite-table-container');
+    if (container) container.style.opacity = '0.5';
+    
+    try {
+        const query = new URLSearchParams({
+            page: adminInviteFilters.page,
+            pageSize: adminInviteFilters.pageSize,
+            keyword: adminInviteFilters.keyword,
+            status: adminInviteFilters.status
+        });
+        const res = await fetch(`/api/admin/invitations?${query.toString()}`, {
+            headers: { 'Authorization': sysToken }
+        });
+        const data = await res.json();
+        if (data.success) {
+            adminData.invitations = data.invitations;
+            if (container) {
+                container.innerHTML = renderAdminInviteTableHTML(data.invitations, data.pagination);
+                container.style.opacity = '1';
+                updateInviteBatchBar();
+            }
+        }
+    } catch (e) {
+        showToast("加载邀请码失败: " + e.message, "#e74c3c");
+    }
+};
+
+window.handleAdminInviteSearch = debounce((val) => {
+    adminInviteFilters.keyword = val.trim();
+    adminInviteFilters.page = 1;
+    performAdminInviteSearch();
+}, 400);
+
+window.handleAdminInviteFilter = (type, val) => {
+    adminInviteFilters[type] = val;
+    adminInviteFilters.page = 1;
+    performAdminInviteSearch();
+};
+
+window.handleAdminInvitePageChange = (page) => {
+    adminInviteFilters.page = page;
+    performAdminInviteSearch();
+};
+
+const renderAdminInviteTableHTML = (list, pagination) => {
+    const isAllSelected = list.length > 0 && list.every(i => adminSelectedInviteIds.has(i.code));
+    const { total, page, pageSize } = pagination || { total: 0, page: 1, pageSize: 20 };
+    const totalPages = Math.ceil(total / pageSize);
+
+    return `
+        <div class="admin-table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th class="col-checkbox">
+                            <input type="checkbox" ${isAllSelected ? 'checked' : ''} onchange="toggleAdminInviteSelectAll(this.checked)">
+                        </th>
+                        <th>邀请码</th>
+                        <th>状态</th>
+                        <th>使用者</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:30px; opacity:0.5;">暂无邀请码</td></tr>' : 
+                      list.map(i => `
+                        <tr class="${adminSelectedInviteIds.has(i.code) ? 'selected' : ''}">
+                            <td class="col-checkbox">
+                                <input type="checkbox" ${adminSelectedInviteIds.has(i.code) ? 'checked' : ''} onchange="toggleAdminInviteSelect('${i.code}', this.checked)">
+                            </td>
+                            <td class="code-font" style="font-weight:bold; letter-spacing:1px;">${i.code}</td>
+                            <td><span class="status-badge ${i.status}">${i.status === 'unused' ? '未使用' : '已使用'}</span></td>
+                            <td>${i.used_by_name ? `<b>${escapeHTML(i.used_by_name)}</b>` : '<span style="opacity:0.3">-</span>'}</td>
+                            <td><small style="opacity:0.6">${new Date(i.created_at).toLocaleDateString()}</small></td>
+                            <td>
+                                <button class="action-link" onclick="copySingleInvite('${i.code}')" title="复制">
+                                    <i class="ri-file-copy-line"></i>
+                                </button>
+                                ${i.status === 'unused' ? `
+                                    <button class="action-link danger" onclick="deleteInvite('${i.code}')" title="删除" style="margin-left:8px;">
+                                        <i class="ri-delete-bin-line"></i>
+                                    </button>
+                                ` : ''}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        <div class="admin-pagination">
+            <div class="pagination-info">共 <b>${total}</b> 条</div>
+            <div class="pagination-controls">
+                <button class="page-btn" ${page <= 1 ? 'disabled' : ''} onclick="handleAdminInvitePageChange(${page - 1})"><i class="ri-arrow-left-s-line"></i></button>
+                <span style="font-size:12px;">${page} / ${totalPages || 1}</span>
+                <button class="page-btn" ${page >= totalPages ? 'disabled' : ''} onclick="handleAdminInvitePageChange(${page + 1})"><i class="ri-arrow-right-s-line"></i></button>
+            </div>
+        </div>
+    `;
+};
+
+window.toggleAdminInviteSelect = (code, checked) => {
+    if (checked) adminSelectedInviteIds.add(code);
+    else adminSelectedInviteIds.delete(code);
+    const container = document.getElementById('admin-invite-table-container');
+    if (container) container.innerHTML = renderAdminInviteTableHTML(adminData.invitations, { ...adminData.pagination, page: adminInviteFilters.page });
+    updateInviteBatchBar();
+};
+
+window.toggleAdminInviteSelectAll = (checked) => {
+    if (checked) adminData.invitations.forEach(i => adminSelectedInviteIds.add(i.code));
+    else adminSelectedInviteIds.clear();
+    const container = document.getElementById('admin-invite-table-container');
+    if (container) container.innerHTML = renderAdminInviteTableHTML(adminData.invitations, { ...adminData.pagination, page: adminInviteFilters.page });
+    updateInviteBatchBar();
+};
+
+window.updateInviteBatchBar = () => {
+    const bar = document.getElementById('admin-invite-batch-bar');
+    const countSpan = document.getElementById('invite-batch-count');
+    if (!bar || !countSpan) return;
+
+    if (adminSelectedInviteIds.size > 0) {
+        countSpan.innerHTML = `已选中 <b>${adminSelectedInviteIds.size}</b> 个邀请码`;
+        bar.classList.add('visible');
+    } else {
+        bar.classList.remove('visible');
+    }
+};
+
+window.batchInviteAction = async (action) => {
+    if (adminSelectedInviteIds.size === 0) return;
+    const codes = Array.from(adminSelectedInviteIds);
+    if (action === 'delete' && !confirm(`确定要批量下架这 ${codes.length} 个未使用邀请码吗？`)) return;
+
+    await SyncUI.perform('INVITE_BATCH', async () => {
+        for (const code of codes) {
+            await fetch('/api/admin/invitations', {
+                method: 'DELETE',
+                headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code })
+            });
+        }
+        showToast("批量下架完成", "#2ecc71");
+        adminSelectedInviteIds.clear();
+        performAdminInviteSearch();
+    });
+};
+
+// Task STD.3: 审计日志交互逻辑
+window.toggleAuditSearch = () => {
+    const body = document.getElementById('audit-search-body');
+    const arrow = document.getElementById('audit-search-arrow');
+    if (!body || !arrow) return;
+    const isCollapsed = body.classList.toggle('collapsed');
+    arrow.className = isCollapsed ? 'ri-arrow-down-s-line' : 'ri-arrow-up-s-line';
+};
+
+const performAdminAuditSearch = async () => {
+    const container = document.getElementById('admin-audit-table-container');
+    if (container) container.style.opacity = '0.5';
+    
+    try {
+        const query = new URLSearchParams({
+            page: adminAuditFilters.page,
+            pageSize: adminAuditFilters.pageSize,
+            keyword: adminAuditFilters.keyword,
+            actionType: adminAuditFilters.actionType
+        });
+        const res = await fetch(`/api/admin/audit-logs?${query.toString()}`, {
+            headers: { 'Authorization': sysToken }
+        });
+        const data = await res.json();
+        if (data.success) {
+            adminData.logs = data.logs;
+            if (container) {
+                container.innerHTML = renderAdminAuditTableHTML(data.logs, data.pagination);
+                container.style.opacity = '1';
+            }
+        }
+    } catch (e) {
+        showToast("加载日志失败: " + e.message, "#e74c3c");
+    }
+};
+
+window.handleAdminAuditSearch = debounce((val) => {
+    adminAuditFilters.keyword = val.trim();
+    adminAuditFilters.page = 1;
+    performAdminAuditSearch();
+}, 400);
+
+window.handleAdminAuditFilter = (type, val) => {
+    adminAuditFilters[type] = val;
+    adminAuditFilters.page = 1;
+    performAdminAuditSearch();
+};
+
+window.handleAdminAuditPageChange = (page) => {
+    adminAuditFilters.page = page;
+    performAdminAuditSearch();
+};
+
+const renderAdminAuditTableHTML = (logs, pagination) => {
+    const { total, page, pageSize } = pagination || { total: 0, page: 1, pageSize: 20 };
+    const totalPages = Math.ceil(total / pageSize);
+
+    return `
+        <div class="admin-table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th style="width:100px;">记录时间</th>
+                        <th>操作人</th>
+                        <th>动作</th>
+                        <th>详情</th>
+                        <th>来源 IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${logs.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:30px; opacity:0.5;">暂无日志数据</td></tr>' : 
+                      logs.map(l => {
+                        const dateObj = new Date(l.created_at);
+                        const dateStr = dateObj.toLocaleDateString();
+                        const timeStr = dateObj.toLocaleTimeString();
+                        const actionInfo = AuditActionMap[l.action] || { label: l.action, color: '#3498db' };
+                        
+                        return `
+                        <tr>
+                            <td style="font-family:monospace; line-height:1.2;">
+                                <div style="font-size:10px; opacity:0.5;">${dateStr}</div>
+                                <div style="font-size:12px; font-weight:bold; color:var(--text-main);">${timeStr}</div>
+                            </td>
+                            <td style="font-weight:bold;" title="用户内部 ID: ${l.user_id}">${escapeHTML(l.operator_name || 'System')}</td>
+                            <td>
+                                <span class="status-badge" style="background:rgba(255,255,255,0.05); color:${actionInfo.color}; border:1px solid ${actionInfo.color}44; white-space:nowrap;" title="原始动作: ${l.action}">
+                                    ${actionInfo.label}
+                                </span>
+                            </td>
+                            <td style="font-size:11px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHTML(l.details || '')}">
+                                ${escapeHTML(l.details || '-')}
+                            </td>
+                            <td style="font-size:10px; opacity:0.5; font-family:monospace;">${l.ip}</td>
+                        </tr>
+                        `;
+                      }).join('')}
+                </tbody>
+            </table>
+        </div>
+        <div class="admin-pagination">
+            <div class="pagination-info">共 <b>${total}</b> 条日志</div>
+            <div class="pagination-controls">
+                <button class="page-btn" ${page <= 1 ? 'disabled' : ''} onclick="handleAdminAuditPageChange(${page - 1})"><i class="ri-arrow-left-s-line"></i></button>
+                <span style="font-size:12px;">${page} / ${totalPages || 1}</span>
+                <button class="page-btn" ${page >= totalPages ? 'disabled' : ''} onclick="handleAdminAuditPageChange(${page + 1})"><i class="ri-arrow-right-s-line"></i></button>
+            </div>
+        </div>
+    `;
+};
+
+window.handleAdminPageChange = (page) => {
+    adminUserFilters.page = page;
+    performAdminUserSearch();
+};
+
+window.handleAdminPageSizeChange = (size) => {
+    adminUserFilters.pageSize = parseInt(size);
+    adminUserFilters.page = 1;
+    performAdminUserSearch();
+};
+
+const renderAdminUserTableHTML = (users) => {
+    const isAllSelected = users.length > 0 && users.every(u => adminSelectedUserIds.has(u.id));
+    const { total, page, pageSize } = adminData.pagination || { total: 0, page: 1, pageSize: 20 };
+    const totalPages = Math.ceil(total / pageSize);
+
+    return `
+        <div class="admin-table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th class="col-checkbox">
+                            <input type="checkbox" ${isAllSelected ? 'checked' : ''} onchange="toggleAdminSelectAll(this.checked)">
+                        </th>
+                        <th>用户名</th>
+                        <th>角色</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${users.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:30px; opacity:0.5;">未找到匹配的用户</td></tr>' : 
+                      users.map(u => `
+                        <tr class="${adminSelectedUserIds.has(u.id) ? 'selected' : ''}">
+                            <td class="col-checkbox">
+                                <input type="checkbox" ${adminSelectedUserIds.has(u.id) ? 'checked' : ''} onchange="toggleAdminUserSelect('${u.id}', this.checked)">
+                            </td>
+                            <td>
+                                <div style="display:flex; flex-direction:column;">
+                                    <span style="font-weight:bold;">${escapeHTML(u.username)}</span>
+                                    <span style="font-size:10px; opacity:0.5; font-family:monospace;" title="完整内部 ID: ${u.id}">${u.uid || u.id?.substring(0, 8) || '---'}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge ${u.role}">${u.role.toUpperCase()}</span>
+                            </td>
+                            <td><span class="status-badge ${u.status}">${u.status}</span></td>
+                            <td>
+                                <div style="display:flex; gap:8px; align-items:center;">
+                                    ${u.role === 'admin' ? '-' : `
+                                        <button class="action-link" onclick="updateUserAdmin('${u.id}', { status: '${u.status === 'active' ? 'frozen' : 'active'}' })" title="${u.status === 'active' ? '冻结账号' : '激活账号'}">
+                                            <i class="${u.status === 'active' ? 'ri-user-forbid-line' : 'ri-user-follow-line'}"></i>
+                                        </button>
+                                        <button class="action-link" onclick="resetUserPasswordAdmin('${u.id}')" title="重置密码">
+                                            <i class="ri-key-2-line"></i>
+                                        </button>
+                                        <button class="action-link danger" onclick="deleteUserAdmin('${u.id}')" title="删除用户">
+                                            <i class="ri-delete-bin-line"></i>
+                                        </button>
+                                    `}
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Task UM.5: 分页控制 -->
+        <div class="admin-pagination">
+            <div class="pagination-info">
+                共 <b>${total}</b> 条数据，每页 
+                <select style="width:auto; padding:2px 5px; height:24px; font-size:11px;" onchange="handleAdminPageSizeChange(this.value)">
+                    <option value="20" ${pageSize === 20 ? 'selected' : ''}>20</option>
+                    <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
+                    <option value="100" ${pageSize === 100 ? 'selected' : ''}>100</option>
+                </select> 条
+            </div>
+            <div class="pagination-controls">
+                <button class="page-btn" ${page <= 1 ? 'disabled' : ''} onclick="handleAdminPageChange(1)" title="第一页"><i class="ri-arrow-left-double-line"></i></button>
+                <button class="page-btn" ${page <= 1 ? 'disabled' : ''} onclick="handleAdminPageChange(${page - 1})" title="上一页"><i class="ri-arrow-left-s-line"></i></button>
+                
+                <span style="font-size:12px; margin:0 10px;">第 <b>${page}</b> / ${totalPages || 1} 页</span>
+
+                <button class="page-btn" ${page >= totalPages ? 'disabled' : ''} onclick="handleAdminPageChange(${page + 1})" title="下一页"><i class="ri-arrow-right-s-line"></i></button>
+                <button class="page-btn" ${page >= totalPages ? 'disabled' : ''} onclick="handleAdminPageChange(${totalPages})" title="末页"><i class="ri-arrow-right-double-line"></i></button>
+            </div>
+        </div>
+    `;
+};
+
+// Task UM.4: 多选与批量操作逻辑
+window.toggleAdminUserSelect = (userId, checked) => {
+    if (checked) adminSelectedUserIds.add(userId);
+    else adminSelectedUserIds.delete(userId);
+    
+    // 局部更新表格行样式而不重绘整个表格（优化性能）
+    const container = document.getElementById('admin-users-table-container');
+    if (container) {
+        container.innerHTML = renderAdminUserTableHTML(adminData.users);
+    }
+    updateAdminBatchBar();
+};
+
+window.toggleAdminSelectAll = (checked) => {
+    if (checked) {
+        adminData.users.forEach(u => adminSelectedUserIds.add(u.id));
+    } else {
+        adminData.users.forEach(u => adminSelectedUserIds.delete(u.id));
+    }
+    const container = document.getElementById('admin-users-table-container');
+    if (container) {
+        container.innerHTML = renderAdminUserTableHTML(adminData.users);
+    }
+    updateAdminBatchBar();
+};
+
+window.updateAdminBatchBar = () => {
+    let bar = document.getElementById('admin-user-batch-bar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'admin-user-batch-bar';
+        bar.className = 'user-batch-bar';
+        document.body.appendChild(bar);
+    }
+
+    if (adminSelectedUserIds.size > 0) {
+        bar.innerHTML = `
+            <span>已选中 <b>${adminSelectedUserIds.size}</b> 名用户</span>
+            <div class="batch-btns">
+                <button class="batch-action-btn" onclick="exportUsersCSV()">CSV 导出</button>
+                <button class="batch-action-btn" onclick="adminSelectedUserIds.clear(); updateAdminBatchBar(); const container = document.getElementById('admin-users-table-container'); if(container) container.innerHTML = renderAdminUserTableHTML(adminData.users);">取消选择</button>
+            </div>
+        `;
+        bar.classList.add('visible');
+    } else {
+        bar.classList.remove('visible');
+    }
+};
+
+// Task UM.6: CSV 批量导出实现
+window.exportUsersCSV = () => {
+    if (adminSelectedUserIds.size === 0) return showToast("请先选择要导出的用户", "#e67e22");
+
+    const selectedUsers = adminData.users.filter(u => adminSelectedUserIds.has(u.id));
+    
+    // 1. 构建 CSV 内容
+    const headers = ['ID', 'UUID', 'Username', 'Role', 'Status', 'Last Login', 'Created At'];
+    const rows = selectedUsers.map(u => [
+        u.id,
+        u.uid,
+        u.username,
+        u.role,
+        u.status,
+        u.last_login || '-',
+        u.created_at
+    ]);
+
+    let csvContent = "\ufeff"; // 添加 BOM 支持中文 Excel
+    csvContent += headers.join(',') + "\n";
+    rows.forEach(row => {
+        csvContent += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',') + "\n";
+    });
+
+    // 2. 触发下载
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const timestamp = new Date().toISOString().slice(0,10).replace(/-/g, '');
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `CloudNav_Users_Export_${timestamp}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast(`成功导出 ${selectedUsers.size} 条记录`, "#2ecc71");
+};
+
 window.switchHubTab = (tab) => {
     document.querySelectorAll('.hub-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     document.querySelectorAll('.hub-pane').forEach(p => p.classList.toggle('active', p.id === `hub-content-${tab}`));
+    
+    if (tab !== 'users' && tab !== 'announcements' && tab !== 'invites') {
+        const userBar = document.getElementById('admin-user-batch-bar');
+        const announceBar = document.getElementById('admin-announce-batch-bar');
+        const inviteBar = document.getElementById('admin-invite-batch-bar');
+        if (userBar) userBar.classList.remove('visible');
+        if (announceBar) announceBar.classList.remove('visible');
+        if (inviteBar) inviteBar.classList.remove('visible');
+    } else if (tab === 'users') {
+        updateAdminBatchBar();
+        const announceBar = document.getElementById('admin-announce-batch-bar');
+        const inviteBar = document.getElementById('admin-invite-batch-bar');
+        if (announceBar) announceBar.classList.remove('visible');
+        if (inviteBar) inviteBar.classList.remove('visible');
+    } else if (tab === 'announcements') {
+        updateAnnounceBatchBar();
+        const userBar = document.getElementById('admin-user-batch-bar');
+        const inviteBar = document.getElementById('admin-invite-batch-bar');
+        if (userBar) userBar.classList.remove('visible');
+        if (inviteBar) inviteBar.classList.remove('visible');
+    } else if (tab === 'invites') {
+        updateInviteBatchBar();
+        const userBar = document.getElementById('admin-user-batch-bar');
+        const announceBar = document.getElementById('admin-announce-batch-bar');
+        if (userBar) userBar.classList.remove('visible');
+        if (announceBar) announceBar.classList.remove('visible');
+    }
 };
 
 window.generateInvites = async (count) => {
@@ -3144,9 +4169,10 @@ window.deleteInvite = async (code) => {
 };
 
 window.updateUserAdmin = async (userId, payload) => {
+    // Task UM.8.5: 统一二次验证逻辑
     const adminPassword = prompt("执行管理操作，请输入您的管理员密码进行二次验证:");
     if (adminPassword === null) return;
-    if (!adminPassword) return showToast("请输入密码", "#e67e22");
+    if (!adminPassword) return showToast("请输入密码以继续", "#e67e22");
 
     await SyncUI.perform('USER_MANAGE', async () => {
         const res = await fetch('/api/admin/users', {
@@ -3155,20 +4181,60 @@ window.updateUserAdmin = async (userId, payload) => {
             body: JSON.stringify({ userId, ...payload, adminPassword })
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "同步失败");
-        openAdminHub('users');
+        if (!res.ok) throw new Error(data.error || "操作失败");
+        performAdminUserSearch(); // 局部刷新
+    });
+};
+
+window.resetUserPasswordAdmin = async (userId) => {
+    const newPassword = prompt("请输入为该用户设置的新密码:");
+    if (!newPassword) return;
+    
+    const adminPassword = prompt("请输入您的管理员密码确认修改:");
+    if (!adminPassword) return;
+
+    await SyncUI.perform('USER_MANAGE', async () => {
+        const res = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, newPassword, adminPassword })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "重置失败");
+        showToast("密码已重置", "#2ecc71");
+    });
+};
+
+window.deleteUserAdmin = async (userId) => {
+    if (!confirm("⚠️ 警告：删除用户将永久清除其所有数据（分类、书签、设置），且不可恢复！确认删除吗？")) return;
+
+    const adminPassword = prompt("【最后确认】请输入您的管理员密码执行删除操作:");
+    if (!adminPassword) return;
+
+    await SyncUI.perform('USER_MANAGE', async () => {
+        const res = await fetch('/api/admin/users', {
+            method: 'DELETE',
+            headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, adminPassword })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "删除失败");
+        showToast("用户已删除", "#2ecc71");
+        performAdminUserSearch();
     });
 };
 
 window.saveAnnouncement = async () => {
     const isEdit = currentEditingAnnounceId !== null;
+    const isDraft = document.getElementById('announce-is-draft')?.checked;
     const payload = {
         id: isEdit ? Number(currentEditingAnnounceId) : null,
         title: document.getElementById('announce-title').value.trim(),
         content: document.getElementById('announce-content').value.trim(),
         type: document.getElementById('announce-type').value,
         expire_at: document.getElementById('announce-expire').value,
-        is_top: document.getElementById('announce-top').checked
+        is_top: document.getElementById('announce-top').checked,
+        status: isDraft ? 'draft' : 'published'
     };
 
     if (!payload.title || !payload.content) return showToast("标题和内容不能为空", "#e67e22");
@@ -3182,8 +4248,9 @@ window.saveAnnouncement = async () => {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "发布失败");
+        showToast(isEdit ? "公告已更新" : "公告已发布", "#2ecc71");
         cancelEditAnnounce();
-        openAdminHub('announcements');
+        performAdminAnnounceSearch();
         initAnnouncements();
     });
 };
@@ -3197,7 +4264,9 @@ window.deleteAnnouncement = async (id) => {
             body: JSON.stringify({ id })
         });
         if (!res.ok) throw new Error("下架失败");
-        openAdminHub('announcements');
+        showToast("公告已删除", "#2ecc71");
+        performAdminAnnounceSearch();
+        initAnnouncements();
     });
 };
 
@@ -3544,7 +4613,7 @@ const openJsonEditor = () => {
             if (!parsed.categories || !parsed.items) throw new Error("缺少核心字段 (categories/items)");
             
             // Task 4.3: 专家模式配额校验
-            const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
+            const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
             if (parsed.categories.length > quota.maxCategories) throw new Error(`分类数量超出上限 (${quota.maxCategories})`);
             for (const cat of parsed.categories) {
                 const count = parsed.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
@@ -3638,7 +4707,7 @@ const initGlobalEvents = () => {
                     if (!parsed.categories || !parsed.items) throw new Error("非法的 CloudNav 配置格式");
                     
                     // Task 4.3: 导入配额校验
-                    const quota = appData.quota || { maxCategories: 5, maxItemsPerCategory: 10 };
+                    const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
                     if (parsed.categories.length > quota.maxCategories) throw new Error(`分类数量超出上限 (${quota.maxCategories})`);
                     for (const cat of parsed.categories) {
                         const count = parsed.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;

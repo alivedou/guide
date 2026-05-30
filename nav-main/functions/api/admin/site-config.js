@@ -7,8 +7,13 @@ export async function onRequestGet(context) {
     siteTitle: "CloudNav 导航",
     faviconUrl: "/favicon.ico",
     seoKeywords: "导航, 自定义, 云端存储",
-    seoDescription: "极致简洁的个人自定义导航网站"
+    seoDescription: "极致简洁的个人自定义导航网站",
+    superUserInviteQuota: 10
   };
+  // 确保旧配置也能返回默认值
+  if (config && config.superUserInviteQuota === undefined) {
+    config.superUserInviteQuota = 10;
+  }
   return new Response(JSON.stringify(config), { headers: { "Content-Type": "application/json" } });
 }
 

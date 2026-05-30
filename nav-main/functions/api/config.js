@@ -68,7 +68,13 @@ export async function onRequestGet(context) {
 
   const kvKey = userId === "guest" ? "config" : `user_config:${userId}`;
 
-  const headers = { "Content-Type": "application/json;charset=UTF-8" };
+  // Task UQ.2: 强制禁用浏览器及 CDN 缓存，确保配额实时同步
+  const headers = { 
+    "Content-Type": "application/json;charset=UTF-8",
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0"
+  };
 
   try {
     let dataStr = await env.nav.get(kvKey);

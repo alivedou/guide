@@ -14,7 +14,9 @@ export const defaultData = {
     openInNewTab: true, 
     hideBgMask: false,
     isolatedView: false,
-    density: 'standard'
+    density: 'standard',
+    syncInterval: 7, // Task節流.1: 默认 7 天备份一次
+    autoSyncOnLogout: true
   },
 
   // 分类列表

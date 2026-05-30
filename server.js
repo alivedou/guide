@@ -457,32 +457,106 @@ app.post('/api/auth/register', (req, res) => {
     }
 });
 
-// ====== Task 4.4: 邀请码管理 API ======
+// ====== Task 4.4: 审计日志管理 API ======
 
 app.get('/api/admin/audit-logs', authenticate, adminOnly, (req, res) => {
+    // Task AC.4: 显式校验 Admin 权限
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: '权限不足，审计日志仅限系统管理员查看' });
+    }
+    
+    const page = parseInt(req.query.page || '1');
+    const pageSize = parseInt(req.query.pageSize || '20');
+    const keyword = req.query.keyword || '';
+    const actionType = req.query.actionType || '';
+
     try {
-        const logs = db.prepare(`
+        let query = `
             SELECT al.*, u.username as operator_name 
             FROM audit_logs al
             LEFT JOIN users u ON al.user_id = u.id
-            ORDER BY al.created_at DESC
-            LIMIT 100
-        `).all();
-        res.json({ success: true, logs });
+            WHERE 1=1
+        `;
+        let countQuery = `
+            SELECT COUNT(*) as total FROM audit_logs al
+            LEFT JOIN users u ON al.user_id = u.id
+            WHERE 1=1
+        `;
+        let params = [];
+
+        if (keyword) {
+            const kw = `%${keyword}%`;
+            query += ' AND (u.username LIKE ? OR al.details LIKE ? OR al.ip LIKE ?)';
+            countQuery += ' AND (u.username LIKE ? OR al.details LIKE ? OR al.ip LIKE ?)';
+            params.push(kw, kw, kw);
+        }
+
+        if (actionType) {
+            query += ' AND al.action = ?';
+            countQuery += ' AND al.action = ?';
+            params.push(actionType);
+        }
+
+        const totalRow = db.prepare(countQuery).bind(...params).get();
+        const total = totalRow ? totalRow.total : 0;
+
+        query += ' ORDER BY al.created_at DESC LIMIT ? OFFSET ?';
+        const logs = db.prepare(query).bind(...params, pageSize, (page - 1) * pageSize).all();
+        
+        res.json({ 
+            success: true, 
+            logs,
+            pagination: { total, page, pageSize }
+        });
     } catch (e) {
         res.status(500).json({ error: '获取审计日志失败', details: e.message });
     }
 });
 
 app.get('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
+    const page = parseInt(req.query.page || '1');
+    const pageSize = parseInt(req.query.pageSize || '20');
+    const keyword = req.query.keyword || '';
+    const status = req.query.status || '';
+
     try {
-        const list = db.prepare(`
+        let query = `
             SELECT ic.*, u2.username as used_by_name 
             FROM invitation_codes ic
             LEFT JOIN users u2 ON ic.used_by = u2.id
-            ORDER BY ic.created_at DESC
-        `).all();
-        res.json({ success: true, invitations: list });
+            WHERE 1=1
+        `;
+        let countQuery = `
+            SELECT COUNT(*) as total FROM invitation_codes ic
+            LEFT JOIN users u2 ON ic.used_by = u2.id
+            WHERE 1=1
+        `;
+        let params = [];
+
+        if (keyword) {
+            const kw = `%${keyword}%`;
+            query += ' AND (ic.code LIKE ? OR u2.username LIKE ?)';
+            countQuery += ' AND (ic.code LIKE ? OR u2.username LIKE ?)';
+            params.push(kw, kw);
+        }
+
+        if (status) {
+            query += ' AND ic.status = ?';
+            countQuery += ' AND ic.status = ?';
+            params.push(status);
+        }
+
+        const totalRow = db.prepare(countQuery).bind(...params).get();
+        const total = totalRow ? totalRow.total : 0;
+
+        query += ' ORDER BY ic.created_at DESC LIMIT ? OFFSET ?';
+        const list = db.prepare(query).bind(...params, pageSize, (page - 1) * pageSize).all();
+        
+        res.json({ 
+            success: true, 
+            invitations: list,
+            pagination: { total, page, pageSize }
+        });
     } catch (e) {
         res.status(500).json({ error: '获取邀请码失败', details: e.message });
     }
@@ -670,9 +744,51 @@ app.post('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
 });
 
 app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
+    const page = parseInt(req.query.page || '1');
+    const pageSize = parseInt(req.query.pageSize || '20');
+    const keyword = req.query.keyword || '';
+    const status = req.query.status || '';
+
     try {
-        const users = db.prepare('SELECT id, username, role, status, last_login, created_at FROM users ORDER BY created_at DESC').all();
-        res.json({ success: true, users });
+        let query = 'SELECT id, uid, username, role, status, last_login, created_at FROM users WHERE 1=1';
+        let countQuery = 'SELECT COUNT(*) as total FROM users WHERE 1=1';
+        let params = [];
+
+        if (keyword) {
+            const kw = `%${keyword}%`;
+            query += ' AND (username LIKE ? OR uid LIKE ?)';
+            countQuery += ' AND (username LIKE ? OR uid LIKE ?)';
+            params.push(kw, kw);
+        }
+
+        if (status) {
+            query += ' AND status = ?';
+            countQuery += ' AND status = ?';
+            params.push(status);
+        }
+
+        // 获取总数
+        const totalRow = db.prepare(countQuery).bind(...params).get();
+        const total = totalRow ? totalRow.total : 0;
+
+        // 获取管理员总数 (Task AC.1 & DP.2)
+        const adminCountRow = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get();
+        const adminCount = adminCountRow ? adminCountRow.count : 0;
+
+        // 排序与分页
+        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        const users = db.prepare(query).bind(...params, pageSize, (page - 1) * pageSize).all();
+        
+        res.json({ 
+            success: true, 
+            users,
+            adminCount,
+            pagination: {
+                total,
+                page,
+                pageSize
+            }
+        });
     } catch (e) {
         res.status(500).json({ error: '获取用户列表失败', details: e.message });
     }
