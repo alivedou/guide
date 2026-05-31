@@ -11,5 +11,5 @@ id = "YOUR_KV_NAMESPACE_ID"
 [[d1_databases]]
 binding = "DB"
 database_name = "cloudnav-db"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "f5a6c7c4-4dd8-47c2-bd56-98f80a0ebea8"
 migrations_dir = "migrations"
