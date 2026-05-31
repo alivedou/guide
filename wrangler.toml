@@ -6,10 +6,10 @@ JWT_SECRET = "cloudnav-secret-2026"
 
 [[kv_namespaces]]
 binding = "nav"
-id = "YOUR_KV_NAMESPACE_ID"
+id = "5c205a8aa34946adba9b9fc64b385cfe"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "cloudnav-db"
-database_id = "f5a6c7c4-4dd8-47c2-bd56-98f80a0ebea8"
+database_id = "0efbbde1-e891-4ec9-a219-0d577c176131"
 migrations_dir = "migrations"
