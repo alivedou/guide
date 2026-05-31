@@ -8,12 +8,12 @@
   "theme_color": "#399dff",
   "icons": [
     {
-      "src": "https://api.iowen.cn/favicon/github.com.png",
+      "src": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=192&h=192&fit=crop",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://api.iowen.cn/favicon/github.com.png",
+      "src": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=512&h=512&fit=crop",
       "sizes": "512x512",
       "type": "image/png"
     }

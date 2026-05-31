@@ -151,39 +151,108 @@ export async function onRequestPost(context) {
       }
     }
 
-    // 1. D1 事务持久化 (Task 6.3)
-    const queries = [
+    // 1. D1 事务持久化 (Task 6.3 & Task NT-V2.20)
+    // 1.1 先行执行全量清空 (DELETE)，确保多租户数据干净剔除
+    const deleteQueries = [
       env.DB.prepare('DELETE FROM categories WHERE user_id = ?').bind(userId),
       env.DB.prepare('DELETE FROM items WHERE user_id = ?').bind(userId)
     ];
+    await env.DB.batch(deleteQueries);
+
+    // 1.2 动态封装所有写入操作 (INSERT & UPDATE)与多用户主键安全重塑 (Task NT-V2.22)
+    const writeQueries = [];
+    const catIdMap = new Map();
+    const finalCategories = [];
+    const finalItems = [];
 
     if (categories) {
       categories.forEach((cat, idx) => {
-        queries.push(env.DB.prepare('INSERT INTO categories (id, user_id, name, icon, sort_order, is_video, hidden) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .bind(cat.id, userId, cat.name, cat.icon, idx, cat._isVideo ? 1 : 0, cat.hidden ? 1 : 0));
+        const oldId = cat.id || `temp_cat_${idx}`;
+        const newId = `cat_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
+        catIdMap.set(oldId, newId);
+
+        const newCat = {
+            id: newId,
+            name: cat.name || '未命名分类',
+            icon: cat.icon !== undefined ? cat.icon : '📌',
+            sort_order: idx,
+            _isVideo: !!cat._isVideo,
+            hidden: !!cat.hidden
+        };
+        finalCategories.push(newCat);
+
+        writeQueries.push(env.DB.prepare('INSERT INTO categories (id, user_id, name, icon, sort_order, is_video, hidden) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .bind(
+            newId, 
+            userId, 
+            newCat.name, 
+            newCat.icon, 
+            idx, 
+            newCat._isVideo ? 1 : 0, 
+            newCat.hidden ? 1 : 0
+          ));
       });
     }
 
     if (items) {
       items.forEach((item, idx) => {
+        let oldCatId = item.catId || item.cat_id;
+        let newCatId = catIdMap.get(oldCatId);
+        
+        if (!newCatId) {
+            const fallbackNewId = Array.from(catIdMap.values())[0] || null;
+            newCatId = fallbackNewId;
+        }
+
+        const newItemId = `item_${Math.random().toString(36).substring(2, 9)}_${Math.random().toString(36).substring(2, 9)}`;
+
+        const newItem = {
+            ...item,
+            id: newItemId,
+            catId: newCatId,
+            cat_id: newCatId
+        };
+        finalItems.push(newItem);
+
         // Task 4.4: 强制所有权绑定，防止跨用户注入数据
-        queries.push(env.DB.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .bind(item.id, userId, item.catId || item.cat_id, item.title, item.url, item.desc, item.icon, item.bg_color || '', idx, item.hidden ? 1 : 0));
+        writeQueries.push(env.DB.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(
+            newItemId, 
+            userId, 
+            newCatId, 
+            item.title || '未命名书签', 
+            item.url || '', 
+            item.desc !== undefined ? item.desc : null, 
+            item.icon !== undefined ? item.icon : null, 
+            item.bg_color || '', 
+            idx, 
+            item.hidden ? 1 : 0
+          ));
       });
     }
 
     if (settings) {
-      queries.push(env.DB.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = ?, bg_url = ?, simple_mode = ?, open_in_new_tab = ?, theme_mode = ? WHERE user_id = ?')
-        .bind(settings.cardWidth, settings.zenMode ? 1 : 0, settings.showFrequent ? 1 : 0, settings.bgUrl || null, settings.simpleMode ? 1 : 0, settings.openInNewTab ? 1 : 0, settings.themeMode || 'auto', userId));
+      writeQueries.push(env.DB.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = ?, bg_url = ?, simple_mode = ?, open_in_new_tab = ?, theme_mode = ? WHERE user_id = ?')
+        .bind(settings.cardWidth !== undefined ? settings.cardWidth : null, settings.zenMode ? 1 : 0, settings.showFrequent ? 1 : 0, settings.bgUrl || null, settings.simpleMode ? 1 : 0, settings.openInNewTab ? 1 : 0, settings.themeMode || 'auto', userId));
     }
 
-    await env.DB.batch(queries);
+    // 1.3 核心切片提交保护：分批执行写入操作，每包限制最大 80 条查询（绑定参数绝对低于 D1 的 1000 限制上限）
+    const chunkSize = 80;
+    for (let i = 0; i < writeQueries.length; i += chunkSize) {
+        const chunk = writeQueries.slice(i, i + chunkSize);
+        await env.DB.batch(chunk);
+    }
 
-    // 2. 更新 KV 缓存 (压缩存储)
-    newData.lastUpdated = formatCNTime(new Date());
-    await env.nav.put(kvKey, JSON.stringify(newData));
+    // 2. 将重塑主键后完全干净、全站独一无二的 categories 和 items 组合成全新 syncedData，写回并同步至 KV
+    const syncedData = {
+        ...newData,
+        categories: finalCategories,
+        items: finalItems,
+        lastUpdated: formatCNTime(new Date())
+    };
+    await env.nav.put(kvKey, JSON.stringify(syncedData));
     
-    return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true, categories: finalCategories, items: finalItems }), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
     return new Response(JSON.stringify({ error: "POST_ERROR", message: err.toString() }), { status: 500 });
   }

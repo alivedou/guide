@@ -1584,8 +1584,20 @@ const init = async (forceRender = false) => {
 const buildCardHtml = (i) => {
     const target = appData.settings?.link_target || '_blank';
     const rel = target === '_blank' ? 'rel="noopener noreferrer"' : '';
-    const icon = i.icon && i.icon.startsWith('http') 
-        ? `<img src="${i.icon}" loading="lazy" data-retry-index="0" data-title="${escapeHTML(i.title)}" onerror="utils.handleIconError(this, '${i.url}')">` 
+    
+    let iconUrl = i.icon;
+    // 智能防追踪过滤：如果卡片图标是指向外部原域名的 Favicon (如 mail.qq.com/favicon.ico)，自动转换为通用的 api.iowen.cn 代理源，防止 Tracking Prevention 警告 (Task NT-V2.24)
+    if (iconUrl && iconUrl.startsWith('http') && !iconUrl.includes('api.iowen.cn') && !iconUrl.includes('images.unsplash.com')) {
+        try {
+            const domain = new URL(iconUrl).hostname;
+            if (domain) {
+                iconUrl = `https://api.iowen.cn/favicon/${domain}.png`;
+            }
+        } catch(e) {}
+    }
+
+    const icon = iconUrl && iconUrl.startsWith('http') 
+        ? `<img src="${iconUrl}" loading="lazy" data-retry-index="0" data-title="${escapeHTML(i.title)}" onerror="utils.handleIconError(this, '${i.url}')">` 
         : `<span class="emoji-icon">${i.icon || '🔗'}</span>`;
     return `<a href="${i.url}" target="${target}" ${rel}><div class="icon-wrapper">${icon}</div><h3>${i.title}</h3></a>`;
 };
@@ -3269,10 +3281,11 @@ const initSearch = () => {
         }
     });
 
-    // Task S.3: 召唤按钮点击逻辑
+    // Task S.3: 召唤按钮点击逻辑 (Task NT-V2.21)
     const summonBtn = document.getElementById('btn-summon-search');
     if (summonBtn) {
-        summonBtn.onclick = () => {
+        summonBtn.onclick = (e) => {
+            e.stopPropagation(); // 🚀 阻止冒泡，防止被下方的全局 document.click 误当作外部点击瞬间秒关！
             document.body.classList.add('search-active');
             sea.focus();
         };
@@ -3538,7 +3551,7 @@ window.initEmojiPicker = (activeCategory = 'officeAndBookmarks', searchQuery = '
         
         if (isUrlLike && domain.length > 3) {
             faviconDomain = domain;
-            faviconUrl = `https://favicon.qqsuu.cn/${domain}`;
+            faviconUrl = `https://api.iowen.cn/favicon/${domain}.png`;
         }
     }
 
@@ -6012,7 +6025,7 @@ const initGlobalEvents = () => {
                                     title: title,
                                     url: url,
                                     desc: desc,
-                                    icon: `https://favicon.qqsuu.cn/${new URL(url).hostname}`,
+                                    icon: `https://api.iowen.cn/favicon/${new URL(url).hostname}.png`,
                                     hidden: false
                                 });
                             }
@@ -6037,7 +6050,7 @@ const initGlobalEvents = () => {
                                 title: title,
                                 url: url,
                                 desc: desc,
-                                icon: `https://favicon.qqsuu.cn/${new URL(url).hostname}`,
+                                icon: `https://api.iowen.cn/favicon/${new URL(url).hostname}.png`,
                                 hidden: false
                             });
                         }
@@ -6075,7 +6088,7 @@ const initGlobalEvents = () => {
                         title: title,
                         url: url,
                         desc: desc,
-                        icon: url ? `https://favicon.qqsuu.cn/${new URL(url).hostname}` : '',
+                        icon: url ? `https://api.iowen.cn/favicon/${new URL(url).hostname}.png` : '',
                         hidden: false
                     };
                 }).filter(i => i.url && i.url.startsWith('http'));
@@ -6106,7 +6119,7 @@ const initGlobalEvents = () => {
                                     title: title,
                                     url: url,
                                     desc: desc,
-                                    icon: `https://favicon.qqsuu.cn/${new URL(url).hostname}`,
+                                    icon: `https://api.iowen.cn/favicon/${new URL(url).hostname}.png`,
                                     hidden: false
                                 });
                             }
@@ -6147,7 +6160,7 @@ const initGlobalEvents = () => {
                     title: title,
                     url: url,
                     desc: "",
-                    icon: `https://favicon.qqsuu.cn/${new URL(url).hostname}`,
+                    icon: `https://api.iowen.cn/favicon/${new URL(url).hostname}.png`,
                     hidden: false
                 });
             } else {
@@ -6164,7 +6177,7 @@ const initGlobalEvents = () => {
                         title: host || "快捷导航",
                         url: url,
                         desc: "",
-                        icon: host ? `https://favicon.qqsuu.cn/${host}` : '',
+                        icon: host ? `https://api.iowen.cn/favicon/${host}.png` : '',
                         hidden: false
                     });
                 }
@@ -6768,7 +6781,7 @@ const triggerMagicWand = async () => {
             try {
                 const domain = new URL(url).hostname;
                 if (domain) {
-                    finalIcon = `https://favicon.qqsuu.cn/${domain}`;
+                    finalIcon = `https://api.iowen.cn/favicon/${domain}.png`;
                 }
             } catch (err) {
                 console.warn('[MagicWand] Failed to extract domain for stable favicon mapping', err);

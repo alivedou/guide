@@ -1,15 +1,3 @@
-# CloudNav 完善阶段待办事项 (Combat Map) - V4
----
-## 📦 Phase final: 性能审计与生产准备
-- [ ] **Task 1: 性能瘦身与 Z-index 审计**
-- [ ] **Task 2: PWA 与离线体验补强**
-- [ ] **Task 3: 自动化部署套件**
-
-## 🧪 Phase Extra: 可选增强模块 (Optional Enhancements)
-- [ ] **Task E.1: [R2 存储] 环境自适应架构实现 (支持 R2 绑定自动激活上传功能)**
-- [ ] **Task E.2: [R2 存储] 完善图片上传/缩放/自动清理逻辑 (仅当 R2 开启时)**
-- [ ] **Task E.3: [UI] 视觉实验室背景区增加“上传/链接”弹性切换组件**
-
 🚀 从零开始：Cloudflare 全新部署上云 6 步法
 第一步：登录 Wrangler CLI 工具
 在您的 wsl 终端中安装并进行 Cloudflare 账户授权登录：
@@ -62,8 +50,4 @@ wrangler pages deploy ./public --project-name=cloudnav --commit-message="Fresh C
 在 Environment variables 中点击 Add variables，新增环境变量：
 JWT_SECRET → cc9f09dc-e2a1-425f-91c8-45452204f432 （可以使用任意复杂密钥）
 6.激活重新发布：
-配置完毕后，进入 Deployments 页面点击最新一次部署后面的三点重试重新部署，或者 wsl 终端中再次运行一次 wrangler pages deploy ./public --project-name=cloudnav --commit-message="Activate Config"，即可完美通关，全站极速上线运行！
-
-- [x] **Task NT-V2.22: 彻底剿灭多租户下导入相同模板的主键碰撞500崩溃** (在后端对导入的分类与书签全量派发独一无二的随机安全主键 UUID，并对级联外键进行精密映射重整、重写写回 KV 缓存，彻底剿灭了由于多租户全局主键唯一而造成的 `UNIQUE constraint failed` 数据库死锁)
-- [x] **Task NT-V2.23: 全站彻底清洗替换 qqsu 图标源为 api.iowen 高稳定大厂源** (彻底将前端、后端初始化默认数据 `defaultData.js` 中所有易裂开、加载失败的 `qqsu` 图标源全量下架，一律升级为 100% 全球与大陆畅通、秒开的 `api.iowen.cn` 规范源，根治了图标裂开的视觉噪点)
-- [x] **Task NT-V2.24: 卡片渲染层引入智能“防追踪隐私盾”** (在前台 `buildCardHtml` 渲染网址卡片前加入无感重塑拦截。凡是直接向第三方原网站加载极易触发浏览器“Tracking Prevention”警告的直接 Favicon 链接，一律智能、平滑地转译转换为 `api.iowen.cn` 无痕高密源，彻底肃清此类控制台残留追踪警告)
+配置完毕后，进入 Deployments 页面点击最新一次部署后面的三点重试重新部署，或者在 wsl 终端中再次运行一次 wrangler pages deploy ./public --project-name=cloudnav --commit-message="Activate Config"，即可完美通关，全站极速上线运行！
