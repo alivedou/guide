@@ -12,9 +12,12 @@ export const defaultData = {
     cardWidth: 125, 
     zenMode: false, 
     openInNewTab: true, 
-    hideBgMask: false,
+    link_target: '_blank',
+    hideBgMask: true,
     isolatedView: false,
     density: 'standard',
+    showFrequent: true,
+    bgUrl: '',
     syncInterval: 7, // Task節流.1: 默认 7 天备份一次
     autoSyncOnLogout: true
   },

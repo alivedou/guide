@@ -2,7 +2,15 @@
   "settings": {
     "cardWidth": 125,
     "zenMode": false,
-    "openInNewTab": true
+    "openInNewTab": true,
+    "link_target": "_blank",
+    "hideBgMask": true,
+    "isolatedView": false,
+    "density": "standard",
+    "showFrequent": true,
+    "bgUrl": "",
+    "syncInterval": 7,
+    "autoSyncOnLogout": true
   },
   "categories": [
     { "id": "A01", "name": "社交", "icon": "💬", "hidden": false },

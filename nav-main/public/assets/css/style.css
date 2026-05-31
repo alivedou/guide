@@ -23,8 +23,8 @@
 
     /* 圆角与尺寸 */
     --radius: 15px;
-    --card-w: 85px;
-    --card-h: 85px;
+    --card-w: 105px;
+    --card-h: 105px;
 
     /* 背景遮罩透明度 */
     --bg-overlay-opacity: 0.4;
@@ -144,7 +144,12 @@ body.light-theme .sidebar-footer {
 }
 
 body.light-theme .category-section-title {
-    color: #3d4f5f;
+    color: #2c3e50;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
 body.light-theme .sidebar-toggle {
@@ -1025,19 +1030,19 @@ body.zen-active .category-section-title {
 /* ==================== 视觉实验室 (Task 4.2) ==================== */
 /* 密度控制 */
 body.density-compact {
-    --card-w: 70px;
-    --card-h: 70px;
-    --grid-gap: 12px;
-}
-body.density-standard {
     --card-w: 85px;
     --card-h: 85px;
-    --grid-gap: 18px;
+    --grid-gap: 14px;
+}
+body.density-standard {
+    --card-w: 105px;
+    --card-h: 105px;
+    --grid-gap: 20px;
 }
 body.density-comfortable {
-    --card-w: 110px;
-    --card-h: 110px;
-    --grid-gap: 25px;
+    --card-w: 125px;
+    --card-h: 125px;
+    --grid-gap: 26px;
 }
 
 /* 网格布局适配变量 */
@@ -1794,18 +1799,24 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
 }
 
 .category-section-title {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--text);
-    padding: 8px 4px 10px;
-    margin-bottom: 12px;
+    padding: 6px 16px;
+    margin-bottom: 16px;
+    margin-left: 4px;
     position: sticky;
     top: 0;
     z-index: 10;
-    background: inherit;
+    border-radius: 20px;
+    background: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .category-section-title .cat-icon {
@@ -1839,6 +1850,50 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
     background: #f39c12;
     border-color: #e67e22;
     box-shadow: 0 4px 15px rgba(230, 126, 34, 0.4);
+}
+
+/* ==================== 分段选择器（Segmented Control）样式 ==================== */
+.segmented-control {
+    display: flex;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 8px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.light-theme .segmented-control {
+    background: rgba(0, 0, 0, 0.06);
+    border-color: rgba(0, 0, 0, 0.03);
+}
+
+.seg-btn {
+    flex: 1;
+    border: none;
+    outline: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.65);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+body.light-theme .seg-btn {
+    color: rgba(44, 62, 80, 0.65);
+}
+
+.seg-btn.active {
+    background: var(--primary) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(57, 157, 255, 0.3);
+    font-weight: bold;
 }
 
 .tab-btn.hidden-item {
@@ -2041,8 +2096,8 @@ body.page-manage-active .card[data-tooltip]::before {
 }
 
 .card img {
-    width: 85%;
-    height: 85%;
+    width: 24px;
+    height: 24px;
     border-radius: 8px;
     object-fit: contain;
     transition: all 0.3s ease, opacity 0.3s ease;
@@ -2057,7 +2112,11 @@ body.page-manage-active .card[data-tooltip]::before {
 }
 
 .card .emoji-icon {
-    font-size: var(--emoji-size);
+    font-size: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 .card h3 {
@@ -2068,12 +2127,12 @@ body.page-manage-active .card[data-tooltip]::before {
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
-    -webkit-line-clamp: 1;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     white-space: normal;
     color: #fff;
-    line-height: 1.2;
-    min-height: 1.5em;
+    line-height: 1.25;
+    min-height: 2.5em;
 }
 
 /* ==================== 管理操作按钮 ==================== */
@@ -2340,22 +2399,39 @@ input[type="radio"] {
 
 /* ==================== 图标预览容器 ==================== */
 .preview-container {
-    width: 40px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.1);
+    width: 38px;
+    height: 38px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     font-size: 20px;
     border-radius: 8px;
-    margin-left: 8px;
+    box-sizing: border-box;
 }
 
 .preview-container img {
     width: 24px;
     height: 24px;
+    border-radius: 4px;
     object-fit: contain;
+}
+
+.preview-container span {
+    font-size: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+/* 亮色模式适配 */
+body.light-theme .preview-container {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.08);
+    color: #3d4f5f;
 }
 
 /* ==================== Toast 提示 ==================== */
@@ -2811,14 +2887,18 @@ body.view-style-2 .icon-wrapper {
 }
 
 body.view-style-2 .card img {
-    width: var(--icon-size);
-    height: var(--icon-size);
+    width: 30px;
+    height: 30px;
     border-radius: 5px;
     object-fit: contain;
 }
 
 body.view-style-2 .card .emoji-icon {
-    font-size: calc(var(--emoji-size) + 4px);
+    font-size: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 body.view-style-2 .card-text-block {
@@ -2839,13 +2919,13 @@ body.view-style-2 .card h3 {
     width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     display: -webkit-box;
     color: #fff;
-    line-height: 1.2;
-    min-height: unset;
+    line-height: 1.25;
+    min-height: 2.5em;
 }
 
 body.view-style-2 .card[data-tooltip]::after {
@@ -3861,20 +3941,27 @@ body.light-theme .sea-clear-btn:hover {
     background: rgba(0,0,0,0.06);
 }
 
-/* 搜索下拉框样式 (Task 2.5.2) */
+/* 搜索下拉框样式 (Task 2.5.2) - 升级为与输入框 1:1 对齐的一体化磨砂玻璃 (Task UI.26) */
 .search-dropdown {
     position: absolute;
     top: 100%;
     left: 0;
     right: 0;
-    background: rgba(30, 30, 30, 0.95);
-    backdrop-filter: blur(20px);
+    background: rgba(15, 25, 35, 0.82);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
     border: 1px solid var(--glass-border);
     border-top: none;
-    border-radius: 0 0 20px 20px;
+    border-radius: 0 0 28px 28px;
     padding: 15px;
     z-index: 1000;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+}
+
+/* 当搜索状态激活时，无缝平滑抹平输入框底部圆角 (Task UI.26) */
+body.is-searching .search-wrapper {
+    border-radius: 28px 28px 0 0 !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
 }
 
 .local-result-item {
@@ -3906,11 +3993,14 @@ body.light-theme .sea-clear-btn:hover {
     background: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
     flex-shrink: 0;
+    font-size: 20px;
+    line-height: 1;
 }
 
 .result-icon img {
     width: 20px;
     height: 20px;
+    object-fit: contain;
 }
 
 .result-info {
@@ -3945,7 +4035,8 @@ body.light-theme .sea-clear-btn:hover {
 }
 
 body.light-theme .search-dropdown {
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.82);
+    border-color: rgba(0, 0, 0, 0.08);
 }
 
 body.light-theme .local-result-item:hover,
@@ -5039,7 +5130,8 @@ body.light-theme .page-btn { background: rgba(0, 0, 0, 0.04); }
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
+    font-size: 24px;
+    line-height: 1;
     aspect-ratio: 1 / 1;
     cursor: pointer;
     border-radius: 10px;
@@ -5047,6 +5139,7 @@ body.light-theme .page-btn { background: rgba(0, 0, 0, 0.04); }
     border: 1px solid rgba(255, 255, 255, 0.05);
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
+    overflow: hidden;
 }
 
 .emoji-item:hover {

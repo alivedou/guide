@@ -73,10 +73,11 @@ const AuditActionMap = {
 const SyncUI = {
     // 1. 话术矩阵 (根据操作类型分流)
     messages: {
-        'AUTH': { loading: '正在建立安全连接...', success: '验证成功，欢迎回来！' },
-        'ADMIN_CONFIG': { loading: '正在下发全站策略至云端...', success: '全站参数已热更新，立即生效' },
-        'USER_MANAGE': { loading: '正在同步权限变更...', success: '用户权限已成功下发至 D1' },
-        'INVITE_GEN': { loading: '正在通过安全算法生成凭证...', success: '邀请码生成成功' },
+        'LOGIN': { loading: '正在验证账户信息...', success: '登录成功，欢迎回来！' },
+        'REGISTER': { loading: '正在通过安全通道创建账户...', success: '注册成功！请使用刚才注册的账号进行登录。' },
+        'ADMIN_CONFIG': { loading: '正在保存系统配置至云端...', success: '系统配置已保存，立即全站生效！' },
+        'USER_MANAGE': { loading: '正在同步权限变更...', success: '角色授权更新成功，立即生效！' },
+        'INVITE_GEN': { loading: '正在生成新邀请凭证...', success: '邀请码生成成功' },
         'INVITE_DEL': { loading: '正在作废此邀请凭证...', success: '已成功移除该邀请码' },
         'ANNOUNCE_SAVE': { loading: '正在全站下发通知条幅...', success: '公告发布成功，已对全员可见' },
         'ANNOUNCE_DEL': { loading: '正在清理该公告记录...', success: '公告已成功下架' },
@@ -194,6 +195,48 @@ const checkSWUpdate = async () => {
 };
 
 // ==================== 2. 辅助工具 ====================
+window.sysSiteConfig = null; // 全局系统配置缓存
+
+// Task 6.32: 统一 SQLite/D1 无时区 UTC 时间安全解析网关 (解决北京时区差 8 小时 Bug)
+window.parseUtcDate = (dateInput) => {
+    if (!dateInput) return new Date();
+    if (typeof dateInput === 'string') {
+        let cleanInput = dateInput.trim();
+        // 匹配 YYYY-MM-DD HH:MM:SS 或 YYYY-MM-DD HH:MM:SS.SSS 格式，如果是 SQLite 默认 UTC 字符串，强制补上 T 和 Z 标记作为标准 UTC 解析
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(cleanInput)) {
+            cleanInput = cleanInput.replace(' ', 'T') + 'Z';
+        } else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+$/.test(cleanInput)) {
+            cleanInput = cleanInput.replace(' ', 'T') + 'Z';
+        }
+        return new Date(cleanInput);
+    }
+    return typeof dateInput === 'object' ? dateInput : new Date(dateInput);
+};
+
+window.formatSystemDate = (dateInput, includeTime = false) => {
+    if (!dateInput) return '';
+    const dateObj = window.parseUtcDate(dateInput);
+    if (isNaN(dateObj.getTime())) return '';
+    const tz = window.sysSiteConfig?.systemTimezone || 'Asia/Shanghai';
+    try {
+        const options = {
+            timeZone: tz,
+            hour12: false,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        };
+        if (includeTime) {
+            options.hour = '2-digit';
+            options.minute = '2-digit';
+            options.second = '2-digit';
+        }
+        return dateObj.toLocaleString('zh-CN', options);
+    } catch (e) {
+        return includeTime ? dateObj.toLocaleString('zh-CN', { hour12: false }) : dateObj.toLocaleDateString('zh-CN');
+    }
+};
+
 // Task 4.1 & 21.2: 全站 SEO 与标题下发 (静默处理鉴权失败)
 const initSiteConfig = async () => {
     try {
@@ -210,6 +253,7 @@ const initSiteConfig = async () => {
 
         if (res.ok) {
             const config = await res.json();
+            window.sysSiteConfig = config; // 保存至全局变量
             document.title = config.siteTitle || "CloudNav 导航";
             const favicon = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="apple-touch-icon"]');
             if (favicon && config.faviconUrl) favicon.href = config.faviconUrl;
@@ -245,15 +289,19 @@ const refreshNoticeBadge = () => {
     try {
         if (!Array.isArray(cachedAnnouncements)) return;
         
-        // Task 7.3: 统一计算逻辑。无论是否登录，都优先检查 D1 (is_read) 和本地 (localStorage)
-        let unreadCount = cachedAnnouncements.filter(notice => {
-            try {
-                // 如果后端返回了已读状态，优先使用后端状态
-                if (notice.is_read !== undefined && notice.is_read) return false;
-                // 否则检查本地 localStorage (支持游客持久化)
-                return !localStorage.getItem(`read_notice_${notice.id}`);
-            } catch (e) { return true; }
-        }).length;
+        let unreadCount = 0;
+        if (!sysToken) {
+            // 游客状态下小红点一直保留，去不掉 (只要存在发布的公告就一直显示) (Task NT.3)
+            unreadCount = cachedAnnouncements.length;
+        } else {
+            // 登录状态下根据后端 D1 和本地已读情况来取消红点 (Task NT.3)
+            unreadCount = cachedAnnouncements.filter(notice => {
+                try {
+                    if (notice.is_read !== undefined && notice.is_read) return false;
+                    return !localStorage.getItem(`read_notice_${notice.id}`);
+                } catch (e) { return true; }
+            }).length;
+        }
         
         // 1. 侧边栏红点
         const noticeBtn = document.getElementById('btn-notice-center');
@@ -306,19 +354,48 @@ const initAnnouncements = async () => {
 
         if (!announcements || announcements.length === 0) return;
 
-        announcements.forEach(notice => {
-            // Task 6.23: 状态判断逻辑升级
-            const hasRead = notice.is_read || localStorage.getItem(`read_notice_${notice.id}`);
-            if (hasRead) return;
-
-            if (notice.type === 'important') {
-                renderImportantNotice(notice);
-            } else {
-                // renderQuietNotice 内部逻辑由 refreshNoticeBadge 接管部分 UI
-                renderQuietNotice(notice);
+        if (!sysToken) {
+            // 游客状态：只展示最新的置顶重要公告（如果没有置顶的，则展示最新一条重要公告），且无法去掉 (Task NT.3)
+            const importantNotices = announcements.filter(notice => notice.type === 'important');
+            const pinned = importantNotices.filter(notice => notice.is_top === 1 || notice.is_top === true || notice.is_top === "1");
+            const targetNotice = pinned.length > 0 ? pinned[0] : (importantNotices.length > 0 ? importantNotices[0] : null);
+            
+            if (targetNotice) {
+                renderImportantNoticeForGuest(targetNotice);
             }
-        });
+        } else {
+            // 登录状态：根据 notice.is_read 或本地 localStorage 来判定
+            announcements.forEach(notice => {
+                const hasRead = notice.is_read || localStorage.getItem(`read_notice_${notice.id}`);
+                if (hasRead) return;
+
+                if (notice.type === 'important') {
+                    renderImportantNotice(notice);
+                } else {
+                    // renderQuietNotice 内部逻辑由 refreshNoticeBadge 接管部分 UI
+                    renderQuietNotice(notice);
+                }
+            });
+        }
     } catch (e) { console.warn('[Notice] Failed to fetch announcements'); }
+};
+
+const renderImportantNoticeForGuest = (notice) => {
+    // 移除已有横幅防止重复堆叠
+    document.querySelectorAll('.important-banner').forEach(el => el.remove());
+    
+    const banner = document.createElement('div');
+    banner.className = 'important-banner guest-banner';
+    banner.setAttribute('role', 'alert');
+    banner.innerHTML = `
+        <div class="banner-content" onclick="viewNoticeDetail(${notice.id})">
+            <i class="ri-error-warning-line"></i>
+            <span class="banner-title"><b>重要公告：</b>${notice.title}</span>
+            <span class="banner-more">查看更多 <i class="ri-arrow-right-s-line"></i></span>
+            <button class="banner-close" onclick="event.stopPropagation(); this.parentElement.parentElement.remove(); showToast('游客状态关闭公告仅限本次生效，注册可永久取消！', '#e67e22');">×</button>
+        </div>
+    `;
+    document.body.prepend(banner);
 };
 
 const renderImportantNotice = (notice) => {
@@ -339,7 +416,9 @@ const renderImportantNotice = (notice) => {
 // Task 33.3: 封装核心联动函数
 const viewNoticeDetail = (id) => {
     const banner = document.querySelector('.important-banner');
-    if (banner) banner.remove();
+    if (banner && sysToken) { // 仅登录状态可移除横幅 (Task NT.3)
+        banner.remove();
+    }
     
     // 标记为已读并刷新红点
     localStorage.setItem(`read_notice_${id}`, 'true');
@@ -486,7 +565,7 @@ const updateStyles = () => {
     document.body.classList.add('sidebar-style-classic');
 
     // 3. 处理视图模态 (Task 24.2: 逻辑解耦与优先级判定)
-    const isZen = appData.settings?.zenMode === true;
+    const isZen = appData.settings?.zenMode === true && !isPageManagementMode;
     // 优先级判定：禅意模式强制开启隔离 (Primary) > 常规模式的用户设置 (Secondary)
     const isEffectivelyIsolated = isZen || appData.settings?.isolatedView === true; 
     
@@ -498,8 +577,12 @@ const updateStyles = () => {
     document.documentElement.style.setProperty('--card-w', w + 'px');
     document.documentElement.style.setProperty('--card-h', w + 'px');
 
-    // 5. 处理禅意静默态逻辑 (Task 4.6.1)
-    if (isZen && !isZenTempExpanded) {
+    // 5. 处理禅意静默态逻辑 (Task 4.6.1) - 存在打开的弹窗时，强制禁用静默态以保留背景和操作面板 (Task NT.4)
+    const isModalOpen = (document.getElementById('edit-modal')?.style.display === 'flex') || 
+                         (document.getElementById('monaco-modal')?.style.display === 'block') ||
+                         (document.getElementById('auth-overlay')?.style.display === 'block');
+                         
+    if (isZen && !isZenTempExpanded && !isModalOpen) {
         document.body.classList.add('zen-silent');
     } else {
         document.body.classList.remove('zen-silent');
@@ -515,7 +598,15 @@ const updateStyles = () => {
     if (bg && bg.trim() !== '') {
         console.log('[Style] Applying user custom background:', bg);
         document.body.dataset.bgType = 'custom';
-        if (bg.startsWith('http')) {
+        if (bg === 'local_upload') {
+            // 🚀 读取本地缓存的高清 Base64 格式壁纸 (Task UI.25)
+            const localBg = localStorage.getItem('nav_local_bg_image');
+            if (localBg) {
+                document.body.style.background = `url("${localBg}") center/cover fixed`;
+            } else {
+                document.body.style.background = `url("/assets/img/default-bg.jpg") center/cover fixed`; // 安全兜底
+            }
+        } else if (bg.startsWith('http')) {
             document.body.style.background = `url("${bg}") center/cover fixed`;
         } else {
             document.body.style.background = bg;
@@ -629,19 +720,10 @@ const openVisualLab = () => {
     
     if (!modal || !body) return;
 
+    modal.dataset.modalType = 'visual-lab'; // 🚀 标记为个性化设置 (Task UI.25)
     title.innerHTML = `视觉实验室 ${isDataDirty ? '<span style="font-size:10px; background:#e67e22; color:#fff; padding:2px 6px; border-radius:10px; margin-left:10px; vertical-align:middle; font-weight:normal;">本地预览中</span>' : ''}`;
     const isZen = appData.settings?.zenMode === true;
     body.innerHTML = `
-        <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-window-line"></i> 常规模式 - 浏览模态</span>
-            <div class="visual-btn-group" ${isZen ? 'style="opacity: 0.5; pointer-events: none;"' : ''}>
-                <button class="tab-btn ${!appData.settings?.isolatedView ? 'active' : ''}" 
-                        onclick="setVisualSetting('isolatedView', false)">长页纵览</button>
-                <button class="tab-btn ${appData.settings?.isolatedView ? 'active' : ''}" 
-                        onclick="setVisualSetting('isolatedView', true)">单视图隔离</button>
-            </div>
-            ${isZen ? '<p style="font-size: 11px; color: #e67e22; margin-top: 5px;"><i class="ri-information-line"></i> 禅意模式已开启：当前由禅意模式强制接管为“单视图隔离”</p>' : ''}
-        </div>
         <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-keyboard-line"></i> 布局密度</span>
             <div class="visual-btn-group">
@@ -651,67 +733,90 @@ const openVisualLab = () => {
             </div>
         </div>
         <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-focus-3-line"></i> 核心体验模态</span>
-            <div class="visual-btn-group">
-                <button class="tab-btn ${!appData.settings?.zenMode ? 'active' : ''}" onclick="toggleZenMode(false)">
-                    <i class="ri-layout-grid-line"></i> 常规模式
-                </button>
-                <button class="tab-btn ${appData.settings?.zenMode ? 'active' : ''}" onclick="toggleZenMode(true)">
-                    <i class="ri-leaf-line"></i> 禅意模式 (Zen)
-                </button>
-            </div>
-            <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示: 使用 Alt + Z 可快速切换禅意模式</p>
-        </div>
-        <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-contrast-2-line"></i> 外观模式 (Task 29.3)</span>
-            <div class="visual-btn-group">
-                <button class="tab-btn ${themeMode === 'auto' ? 'active' : ''}" onclick="setThemeMode('auto')">
-                    <i class="ri-computer-line"></i> 跟随系统
-                </button>
-                <button class="tab-btn ${themeMode === 'light' ? 'active' : ''}" onclick="setThemeMode('light')">
-                    <i class="ri-sun-line"></i> 明亮
-                </button>
-                <button class="tab-btn ${themeMode === 'dark' ? 'active' : ''}" onclick="setThemeMode('dark')">
-                    <i class="ri-moon-line"></i> 暗黑
-                </button>
-            </div>
-            <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">说明: “跟随系统”将根据您的设备设置自动切换亮/暗色</p>
-        </div>
-        <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-image-line"></i> 自定义背景</span>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <input type="text" id="bg-url-input" placeholder="输入图片 URL (留空显示 Bing 壁纸)" 
-                       value="${appData.settings?.bgUrl || ''}" 
+            <div style="display:flex; gap:8px; width:100%; align-items:center; margin-bottom: 8px;">
+                <input type="text" id="bg-url-input" placeholder="输入网络图片 URL (留空显示 Bing 壁纸)" 
+                       value="${appData.settings?.bgUrl === 'local_upload' ? '本地上传图片' : (appData.settings?.bgUrl || '')}" 
                        onchange="setVisualSetting('bgUrl', this.value)"
-                       style="flex:1; height:36px; font-size:12px;">
-                <button class="tab-btn ${!appData.settings?.hideBgMask ? 'active' : ''}" 
+                       style="flex:1; height:38px; font-size:12px; box-sizing:border-box;"
+                       ${appData.settings?.bgUrl === 'local_upload' ? 'disabled' : ''}>
+                <button class="icon-btn-action" 
                         onclick="setVisualSetting('hideBgMask', !appData.settings?.hideBgMask)"
-                        title="文字增强遮罩" style="width:40px; padding:0;">
+                        title="开启/关闭背景模糊" 
+                        style="width:38px; height:38px; flex-shrink:0; ${!appData.settings?.hideBgMask ? 'background: var(--primary); border-color: var(--primary); color: #fff;' : ''}">
                     <i class="ri-contrast-drop-2-line"></i>
                 </button>
             </div>
-            <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示: 开启遮罩可确保背景复杂时文字清晰</p>
+            <div style="display:flex; gap:8px; width:100%;">
+                <button class="tab-btn" onclick="triggerBgUpload()" style="flex:1; font-size:11px; padding: 6px 12px;"><i class="ri-upload-cloud-2-line"></i> 上传本地壁纸</button>
+                ${appData.settings?.bgUrl === 'local_upload' ? `
+                    <button class="tab-btn" onclick="clearBgUpload()" style="flex:1; font-size:11px; padding: 6px 12px; background: rgba(231,76,60,0.15); border-color: rgba(231,76,60,0.3); color: #e74c3c;"><i class="ri-delete-bin-line"></i> 清除本地壁纸</button>
+                ` : ''}
+            </div>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 6px; line-height: 1.4;">
+                提示: 支持外链网络图片，或直接上传本地壁纸（建议 3MB 内以保障性能。图片纯本地缓存，零服务器开销，强制刷新不丢失）。
+            </p>
         </div>
         <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-external-link-line"></i> 网址跳转方式 (Task 36.2)</span>
-            <div class="visual-btn-group">
-                <button class="tab-btn ${appData.settings?.link_target === '_self' ? 'active' : ''}" 
-                        onclick="setVisualSetting('link_target', '_self')">当前页面</button>
-                <button class="tab-btn ${(!appData.settings?.link_target || appData.settings?.link_target === '_blank') ? 'active' : ''}" 
-                        onclick="setVisualSetting('link_target', '_blank')">新窗口打开</button>
+            <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+                <!-- 1. 空间与核心模态 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px;">
+                    <span class="visual-option-label" style="margin: 0; font-size: 13px;"><i class="ri-focus-3-line"></i> 空间模态</span>
+                    <div class="segmented-control" style="width: 220px; flex-shrink: 0;">
+                        <button class="seg-btn ${!appData.settings?.zenMode ? 'active' : ''}" onclick="toggleZenMode(false)">
+                            ${!appData.settings?.zenMode ? '●' : '○'} 常规模式
+                        </button>
+                        <button class="seg-btn ${appData.settings?.zenMode ? 'active' : ''}" onclick="toggleZenMode(true)">
+                            ${appData.settings?.zenMode ? '●' : '○'} 禅意模式
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 2. 单视图隔离 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px; ${isZen ? 'opacity: 0.6;' : ''}">
+                    <span class="visual-option-label" style="margin: 0; font-size: 13px;"><i class="ri-window-line"></i> 视图展示</span>
+                    <div class="segmented-control" style="width: 220px; flex-shrink: 0; ${isZen ? 'pointer-events: none;' : ''}">
+                        <button class="seg-btn ${!appData.settings?.isolatedView ? 'active' : ''}" onclick="setVisualSetting('isolatedView', false)">
+                            ${!appData.settings?.isolatedView ? '●' : '○'} 长页纵览
+                        </button>
+                        <button class="seg-btn ${appData.settings?.isolatedView ? 'active' : ''}" onclick="setVisualSetting('isolatedView', true)">
+                            ${appData.settings?.isolatedView ? '●' : '○'} 单视图隔离
+                        </button>
+                    </div>
+                </div>
             </div>
-            <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">提示：选择“新窗口打开”可避免导航页被覆盖</p>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">说明: 禅意模式专注内容；单视图隔离则精简分类展示</p>
+            ${isZen ? '<p style="font-size: 11px; color: #e67e22; margin-top: 4px;"><i class="ri-information-line"></i> 禅意模式已开启，强制锁定单视图隔离状态</p>' : ''}
         </div>
         <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-star-line"></i> 内容组件显示</span>
-            <div class="visual-btn-group">
-                <button class="tab-btn ${appData.settings?.showFrequent !== false ? 'active' : ''}" onclick="setVisualSetting('showFrequent', true)">
-                    <i class="ri-star-fill"></i> 显示常去网站
-                </button>
-                <button class="tab-btn ${appData.settings?.showFrequent === false ? 'active' : ''}" onclick="setVisualSetting('showFrequent', false)">
-                    <i class="ri-star-off-line"></i> 隐藏常去网站
-                </button>
+            <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+                <!-- 3. 跳转机制 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px;">
+                    <span class="visual-option-label" style="margin: 0; font-size: 13px;"><i class="ri-external-link-line"></i> 跳转机制</span>
+                    <div class="segmented-control" style="width: 220px; flex-shrink: 0;">
+                        <button class="seg-btn ${appData.settings?.link_target === '_self' ? 'active' : ''}" onclick="setVisualSetting('link_target', '_self')">
+                            ${appData.settings?.link_target === '_self' ? '●' : '○'} 直接跳转
+                        </button>
+                        <button class="seg-btn ${(!appData.settings?.link_target || appData.settings?.link_target === '_blank') ? 'active' : ''}" onclick="setVisualSetting('link_target', '_blank')">
+                            ${(!appData.settings?.link_target || appData.settings?.link_target === '_blank') ? '●' : '○'} 新窗口打开
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 4. 常去网站 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px;">
+                    <span class="visual-option-label" style="margin: 0; font-size: 13px;"><i class="ri-star-line"></i> 常去网站</span>
+                    <div class="segmented-control" style="width: 220px; flex-shrink: 0;">
+                        <button class="seg-btn ${appData.settings?.showFrequent === false ? 'active' : ''}" onclick="setVisualSetting('showFrequent', false)">
+                            ${appData.settings?.showFrequent === false ? '●' : '○'} 隐藏常去
+                        </button>
+                        <button class="seg-btn ${appData.settings?.showFrequent !== false ? 'active' : ''}" onclick="setVisualSetting('showFrequent', true)">
+                            ${appData.settings?.showFrequent !== false ? '●' : '○'} 显示常去
+                        </button>
+                    </div>
+                </div>
             </div>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">说明: 控制新标签页跳转机制，以及常去网站磁贴显示</p>
         </div>
     `;
     
@@ -724,7 +829,7 @@ const openVisualLab = () => {
 
     // Task 37.2: 自动聚焦第一个选项
     setTimeout(() => {
-        modal.querySelector('.tab-btn')?.focus();
+        modal.querySelector('.seg-btn')?.focus();
     }, 50);
 };
 
@@ -747,10 +852,56 @@ window.setVisualSetting = (key, value) => {
 
     updateStyles();
     openVisualLab(); // 刷新弹窗状态
-    showToast("预览已更新 (本地暂存)", "#3498db");
 };
 
-const toggleZenMode = (force) => {
+window.triggerBgUpload = () => {
+    let input = document.getElementById('temp-bg-upload');
+    if (!input) {
+        input = document.createElement('input');
+        input.id = 'temp-bg-upload';
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // 安全限制：localStorage 上限 5MB，限制图片在 3MB 内是绝对安全的 (Task UI.25)
+            if (file.size > 3 * 1024 * 1024) {
+                return showToast("上传失败：本地图片大小请限制在 3MB 以内，防止存储溢出", "#e74c3c");
+            }
+            
+            showLoader('正在载入并处理图片...');
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const base64Data = event.target.result;
+                    localStorage.setItem('nav_local_bg_image', base64Data);
+                    setVisualSetting('bgUrl', 'local_upload');
+                    showToast("本地壁纸载入成功 (数据纯本地缓存，不占用服务器空间)");
+                    openVisualLab(); // 重新刷新弹窗以呈现“清除”按钮
+                } catch (err) {
+                    showToast("载入失败，请重试", "#e74c3c");
+                } finally {
+                    hideLoader();
+                }
+            };
+            reader.readAsDataURL(file);
+        };
+    }
+    input.click();
+};
+
+window.clearBgUpload = () => {
+    localStorage.removeItem('nav_local_bg_image');
+    setVisualSetting('bgUrl', '');
+    showToast("本地自定壁纸已清除");
+    openVisualLab(); // 重新刷新弹窗
+};
+
+const toggleZenMode = (force, isFromShortcut = false) => {
     if (!appData.settings) appData.settings = {};
     const newState = typeof force === 'boolean' ? force : !appData.settings.zenMode;
     appData.settings.zenMode = newState;
@@ -767,7 +918,9 @@ const toggleZenMode = (force) => {
         if (isSidebarPinned) toggleSidebar(true);
     }
 
-    showToast(newState ? "进入禅意预览 (本地暂存)" : "回到标准预览 (本地暂存)", newState ? "#2c3e50" : "#3498db");
+    if (isFromShortcut) {
+        showToast(newState ? "切换到禅意模式" : "切换到常规模式", newState ? "#2c3e50" : "#3498db");
+    }
     
     // 强制清理搜索状态
     const sea = document.getElementById('sea-input');
@@ -854,7 +1007,7 @@ const doLogin = async () => {
     const p = document.getElementById('auth-password').value.trim();
     if (!u || !p) return showToast("请填写用户名和密码", "#e67e22");
 
-    await SyncUI.perform('AUTH', async () => {
+    await SyncUI.perform('LOGIN', async () => {
         const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -898,7 +1051,7 @@ const doRegister = async () => {
 
     if (!u || !p) return showToast("请填写完整信息", "#e67e22");
 
-    await SyncUI.perform('AUTH', async () => {
+    await SyncUI.perform('REGISTER', async () => {
         const res = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1129,13 +1282,39 @@ const initAuthUI = () => {
     document.getElementById('btn-confirm-edit').onclick = saveItem;
 };
 
-// ==================== 4. 数据加载 ====================
+// ==================== 4. 数据加载 (缓存优先秒开 + 后台静默异步校验架构) ====================
 const init = async (forceRender = false) => {
-    // 增加一个 3 秒超时保底，防止 API 挂起导致白屏
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Fetch timeout')), 3000));
+    // 1. 【秒开阶段】尝试从本地 LocalStorage 立即读取缓存并渲染，实现 0 延时渲染
+    let hasLoadedCache = false;
+    const cached = localStorage.getItem('nav_app_data');
+    if (cached) {
+        try {
+            appData = JSON.parse(cached);
+            hasLoadedCache = true;
+            toggleSkeleton(false); // 立即关闭骨架屏
+            renderNav();
+            renderTools();
+            updateStyles();
+            if (!appData.settings?.bgUrl) {
+                getBingWallpaper(); // 异步触发
+            }
+            console.log('[Init] Stale-First: Loaded from local cache instantly.');
+        } catch (e) {
+            console.warn('[Init] Local cache parse failed:', e);
+        }
+    }
+
+    // 游客态且本地已成功拉起并渲染缓存，直接结束，防止刷新被默认模板覆盖 (Task UI.21)
+    if (!sysToken && hasLoadedCache) {
+        initAnnouncements();
+        return;
+    }
+
+    // 2. 【异步后台校验阶段】发起非阻塞网络请求，确保云端最新的修改可以被拉取
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Fetch timeout')), 4000));
     
     try {
-        console.log('Fetching config...');
+        console.log('[Init] Background revalidating config from cloud...');
         const fetchPromise = fetch('/api/config', {
             headers: sysToken ? { 'Authorization': sysToken } : {}
         });
@@ -1155,33 +1334,60 @@ const init = async (forceRender = false) => {
             console.warn('[Init] Token stale or database reset, cleaning up...');
             handleAuthError(); // 自动清理失效信息
             // 重新获取数据（此时以访客身份获取默认数据）
-            const guestRes = await fetch('/api/config');
-            if (guestRes.ok) {
-                appData = await guestRes.json();
-            } else {
-                throw new Error('Guest data fetch failed');
+            if (!hasLoadedCache) {
+                const guestRes = await fetch('/api/config');
+                if (guestRes.ok) {
+                    appData = await guestRes.json();
+                    localStorage.setItem('nav_app_data', JSON.stringify(appData));
+                    toggleSkeleton(false);
+                    renderNav();
+                    renderTools();
+                    updateStyles();
+                } else {
+                    throw new Error('Guest data fetch failed');
+                }
             }
+            return;
         } else if (res.ok) {
-            const data = await res.json();
-            console.log('Config received:', data);
+            const cloudData = await res.json();
+            console.log('[Init] Cloud config received:', cloudData);
             
-            // Task 19.3: 渲染兜底 - 如果 data 缺失核心字段，使用默认兜底
-            if (!data.categories || !data.items) {
-                console.warn('[Init] Data incomplete, merging with defaultData');
-                appData = { ...MINIMAL_SAFE_DATA, ...data };
-                if (!appData.categories || appData.categories.length === 0) appData.categories = MINIMAL_SAFE_DATA.categories;
-                if (!appData.items) appData.items = [];
+            // 3. 【差异指纹比对】仅当云端指纹与本地指纹不一致时，执行后台静默渲染
+            const localFingerprint = getCoreDataFingerprint(appData || {});
+            const cloudFingerprint = getCoreDataFingerprint(cloudData || {});
+            
+            if (localFingerprint !== cloudFingerprint || !hasLoadedCache) {
+                console.log('[Init] Cloud fingerprint changed, updating locally...');
+                
+                // Task 19.3: 渲染兜底
+                if (!cloudData.categories || !cloudData.items) {
+                    appData = { ...MINIMAL_SAFE_DATA, ...cloudData };
+                    if (!appData.categories || appData.categories.length === 0) appData.categories = MINIMAL_SAFE_DATA.categories;
+                    if (!appData.items) appData.items = [];
+                } else {
+                    appData = cloudData;
+                }
+                
+                isAdmin = appData.isAdmin;
+                localStorage.setItem('nav_app_data', JSON.stringify(appData));
+                
+                // 执行后台无感重渲染
+                renderNav();
+                renderTools();
+                updateStyles();
+                lastSyncFingerprint = cloudFingerprint;
             } else {
-                appData = data;
+                console.log('[Init] Local and Cloud data match. Skipped background re-render.');
+                lastSyncFingerprint = localFingerprint;
             }
             
-            // Task 5.1: 同步最新的用户信息 (包含 UID)
-            if (data.username && data.role) {
+            // 同步最新的用户信息 (包含 UID)
+            if (cloudData.username && cloudData.role) {
                 currentUser = { 
-                    id: data.user || data.id, 
-                    uid: data.uid,
-                    username: data.username, 
-                    role: data.role 
+                    id: cloudData.user || cloudData.id, 
+                    uid: cloudData.uid,
+                    username: cloudData.username, 
+                    role: cloudData.role 
                 };
                 localStorage.setItem('nav_current_user', JSON.stringify(currentUser));
                 
@@ -1193,26 +1399,22 @@ const init = async (forceRender = false) => {
             }
             
             // 恢复云端点击数据 (Task 2.5.4)
-            if (data.clicks_history) {
-                localStorage.setItem('nav_clicks_history', JSON.stringify(data.clicks_history));
+            if (cloudData.clicks_history) {
+                localStorage.setItem('nav_clicks_history', JSON.stringify(cloudData.clicks_history));
             }
-            
-            isAdmin = appData.isAdmin;
-            localStorage.setItem('nav_app_data', JSON.stringify(appData));
-            
-            // Task SYNC.GUARD.2: 初始化同步指纹
-            lastSyncFingerprint = getCoreDataFingerprint(appData);
         } else {
             throw new Error(`Server returned ${res.status}`);
         }
     } catch (e) { 
-        console.warn('[Init] Load failed, using cache/default:', e.message);
-        const cached = localStorage.getItem('nav_app_data');
-        if (cached) {
-            try {
-                appData = JSON.parse(cached);
-                showToast("连接服务器超时，已加载本地缓存", "#e67e22");
-            } catch(err) { console.error('Cache parse error'); }
+        console.warn('[Init] Load or revalidation failed, keeping cache/default:', e.message);
+        // 如果本地无缓存，且网络拉取也挂了，启用默认安全数据防止白屏
+        if (!hasLoadedCache) {
+            appData = { ...MINIMAL_SAFE_DATA };
+            toggleSkeleton(false);
+            renderNav();
+            renderTools();
+            updateStyles();
+            showToast("网络连接超时，已启用预置安全数据", "#e67e22");
         }
     } finally {
         // Task 18.4: 无论发生什么，强制关闭骨架屏并渲染
@@ -1744,8 +1946,8 @@ const renderTools = () => {
         {
             id: 'btn-sys-config',
             icon: 'ri-shield-keyhole-line',
-            label: '系统参数',
-            tooltip: '系统全站参数配置',
+            label: '系统配置',
+            tooltip: '系统配置中心',
             onclick: 'openSystemConfigHub()',
             show: canConfigSystem
         },
@@ -1804,20 +2006,10 @@ const renderTools = () => {
                     <span class="nav-icon"><i class="ri-code-s-slash-line"></i></span>
                     <span class="nav-label">专家模式</span>
                 </div>
-                <!-- Task EXIT.5: 增加立即同步按钮，保持菜单内样式一致 -->
-                ${sysToken ? `
-                <div class="sidebar-nav-item" onclick="manualSyncCloud(false)" style="font-size: 13px; padding: 6px 12px;">
-                    <span class="nav-icon"><i class="ri-cloud-upload-line"></i></span>
-                    <span class="nav-label">立即同步</span>
-                </div>
-                ` : ''}
-                <div class="sidebar-nav-item" onclick="exportConfig()" style="font-size: 13px; padding: 6px 12px;">
-                    <span class="nav-icon"><i class="ri-download-2-line"></i></span>
-                    <span class="nav-label">备份导出</span>
-                </div>
-                <div class="sidebar-nav-item" onclick="document.getElementById('import-file').click()" style="font-size: 13px; padding: 6px 12px;">
-                    <span class="nav-icon"><i class="ri-upload-2-line"></i></span>
-                    <span class="nav-label">配置导入</span>
+                <!-- 还原为与其他按钮样式一致的“本地导入/导出”按钮 -->
+                <div class="sidebar-nav-item" onclick="openImportExportModal()" style="font-size: 13px; padding: 6px 12px;">
+                    <span class="nav-icon"><i class="ri-database-2-line"></i></span>
+                    <span class="nav-label">本地导入/导出</span>
                 </div>
                 <div class="sidebar-nav-item" onclick="doResetConfig()" style="font-size: 13px; padding: 6px 12px;">
                     <span class="nav-icon"><i class="ri-refresh-line"></i></span>
@@ -1853,7 +2045,7 @@ window.openSyncCenter = () => {
     
     // 获取同步状态
     const lastSync = localStorage.getItem('nav_last_cloud_sync');
-    const timeStr = lastSync ? new Date(parseInt(lastSync)).toLocaleString() : '从未备份';
+    const timeStr = lastSync ? formatSystemDate(parseInt(lastSync), true) : '从未备份';
     const isOverdue = lastSync && (Date.now() - parseInt(lastSync) > (appData.settings?.syncInterval || 7) * 24 * 3600 * 1000);
 
     // 计算冷却时间 (Task節流.3)
@@ -1893,11 +2085,19 @@ window.openSyncCenter = () => {
 
         <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-timer-flash-line"></i> 云端备份模式</span>
-            <div class="visual-btn-group">
-                <button class="tab-btn ${!appData.settings?.syncInterval ? 'active' : ''}" onclick="setSyncMode(0)">手动模式</button>
-                <button class="tab-btn ${appData.settings?.syncInterval === 3 ? 'active' : ''}" onclick="setSyncMode(3)">每 3 天</button>
-                <button class="tab-btn ${appData.settings?.syncInterval === 7 ? 'active' : ''}" onclick="setSyncMode(7)">每 7 天</button>
-                <button class="tab-btn ${appData.settings?.syncInterval === 30 ? 'active' : ''}" onclick="setSyncMode(30)">每 30 天</button>
+            <div class="segmented-control" style="width: 100%; box-sizing: border-box; display: flex;">
+                <button class="seg-btn ${!appData.settings?.syncInterval ? 'active' : ''}" onclick="setSyncMode(0)" style="padding: 6px 4px; font-size: 12px;">
+                    ${!appData.settings?.syncInterval ? '●' : '○'} 手动模式
+                </button>
+                <button class="seg-btn ${appData.settings?.syncInterval === 3 ? 'active' : ''}" onclick="setSyncMode(3)" style="padding: 6px 4px; font-size: 12px;">
+                    ${appData.settings?.syncInterval === 3 ? '●' : '○'} 每 3 天
+                </button>
+                <button class="seg-btn ${appData.settings?.syncInterval === 7 ? 'active' : ''}" onclick="setSyncMode(7)" style="padding: 6px 4px; font-size: 12px;">
+                    ${appData.settings?.syncInterval === 7 ? '●' : '○'} 每 7 天
+                </button>
+                <button class="seg-btn ${appData.settings?.syncInterval === 30 ? 'active' : ''}" onclick="setSyncMode(30)" style="padding: 6px 4px; font-size: 12px;">
+                    ${appData.settings?.syncInterval === 30 ? '●' : '○'} 每 30 天
+                </button>
             </div>
             <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">
                 ${appData.settings?.autoSyncOnLogout !== false 
@@ -1917,13 +2117,15 @@ window.openSyncCenter = () => {
 window.manualSyncCloud = async (refreshUI = false) => {
     if (!sysToken) return showToast("请先登录再进行备份", "#e67e22");
 
-    // Task節流.2: 手动备份冷却逻辑 (5 分钟)
-    const lastSync = parseInt(localStorage.getItem('nav_last_cloud_sync') || '0');
-    const cooldownMs = 5 * 60 * 1000;
-    const remaining = cooldownMs - (Date.now() - lastSync);
-    if (remaining > 0) {
-        const min = Math.ceil(remaining / 60000);
-        return showToast(`操作频繁：手动备份冷却中，请 ${min} 分钟后再试`, "#e67e22");
+    // Task節流.2: 仅在手动备份 (refreshUI === true) 时启用冷却逻辑 (5 分钟)
+    if (refreshUI) {
+        const lastSync = parseInt(localStorage.getItem('nav_last_cloud_sync') || '0');
+        const cooldownMs = 5 * 60 * 1000;
+        const remaining = cooldownMs - (Date.now() - lastSync);
+        if (remaining > 0) {
+            const min = Math.ceil(remaining / 60000);
+            return showToast(`操作频繁：手动备份冷却中，请 ${min} 分钟后再试`, "#e67e22");
+        }
     }
 
     // 1. 数据合法性校验 (Data Validation)
@@ -2007,14 +2209,14 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
         
         if (!modal || !body) return;
 
-        title.innerHTML = `<i class="ri-settings-5-line"></i> 系统参数配置中心`;
+        title.innerHTML = `<i class="ri-settings-5-line"></i> 系统配置中心`;
         const sec = config.security || { maxLoginAttempts: 5, loginLockoutMin: 10, maxRegisterPerHour: 3, registerLockoutHours: 24 };
 
         body.innerHTML = `
             <div class="admin-hub-tabs">
                 <button class="hub-tab ${defaultTab === 'brand' ? 'active' : ''}" onclick="switchSysTab('brand')">品牌与 SEO</button>
                 <button class="hub-tab ${defaultTab === 'policy' ? 'active' : ''}" onclick="switchSysTab('policy')">注册策略</button>
-                <button class="hub-tab ${defaultTab === 'security' ? 'active' : ''}" onclick="switchSysTab('security')">安全防护</button>
+                <button class="hub-tab ${defaultTab === 'security' ? 'active' : ''}" onclick="switchSysTab('security')">安全与时间</button>
                 <button class="hub-tab ${defaultTab === 'roles' ? 'active' : ''}" onclick="switchSysTab('roles')">角色授权</button>
             </div>
 
@@ -2073,9 +2275,10 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                 </div>
             </div>
 
-            <!-- 区块 3: 安全防护 -->
+            <!-- 区块 3: 安全与时间 -->
             <div id="sys-pane-security" class="hub-pane ${defaultTab === 'security' ? 'active' : ''}">
                 <div class="admin-config-section">
+                    <h4 style="font-size:12px; color:#888; text-transform:uppercase; margin: 0 0 10px 0;"><i class="ri-shield-check-line"></i> 安全防护策略</h4>
                     <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
                         <div class="form-group">
                             <label>登录重试上限</label>
@@ -2086,7 +2289,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                             <input type="number" id="sys-login-lock" value="${sec.loginLockoutMin}">
                         </div>
                     </div>
-                    <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                    <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
                         <div class="form-group">
                             <label>IP 每小时注册限额</label>
                             <input type="number" id="sys-reg-max" value="${sec.maxRegisterPerHour}">
@@ -2095,6 +2298,20 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                             <label>注册封禁时长 (时)</label>
                             <input type="number" id="sys-reg-lock" value="${sec.registerLockoutHours}">
                         </div>
+                    </div>
+                    
+                    <h4 style="font-size:12px; color:#888; text-transform:uppercase; margin: 15px 0 10px 0;"><i class="ri-time-line"></i> 系统时区控制</h4>
+                    <div class="form-group">
+                        <label>系统信息显示时区</label>
+                        <select id="sys-timezone" style="width:100%; height:38px; padding:0 10px; background:var(--glass); color:var(--text); border:1px solid var(--glass-border); border-radius:6px; outline:none; box-sizing:border-box;">
+                            <option value="Asia/Shanghai" ${config.systemTimezone === 'Asia/Shanghai' || !config.systemTimezone ? 'selected' : ''}>北京时间 (Asia/Shanghai - UTC+8)</option>
+                            <option value="UTC" ${config.systemTimezone === 'UTC' ? 'selected' : ''}>格林威治时间 (UTC - UTC+0)</option>
+                            <option value="America/New_York" ${config.systemTimezone === 'America/New_York' ? 'selected' : ''}>纽约时间 (America/New_York - UTC-5/UTC-4)</option>
+                            <option value="Europe/London" ${config.systemTimezone === 'Europe/London' ? 'selected' : ''}>伦敦时间 (Europe/London - UTC+0/UTC+1)</option>
+                            <option value="Asia/Tokyo" ${config.systemTimezone === 'Asia/Tokyo' ? 'selected' : ''}>东京时间 (Asia/Tokyo - UTC+9)</option>
+                            <option value="Europe/Paris" ${config.systemTimezone === 'Europe/Paris' ? 'selected' : ''}>巴黎时间 (Europe/Paris - UTC+1/UTC+2)</option>
+                        </select>
+                        <p style="font-size: 11px; opacity: 0.6; margin-top: 5px;">说明：此参数控制系统所有卡片创建时间、日志和同步状态等时间戳的显示时区。</p>
                     </div>
                 </div>
             </div>
@@ -2132,7 +2349,7 @@ window.switchSysTab = (tab) => {
         el.classList.toggle('active', 
             (tab === 'brand' && el.innerText.includes('品牌')) ||
             (tab === 'policy' && el.innerText.includes('策略')) ||
-            (tab === 'security' && el.innerText.includes('防护')) ||
+            (tab === 'security' && (el.innerText.includes('安全') || el.innerText.includes('防护'))) ||
             (tab === 'roles' && el.innerText.includes('角色'))
         );
     });
@@ -2227,6 +2444,7 @@ const saveSystemConfig = async () => {
         allowOpenRegistration: document.getElementById('sys-allow-reg').checked,
         requireInvitation: document.getElementById('sys-require-invite').checked,
         superUserInviteQuota: parseInt(document.getElementById('sys-su-quota').value) || 10,
+        systemTimezone: document.getElementById('sys-timezone').value,
         security: {
             maxLoginAttempts: parseInt(document.getElementById('sys-login-max').value),
             loginLockoutMin: parseInt(document.getElementById('sys-login-lock').value),
@@ -2268,7 +2486,7 @@ const checkAutoSyncSchedule = async () => {
     const threshold = intervalDays * 24 * 60 * 60 * 1000;
 
     if (now - lastSync > threshold) {
-        console.log(`[Sync] Auto-sync triggered. Interval: ${intervalDays} days. Last sync: ${new Date(lastSync).toLocaleDateString()}`);
+        console.log(`[Sync] Auto-sync triggered. Interval: ${intervalDays} days. Last sync: ${formatSystemDate(lastSync, false)}`);
         
         // 自动同步前进行静默检查：如果数据没变（isDataDirty 为 false），则仅更新时间戳而不发请求
         // 或者简单起见，既然是自动备份，直接执行一次上传以确保云端是最新的
@@ -2299,19 +2517,10 @@ window.setThemeMode = (mode) => {
     themeMode = mode;
     localStorage.setItem('nav_theme_mode', mode);
     
-    // 如果已登录，保存到云端设置
-    if (sysToken && appData.settings) {
-        appData.settings.themeMode = mode;
-        isDataDirty = true;
-    }
-    
     applyThemeUpdate(); // 立即应用
     
     // 同步 UI
     renderTools();
-    if (document.getElementById('edit-modal')?.style.display === 'flex') {
-        openVisualLab();
-    }
 };
 
 window.toggleThemeMode = () => {
@@ -2327,10 +2536,6 @@ window.toggleThemeMode = () => {
 };
 
 const initThemeMode = () => {
-    // 优先从 appData 读取 (针对登录用户)
-    if (appData.settings?.themeMode) {
-        themeMode = appData.settings.themeMode;
-    }
     applyThemeUpdate();
 };
 
@@ -2468,8 +2673,11 @@ const initZenMode = () => {
         if (window.zenSleepTimer) clearTimeout(window.zenSleepTimer);
         if (appData.settings?.zenMode && isZenTempExpanded) {
             window.zenSleepTimer = setTimeout(() => {
-                // 如果搜索框没有焦点，且没有处于管理模式，才自动沉睡
-                if (document.activeElement?.id !== 'sea-input' && !isPageManagementMode) {
+                const isModalOpen = (document.getElementById('edit-modal')?.style.display === 'flex') || 
+                                     (document.getElementById('monaco-modal')?.style.display === 'block') ||
+                                     (document.getElementById('auth-overlay')?.style.display === 'block');
+                // 如果搜索框没有焦点，且没有处于管理模式，且没有任何模态弹窗打开，才自动沉睡 (Task NT.4)
+                if (document.activeElement?.id !== 'sea-input' && !isPageManagementMode && !isModalOpen) {
                     isZenTempExpanded = false;
                     updateStyles();
                     renderNav();
@@ -2672,7 +2880,7 @@ const initSearch = () => {
 
             if (matches.length > 0) {
                 resultsList.innerHTML = matches.map((m, idx) => `
-                    <div class="local-result-item ${idx === 0 ? 'active' : ''}" onclick="recordClick('${m.id}'); window.open('${m.url}', '${appData.settings?.openInNewTab ? '_blank' : '_self'}')">
+                    <div class="local-result-item ${idx === 0 ? 'active' : ''}" onclick="recordClick('${m.id}'); window.open('${m.url}', '${appData.settings?.link_target || '_blank'}')">
                         <span class="result-icon">${m.icon?.startsWith('http') ? `<img src="${m.icon}" data-retry-index="0" onerror="utils.handleIconError(this, '${m.url}')">` : (m.icon || '🔗')}</span>
                         <div class="result-info">
                             <div class="result-title">${m.title}</div>
@@ -2808,6 +3016,7 @@ const togglePageManagement = (force) => {
     document.body.classList.toggle('page-manage-active', isPageManagementMode);
     
     // Task 11.4: 必须先进行视图渲染，确保 DOM 节点存在
+    updateStyles(); // 🚀 确保在页面管理切换时，即时解禁/隐退禅意模式并应用标准布局！
     renderTools();
     renderNav();
 
@@ -2847,23 +3056,18 @@ const openCategoryEditModal = (catId) => {
 
     title.innerText = "编辑分类";
     body.innerHTML = `
-        <div class="form-group">
+        <div class="form-row">
             <label><i class="ri-font-size"></i> 分类名称</label>
-            <input type="text" id="edit-cat-name" value="${cat.name}" placeholder="如：社交媒体">
-        </div>
-        <div class="form-group">
-            <label><i class="ri-image-line"></i> 分类图标</label>
-            <div class="category-icon-editor" style="display: flex; align-items: center; gap: 15px;">
-                <div id="cat-icon-preview" class="icon-preview-box" onclick="toggleEmojiPicker()" title="点击切换图标" 
-                     style="width: 48px; height: 48px; background: rgba(255,255,255,0.05); border: 1px dashed var(--glass-border); 
-                            border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer;">
+            <div style="display:flex; gap:8px; width:100%; align-items:center;">
+                <input type="text" id="edit-cat-name" value="${cat.name}" placeholder="如：社交媒体" style="flex:1;">
+                <button id="btn-select-emoji" class="icon-btn-action" title="选择分类图标" onclick="toggleEmojiPicker()">
+                    <i class="ri-emotion-line"></i>
+                </button>
+                <div id="cat-icon-preview" class="preview-container">
                     ${cat.icon || '📂'}
                 </div>
-                <button class="tab-btn active" onclick="toggleEmojiPicker()" style="margin: 0;">
-                    <i class="ri-emotion-line"></i> 选择图标
-                </button>
-                <input type="hidden" id="edit-cat-icon" value="${cat.icon || '📂'}">
             </div>
+            <input type="hidden" id="edit-cat-icon" value="${cat.icon || '📂'}">
         </div>
         ${getEmojiPickerHTML()}
     `;
@@ -2987,6 +3191,12 @@ window.selectEmoji = (emoji) => {
         // Task CR.3: 如果存在预览框，同步更新预览
         const previewBox = document.getElementById('cat-icon-preview');
         if (previewBox) previewBox.innerText = emoji;
+
+        // 针对书签图标编辑框，显式同步更新其预览框结构
+        const editIconPreview = document.getElementById('edit-icon-preview');
+        if (editIconPreview) {
+            editIconPreview.innerHTML = `<span>${emoji}</span>`;
+        }
 
         // 触发一次 input 事件，确保如果有其他联动逻辑可以感知
         iconInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -3137,7 +3347,6 @@ const handleSortEnd = (evt, type) => {
     }
 
     isDataDirty = true;
-    showToast("视觉排序已本地暂存", "#3498db");
 };
 
 const updateBatchBar = () => {
@@ -3862,7 +4071,7 @@ const renderAdminInviteTableHTML = (list, pagination) => {
                             <td class="code-font" style="font-weight:bold; letter-spacing:1px;">${i.code}</td>
                             <td><span class="status-badge ${i.status}">${i.status === 'unused' ? '未使用' : '已使用'}</span></td>
                             <td>${i.used_by_name ? `<b>${escapeHTML(i.used_by_name)}</b>` : '<span style="opacity:0.3">-</span>'}</td>
-                            <td><small style="opacity:0.6">${new Date(i.created_at).toLocaleDateString()}</small></td>
+                            <td><small style="opacity:0.6">${formatSystemDate(i.created_at, false)}</small></td>
                             <td>
                                 <button class="action-link" onclick="copySingleInvite('${i.code}')" title="复制">
                                     <i class="ri-file-copy-line"></i>
@@ -4009,9 +4218,15 @@ const renderAdminAuditTableHTML = (logs, pagination) => {
                 <tbody>
                     ${logs.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:30px; opacity:0.5;">暂无日志数据</td></tr>' : 
                       logs.map(l => {
-                        const dateObj = new Date(l.created_at);
-                        const dateStr = dateObj.toLocaleDateString();
-                        const timeStr = dateObj.toLocaleTimeString();
+                        const dateStr = formatSystemDate(l.created_at, false);
+                        const tz = window.sysSiteConfig?.systemTimezone || 'Asia/Shanghai';
+                        let timeStr = '';
+                        try {
+                            const dateObj = window.parseUtcDate(l.created_at);
+                            timeStr = dateObj.toLocaleTimeString('zh-CN', { timeZone: tz, hour12: false });
+                        } catch (e) {
+                            timeStr = new Date(l.created_at).toLocaleTimeString('zh-CN', { hour12: false });
+                        }
                         const actionInfo = AuditActionMap[l.action] || { label: l.action, color: '#3498db' };
                         
                         return `
@@ -4542,7 +4757,7 @@ window.openNoticeCenter = async (targetId = null) => {
                                     ${!isRead ? '<span class="notice-badge badge-new">NEW</span>' : ''}
                                     <span class="title-text" style="margin-left: ${a.is_top || !isRead ? '8px' : '0'}">${a.title}</span>
                                 </span>
-                                <span class="notice-item-date">${new Date(a.created_at).toLocaleDateString()}</span>
+                                <span class="notice-item-date">${formatSystemDate(a.created_at, false)}</span>
                                 <i class="ri-arrow-down-s-line notice-item-arrow"></i>
                             </div>
                             <div class="notice-item-content">${a.content.replace(/\n/g, '<br>')}</div>
@@ -4752,21 +4967,302 @@ const openJsonEditor = () => {
     };
 };
 
-const exportConfig = () => {
-    const date = new Date();
-    const filename = `CloudNav_Config_${date.getMonth() + 1}${date.getDate()}.json`;
-    const dataStr = JSON.stringify(appData, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+let currentImportExportMode = 'import'; // 'import' | 'export'
+let currentExportFormat = 'json'; // 'json' | 'html'
+
+const openImportExportModal = () => {
+    lastFocusedElement = document.activeElement;
+    closeAllModals(true);
+
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
     
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showToast("配置文件导出成功");
+    if (!modal || !body) return;
+
+    title.innerHTML = `<i class="ri-database-2-line"></i> 本地导入/导出`;
+    
+    currentImportExportMode = 'import';
+    currentExportFormat = 'json';
+
+    const renderModalBody = () => {
+        body.innerHTML = `
+            <div class="visual-option-group">
+                <span class="visual-option-label"><i class="ri-swap-line"></i> 选择操作类型</span>
+                <div class="visual-btn-group">
+                    <button class="tab-btn ${currentImportExportMode === 'import' ? 'active' : ''}" onclick="setImportExportMode('import')">导入数据</button>
+                    <button class="tab-btn ${currentImportExportMode === 'export' ? 'active' : ''}" onclick="setImportExportMode('export')">导出数据</button>
+                </div>
+            </div>
+            
+            <div class="visual-option-group" id="export-format-group" style="${currentImportExportMode === 'export' ? 'display: block;' : 'display: none;'}">
+                <span class="visual-option-label"><i class="ri-file-settings-line"></i> 选择数据格式</span>
+                <div class="visual-btn-group">
+                    <button class="tab-btn ${currentExportFormat === 'json' ? 'active' : ''}" onclick="setExportFormat('json')">JSON 格式</button>
+                    <button class="tab-btn ${currentExportFormat === 'html' ? 'active' : ''}" onclick="setExportFormat('html')">Edge浏览器收藏夹格式</button>
+                </div>
+                <p style="font-size: 11px; opacity: 0.6; margin-top: 8px; line-height: 1.4;">
+                    ${currentExportFormat === 'json' 
+                        ? '说明: 包含所有配置、分类和网址的完整数据。可再次导入本站100%还原。' 
+                        : '说明: 导出为标准 HTML 书签文件，可直接导入到 Edge, Chrome 等浏览器。'}
+                </p>
+            </div>
+            
+            <div class="visual-option-group" id="import-tip-group" style="${currentImportExportMode === 'import' ? 'display: block;' : 'display: none;'}">
+                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.5;">
+                    <i class="ri-information-line" style="color: var(--primary);"></i> 
+                    智能导入适配器支持导入标准 HTML 书签、本站导出的 JSON 文件以及 Markdown 列表等。导入后将覆写本地当前所有配置。
+                </div>
+            </div>
+        `;
+
+        if (currentImportExportMode === 'import') {
+            confirmBtn.innerHTML = `<i class="ri-upload-2-line"></i> 选择文件并导入`;
+            confirmBtn.onclick = () => {
+                document.getElementById('import-file').click();
+            };
+        } else {
+            confirmBtn.innerHTML = `<i class="ri-download-2-line"></i> 确认导出本地文件`;
+            confirmBtn.onclick = () => {
+                if (currentExportFormat === 'json') {
+                    doExportJson();
+                } else {
+                    doExportHtml('clean');
+                }
+            };
+        }
+    };
+
+    window.setImportExportMode = (mode) => {
+        currentImportExportMode = mode;
+        renderModalBody();
+    };
+
+    window.setExportFormat = (format) => {
+        currentExportFormat = format;
+        renderModalBody();
+    };
+
+    renderModalBody();
+    modal.style.display = 'flex';
+};
+
+const exportConfig = () => {
+    closeAllModals(true);
+
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    
+    if (!modal || !body) return;
+
+    title.innerHTML = '<i class="ri-download-2-line"></i> 本地数据导出向导';
+    
+    body.innerHTML = `
+        <div style="margin-bottom: 15px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; font-size: 13px; color: var(--text-dim); line-height: 1.5;">
+            <i class="ri-information-line" style="color: var(--primary);"></i> 
+            本地导出可将您自定义的导航数据下载到本地。如需在云端备份，请使用侧边栏的 <strong>云端备份中心</strong>。
+        </div>
+
+        <div class="form-row" style="margin-bottom: 15px;">
+            <label style="font-weight: bold; margin-bottom: 8px; display: block;"><i class="ri-file-settings-line"></i> 选择导出格式</label>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; cursor: pointer; border: 1px solid var(--glass-border);">
+                    <input type="radio" name="export-format" value="json" checked style="margin-top: 3px;" onchange="toggleExportOptions(this.value)">
+                    <div style="margin-left: 8px;">
+                        <div style="font-weight: bold; color: #fff;">原生 JSON 备份文件</div>
+                        <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">包含所有配置、分类和网址的完整数据。可再次通过“本地数据导入”来100%还原。</div>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; cursor: pointer; border: 1px solid var(--glass-border);">
+                    <input type="radio" name="export-format" value="html" style="margin-top: 3px;" onchange="toggleExportOptions(this.value)">
+                    <div style="margin-left: 8px;">
+                        <div style="font-weight: bold; color: #fff;">标准 HTML 书签文件</div>
+                        <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">导出为 Netscape 格式，可直接导入到 Edge, Chrome, Safari 等浏览器。</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <div id="html-export-suboptions" class="form-row" style="margin-bottom: 15px; display: none; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 8px; border-left: 3px solid var(--primary);">
+            <label style="font-weight: bold; margin-bottom: 8px; display: block;"><i class="ri-settings-4-line"></i> HTML 书签配置选项</label>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12px;">
+                <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
+                    <input type="radio" name="html-mode" value="clean" checked style="margin-top: 2px;">
+                    <div style="margin-left: 6px;">
+                        <span style="font-weight: bold; color: #fff;">清爽模式 (强烈推荐 ⭐)</span>
+                        <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
+                            Edge 导入后书签只显示短标题，不会把网址描述拼到标题里。描述将存放在标准 &lt;DD&gt; 标签与 comment 属性中，干净且支持重新导入本站还原。
+                        </div>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin-top: 4px;">
+                    <input type="radio" name="html-mode" value="merge" style="margin-top: 2px;">
+                    <div style="margin-left: 6px;">
+                        <span style="font-weight: bold; color: #fff;">标题拼接模式</span>
+                        <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
+                            将描述内容合并写入书签标题中（形如：'标题 - 描述'）。适合不支持显示描述的极简浏览器书签栏，但会导致 Edge 收藏夹里的标题极其冗长。
+                        </div>
+                    </div>
+                </label>
+            </div>
+        </div>
+    `;
+
+    // 挂载全局切换函数供 DOM 触发
+    window.toggleExportOptions = (val) => {
+        const subOpts = document.getElementById('html-export-suboptions');
+        if (subOpts) {
+            subOpts.style.display = (val === 'html') ? 'block' : 'none';
+        }
+    };
+
+    confirmBtn.innerText = "确认导出本地文件";
+    confirmBtn.onclick = () => {
+        const format = document.querySelector('input[name="export-format"]:checked')?.value || 'json';
+        if (format === 'json') {
+            doExportJson();
+        } else {
+            const htmlMode = document.querySelector('input[name="html-mode"]:checked')?.value || 'clean';
+            doExportHtml(htmlMode);
+        }
+    };
+
+    modal.style.display = 'flex';
+};
+
+const doExportJson = () => {
+    try {
+        const date = new Date();
+        const filename = `CloudNav_Config_${date.getMonth() + 1}${date.getDate()}.json`;
+        const dataStr = JSON.stringify(appData, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        closeAllModals(true);
+        showToast("本地 JSON 配置导出成功");
+    } catch (e) {
+        console.error(e);
+        showToast(`导出失败: ${e.message}`, "#e74c3c");
+    }
+};
+
+const doExportHtml = (htmlMode) => {
+    try {
+        const date = new Date();
+        const filename = `CloudNav_Bookmarks_${date.getMonth() + 1}${date.getDate()}.html`;
+        
+        let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<!-- This is an automatically generated file.
+     It will be read and written.
+     DO NOT EDIT! -->
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Bookmarks</TITLE>
+<H1>Bookmarks</H1>
+<DL><p>
+`;
+
+        // 遍历分类
+        if (appData.categories && appData.categories.length > 0) {
+            appData.categories.forEach(cat => {
+                // 跳过加载中临时分类
+                if (cat.id === 'temp_init') return;
+                
+                const catName = escapeHTML(cat.name || '默认分类');
+                html += `    <DT><H3 ADD_DATE="${Math.floor(Date.now()/1000)}" LAST_MODIFIED="${Math.floor(Date.now()/1000)}">${catName}</H3>\n`;
+                html += `    <DL><p>\n`;
+                
+                // 筛选出属于此分类的书签
+                const items = appData.items.filter(item => (item.catId === cat.id || item.cat_id === cat.id));
+                items.forEach(item => {
+                    const url = escapeHTML(item.url || '');
+                    if (!url || !url.startsWith('http')) return;
+                    
+                    let linkText = escapeHTML(item.title || '未命名书签');
+                    let commentAttr = '';
+                    let descTag = '';
+                    
+                    if (item.desc) {
+                        const cleanDesc = escapeHTML(item.desc);
+                        if (htmlMode === 'clean') {
+                            // 清爽模式：不拼接标题。把描述放到 comment 属性和 DD 标签里
+                            commentAttr = ` comment="${cleanDesc}"`;
+                            descTag = `\n        <DD>${cleanDesc}`;
+                        } else {
+                            // 拼接模式：拼接到标题中
+                            linkText = `${linkText} - ${cleanDesc}`;
+                        }
+                    }
+                    
+                    let iconAttr = '';
+                    if (item.icon && item.icon.startsWith('http')) {
+                        iconAttr = ` ICON="${escapeHTML(item.icon)}"`;
+                    }
+                    
+                    html += `        <DT><A HREF="${url}" ADD_DATE="${Math.floor(Date.now()/1000)}"${iconAttr}${commentAttr}>${linkText}</A>${descTag}\n`;
+                });
+                
+                html += `    </DL><p>\n`;
+            });
+        } else {
+            // 没有分类时，输出所有书签
+            if (appData.items && appData.items.length > 0) {
+                appData.items.forEach(item => {
+                    const url = escapeHTML(item.url || '');
+                    if (!url || !url.startsWith('http')) return;
+                    
+                    let linkText = escapeHTML(item.title || '未命名书签');
+                    let commentAttr = '';
+                    let descTag = '';
+                    
+                    if (item.desc) {
+                        const cleanDesc = escapeHTML(item.desc);
+                        if (htmlMode === 'clean') {
+                            commentAttr = ` comment="${cleanDesc}"`;
+                            descTag = `\n    <DD>${cleanDesc}`;
+                        } else {
+                            linkText = `${linkText} - ${cleanDesc}`;
+                        }
+                    }
+                    
+                    let iconAttr = '';
+                    if (item.icon && item.icon.startsWith('http')) {
+                        iconAttr = ` ICON="${escapeHTML(item.icon)}"`;
+                    }
+                    html += `    <DT><A HREF="${url}" ADD_DATE="${Math.floor(Date.now()/1000)}"${iconAttr}${commentAttr}>${linkText}</A>${descTag}\n`;
+                });
+            }
+        }
+        
+        html += `</DL><p>\n`;
+        
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        closeAllModals(true);
+        showToast("HTML书签本地导出成功");
+    } catch (e) {
+        console.error(e);
+        showToast(`导出失败: ${e.message}`, "#e74c3c");
+    }
 };
 
 const initGlobalEvents = () => {
@@ -4812,6 +5308,236 @@ const initGlobalEvents = () => {
         // Ctrl+B 的逻辑已整合到下方的 document.keydown 中，此处移除冲突监听
     });
 
+    // 智能书签自适应解析网关 (Smart Import Adapter)
+    const parseImportedData = (rawText) => {
+        let text = rawText.trim();
+        if (!text) throw new Error("导入内容不能为空");
+
+        // 辅助提取 HTML 标准书签描述
+        const getBookmarkDesc = (link) => {
+            let desc = link.getAttribute('comment') || '';
+            if (desc) return desc.trim();
+
+            let next = link.nextSibling;
+            while (next && next.nodeType === 3) {
+                next = next.nextSibling;
+            }
+            if (next && next.tagName === 'DD') {
+                return next.textContent.trim();
+            }
+
+            const parentDt = link.closest('dt');
+            if (parentDt) {
+                let nextSibling = parentDt.nextElementSibling;
+                if (nextSibling && nextSibling.tagName === 'DD') {
+                    return nextSibling.textContent.trim();
+                }
+            }
+            return '';
+        };
+
+        // 1. 尝试检测浏览器 HTML 书签文件
+        if (text.includes("NETSCAPE-Bookmark-file-1") || /<!DOCTYPE\s+NETSCAPE-Bookmark-file-1/i.test(text)) {
+            console.log("[Import] Detected Netscape HTML Bookmark format");
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, "text/html");
+            const categories = [];
+            const items = [];
+            
+            // 查找所有文件夹标题 (H3)
+            const h3s = doc.querySelectorAll('h3');
+            if (h3s.length > 0) {
+                h3s.forEach((h3, catIdx) => {
+                    const catName = h3.textContent.trim().slice(0, 10) || `分类 ${catIdx + 1}`;
+                    const catId = `imported_cat_${catIdx + 1}_${Date.now()}`;
+                    categories.push({ id: catId, name: catName, icon: "🔖", hidden: false });
+                    
+                    // 查找该 H3 同级紧随其后的 <DL> 或 <UL>
+                    let sibling = h3.nextElementSibling;
+                    while (sibling && sibling.tagName !== 'DL' && sibling.tagName !== 'UL') {
+                        sibling = sibling.nextElementSibling;
+                    }
+                    
+                    if (sibling) {
+                        const links = sibling.querySelectorAll('a');
+                        links.forEach((link, itemIdx) => {
+                            const url = link.getAttribute('href');
+                            const title = link.textContent.trim().slice(0, 12) || '未命名书签';
+                            const desc = getBookmarkDesc(link).slice(0, 30);
+                            if (url && url.startsWith('http')) {
+                                items.push({
+                                    id: `imported_item_${catIdx}_${itemIdx}_${Math.random().toString(36).substring(2, 7)}`,
+                                    catId: catId,
+                                    cat_id: catId,
+                                    title: title,
+                                    url: url,
+                                    desc: desc,
+                                    icon: `https://favicon.qqsuu.cn/${new URL(url).hostname}`,
+                                    hidden: false
+                                });
+                            }
+                        });
+                    }
+                });
+            } else {
+                // 没有分类文件夹，将所有 a 标签归入默认分类
+                const links = doc.querySelectorAll('a');
+                if (links.length > 0) {
+                    const catId = `imported_cat_default_${Date.now()}`;
+                    categories.push({ id: catId, name: "默认导入", icon: "📥", hidden: false });
+                    links.forEach((link, itemIdx) => {
+                        const url = link.getAttribute('href');
+                        const title = link.textContent.trim().slice(0, 12) || '未命名书签';
+                        if (url && url.startsWith('http')) {
+                            const desc = getBookmarkDesc(link).slice(0, 30);
+                            items.push({
+                                id: `imported_item_def_${itemIdx}_${Math.random().toString(36).substring(2, 7)}`,
+                                catId: catId,
+                                cat_id: catId,
+                                title: title,
+                                url: url,
+                                desc: desc,
+                                icon: `https://favicon.qqsuu.cn/${new URL(url).hostname}`,
+                                hidden: false
+                            });
+                        }
+                    });
+                }
+            }
+            
+            if (categories.length > 0) return { categories, items };
+            throw new Error("HTML 文件中未解析到有效的 A 标签链接");
+        }
+
+        // 2. 尝试 JSON 解析（标准、扁平或键值对）
+        try {
+            const parsed = JSON.parse(text);
+            
+            // 2.1 标准 CloudNav 格式
+            if (parsed.categories && parsed.items) {
+                console.log("[Import] Detected standard CloudNav format");
+                return parsed;
+            }
+
+            // 2.2 扁平链接数组 [{title, url, desc}]
+            if (Array.isArray(parsed)) {
+                console.log("[Import] Detected flat JSON array format");
+                const catId = `imported_cat_json_${Date.now()}`;
+                const categories = [{ id: catId, name: "外部导入", icon: "🔗", hidden: false }];
+                const items = parsed.map((item, idx) => {
+                    const url = item.url || item.href || (typeof item === 'string' ? item : '');
+                    const title = (item.title || item.name || '未命名网址').slice(0, 12);
+                    const desc = (item.desc || item.description || '').slice(0, 30);
+                    return {
+                        id: `imported_item_json_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+                        catId: catId,
+                        cat_id: catId,
+                        title: title,
+                        url: url,
+                        desc: desc,
+                        icon: url ? `https://favicon.qqsuu.cn/${new URL(url).hostname}` : '',
+                        hidden: false
+                    };
+                }).filter(i => i.url && i.url.startsWith('http'));
+
+                return { categories, items };
+            }
+
+            // 2.3 分组键值对格式 {"分类1": [{"title": "...", "url": "..."}, ...]}
+            if (typeof parsed === 'object' && parsed !== null) {
+                console.log("[Import] Detected nested JSON dictionary format");
+                const categories = [];
+                const items = [];
+                let catIdx = 0;
+                
+                for (const [catName, list] of Object.entries(parsed)) {
+                    if (Array.isArray(list)) {
+                        const catId = `imported_cat_dict_${catIdx}_${Date.now()}`;
+                        categories.push({ id: catId, name: catName.slice(0, 10), icon: "🔖", hidden: false });
+                        list.forEach((item, itemIdx) => {
+                            const url = item.url || item.href || (typeof item === 'string' ? item : '');
+                            const title = (item.title || item.name || '未命名网址').slice(0, 12);
+                            const desc = (item.desc || item.description || '').slice(0, 30);
+                            if (url && url.startsWith('http')) {
+                                items.push({
+                                    id: `imported_item_dict_${catIdx}_${itemIdx}_${Math.random().toString(36).substring(2, 7)}`,
+                                    catId: catId,
+                                    cat_id: catId,
+                                    title: title,
+                                    url: url,
+                                    desc: desc,
+                                    icon: `https://favicon.qqsuu.cn/${new URL(url).hostname}`,
+                                    hidden: false
+                                });
+                            }
+                        });
+                        catIdx++;
+                    }
+                }
+                if (categories.length > 0) {
+                    return { categories, items };
+                }
+            }
+        } catch (e) {
+            // JSON 解析失败，落入文本解析
+        }
+
+        // 3. 文本行解析 (Markdown 格式 [Title](URL) 或直接每行一个 URL)
+        console.log("[Import] Falling back to plain text line-by-line parser");
+        const categories = [];
+        const items = [];
+        const lines = text.split('\n');
+        const catId = `imported_cat_txt_${Date.now()}`;
+        categories.push({ id: catId, name: "文本导入", icon: "📝", hidden: false });
+        
+        let itemIdx = 0;
+        lines.forEach(line => {
+            line = line.trim();
+            if (!line) return;
+            
+            // 匹配 Markdown 格式: [微博](https://weibo.com)
+            const mdMatch = line.match(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/);
+            if (mdMatch) {
+                const title = mdMatch[1].slice(0, 12);
+                const url = mdMatch[2];
+                items.push({
+                    id: `imported_item_txt_${itemIdx++}_${Math.random().toString(36).substring(2, 7)}`,
+                    catId: catId,
+                    cat_id: catId,
+                    title: title,
+                    url: url,
+                    desc: "",
+                    icon: `https://favicon.qqsuu.cn/${new URL(url).hostname}`,
+                    hidden: false
+                });
+            } else {
+                // 匹配普通网址
+                const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
+                if (urlMatch) {
+                    const url = urlMatch[1];
+                    let host = '';
+                    try { host = new URL(url).hostname; } catch (e) {}
+                    items.push({
+                        id: `imported_item_txt_${itemIdx++}_${Math.random().toString(36).substring(2, 7)}`,
+                        catId: catId,
+                        cat_id: catId,
+                        title: host || "快捷导航",
+                        url: url,
+                        desc: "",
+                        icon: host ? `https://favicon.qqsuu.cn/${host}` : '',
+                        hidden: false
+                    });
+                }
+            }
+        });
+
+        if (items.length > 0) {
+            return { categories, items };
+        }
+
+        throw new Error("无法识别的配置格式 (请使用标准的 HTML 网页书签、特定 JSON 结构或 Markdown 列表文件)");
+    };
+
     // 监听文件导入
     const importInput = document.getElementById('import-file');
     if (importInput) {
@@ -4822,15 +5548,57 @@ const initGlobalEvents = () => {
             const reader = new FileReader();
             reader.onload = async (event) => {
                 try {
-                    const parsed = JSON.parse(event.target.result);
-                    if (!parsed.categories || !parsed.items) throw new Error("非法的 CloudNav 配置格式");
+                    const parsed = parseImportedData(event.target.result);
                     
-                    // Task 4.3: 导入配额校验
+                    // Task 4.3: 导入配额校验 & 自动分装裁剪
                     const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
-                    if (parsed.categories.length > quota.maxCategories) throw new Error(`分类数量超出上限 (${quota.maxCategories})`);
-                    for (const cat of parsed.categories) {
-                        const count = parsed.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
-                        if (count > quota.maxItemsPerCategory) throw new Error(`分类 [${cat.name}] 下的书签数量 (${count}) 超出上限 (${quota.maxItemsPerCategory})`);
+                    
+                    let finalCategories = [];
+                    let finalItems = [];
+                    let hasAutoSplit = false;
+                    let hasTruncated = false;
+
+                    parsed.categories.forEach((cat) => {
+                        const catItems = parsed.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id));
+                        if (catItems.length === 0) return;
+
+                        const maxPerCat = quota.maxItemsPerCategory;
+                        const chunkCount = Math.ceil(catItems.length / maxPerCat);
+
+                        for (let c = 0; c < chunkCount; c++) {
+                            // 如果已达分类总上限，则丢弃后续分类以保障系统物理稳定
+                            if (finalCategories.length >= quota.maxCategories) {
+                                hasTruncated = true;
+                                break;
+                            }
+
+                            const subCatId = c === 0 ? cat.id : `${cat.id}_sub_${c}_${Date.now()}`;
+                            const subCatName = c === 0 ? cat.name : `${cat.name} ${c + 1}`;
+                            if (c > 0) hasAutoSplit = true;
+
+                            finalCategories.push({
+                                id: subCatId,
+                                name: subCatName.slice(0, 10),
+                                icon: cat.icon || "🔖",
+                                hidden: !!cat.hidden
+                            });
+
+                            const chunkItems = catItems.slice(c * maxPerCat, (c + 1) * maxPerCat);
+                            chunkItems.forEach((item) => {
+                                finalItems.push({
+                                    ...item,
+                                    catId: subCatId,
+                                    cat_id: subCatId
+                                });
+                            });
+                        }
+                    });
+
+                    parsed.categories = finalCategories;
+                    parsed.items = finalItems;
+
+                    if (parsed.categories.length === 0) {
+                        throw new Error("导入内容经校验为空或无效");
                     }
 
                     if (!confirm("导入将覆盖当前所有配置，确定继续吗？")) return;
@@ -4839,7 +5607,14 @@ const initGlobalEvents = () => {
                     showLoader('正在导入并同步...');
                     await syncConfigToCloud();
                     renderNav();
-                    showToast("导入成功");
+                    
+                    if (hasTruncated) {
+                        showToast("导入成功！部分条目超出容量配额已做安全裁切。", "#e67e22");
+                    } else if (hasAutoSplit) {
+                        showToast("导入成功！超出上限的书签已自动分箱拆分。", "#27ae60");
+                    } else {
+                        showToast("导入成功");
+                    }
                 } catch (err) {
                     showToast(`导入失败: ${err.message}`, "#e74c3c");
                 } finally {
@@ -5121,7 +5896,7 @@ const initGlobalEvents = () => {
         if (e.altKey && key === 'z') {
             if (activeModal) return; // Task 37.4: 弹窗时屏蔽
             e.preventDefault();
-            toggleZenMode();
+            toggleZenMode(undefined, true);
             return;
         }
 
@@ -5243,11 +6018,12 @@ const openEditModal = (id) => {
             <input type="text" id="edit-title-input" value="${item.title}" placeholder="网站名称">
         </div>
         <div class="form-row">
-            <label><i class="ri-image-line"></i> 图标
-                <button class="emoji-picker-trigger" onclick="toggleEmojiPicker()"><i class="ri-emotion-line"></i> 选择图标</button>
-            </label>
+            <label><i class="ri-image-line"></i> 图标</label>
             <div style="display:flex; gap:8px; width:100%; align-items:center;">
-                <input type="text" id="edit-icon" value="${item.icon}" placeholder="Emoji 或 图片 URL">
+                <input type="text" id="edit-icon" value="${item.icon || ''}" placeholder="Emoji 或 图片 URL">
+                <button id="btn-select-emoji" class="icon-btn-action" title="选择表情/图标" onclick="toggleEmojiPicker()">
+                    <i class="ri-emotion-line"></i>
+                </button>
                 <div id="edit-icon-preview" class="preview-container">
                     ${item.icon?.startsWith('http') ? `<img src="${item.icon}">` : `<span>${item.icon || '🔗'}</span>`}
                 </div>
@@ -5279,6 +6055,13 @@ const openEditModal = (id) => {
 
     modal.style.display = 'flex';
 
+    // 重新复位并绑定确认按钮事件 (防止被其他弹窗覆盖劫持)
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    if (confirmBtn) {
+        confirmBtn.style.display = 'block';
+        confirmBtn.onclick = saveItem;
+    }
+
     // Task 37.2: 自动聚焦
     setTimeout(() => {
         document.getElementById('edit-url')?.focus();
@@ -5291,6 +6074,8 @@ const triggerMagicWand = async () => {
     if (!url.startsWith('http')) return showToast("请输入完整的 http(s) 网址", "#e67e22");
 
     const btn = document.getElementById('btn-magic-wand');
+    const initialIcon = document.getElementById('edit-icon')?.value || '';
+    
     btn.classList.add('loading');
     btn.disabled = true;
 
@@ -5306,11 +6091,21 @@ const triggerMagicWand = async () => {
             const descInput = document.getElementById('edit-desc');
             const iconInput = document.getElementById('edit-icon');
 
+            // 竞态防御：若此时模态框已被关闭或组件已被销毁，直接安全退出
+            if (!titleInput || !descInput || !iconInput) {
+                console.log("[MagicWand] Modal has been closed, dropping async response.");
+                return;
+            }
+
             if (!titleInput.value) titleInput.value = title;
             if (!descInput.value) descInput.value = desc;
-            if (!iconInput.value) {
+            
+            // 竞态防御：只有在用户等待期间没有手动修改过图标时，才予以自动覆盖填充
+            if (iconInput.value === initialIcon || !iconInput.value) {
                 iconInput.value = icon;
                 iconInput.dispatchEvent(new Event('input'));
+            } else {
+                console.log("[MagicWand] User manually specified emoji, skipping auto icon overwrite.");
             }
             showToast("魔法填充成功！");
         } else {
@@ -5319,8 +6114,12 @@ const triggerMagicWand = async () => {
     } catch (e) {
         showToast("请求服务失败", "#e74c3c");
     } finally {
-        btn.classList.remove('loading');
-        btn.disabled = false;
+        // 同样在按钮还存在时才做状态清除
+        const currentBtn = document.getElementById('btn-magic-wand');
+        if (currentBtn) {
+            currentBtn.classList.remove('loading');
+            currentBtn.disabled = false;
+        }
     }
 };
 
@@ -5360,4 +6159,21 @@ const saveItem = async () => {
     modal.style.display = 'none';
     showToast(id ? "修改已本地暂存" : "书签已本地添加", "#3498db");
     renderNav();
+
+    // 登录态即时静默后台同步 (Task BF.3)
+    if (sysToken) {
+        // 先写入本地 localStorage 以防断电或离线刷新
+        localStorage.setItem('nav_app_data', JSON.stringify(appData));
+        
+        const autoSync = appData.settings?.autoSyncOnLogout !== false;
+        if (autoSync) {
+            console.log("[Sync] Triggering background auto-sync to cloud...");
+            manualSyncCloud(false).then(() => {
+                isDataDirty = false;
+                console.log("[Sync] Background auto-sync succeeded.");
+            }).catch(err => {
+                console.warn("[Sync] Background auto-sync failed:", err);
+            });
+        }
+    }
 };

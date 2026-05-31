@@ -17,7 +17,8 @@ export async function onRequest(context) {
     '/api/auth/login',
     '/api/auth/register',
     '/api/bing',
-    '/api/config'
+    '/api/config',
+    '/api/announcements'
   ];
   
   const isPublic = publicPaths.some(p => path === p);
