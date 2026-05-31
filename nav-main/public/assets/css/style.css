@@ -9,10 +9,11 @@
 
 /* ==================== CSS 变量定义 ==================== */
 :root {
-    /* 毛玻璃效果颜色 */
-    --glass: rgba(255, 255, 255, 0.15);
-    --glass-hover: rgba(255, 255, 255, 0.3);
-    --glass-border: rgba(255, 255, 255, 0.1);
+    /* 统一毛玻璃背景及透明度（常规/沉浸模式同步复用，黑暗模式高透设计） */
+    --glass-bg: rgba(0, 0, 0, 0.2);
+    --glass: var(--glass-bg);
+    --glass-hover: rgba(0, 0, 0, 0.35);
+    --glass-border: rgba(255, 255, 255, 0.08);
 
     /* 文字颜色 */
     --text: #ffffff;
@@ -41,9 +42,11 @@
 
 /* ==================== 亮色模式 ==================== */
 body.light-theme {
-    --glass: rgba(255, 255, 255, 0.55);
-    --glass-hover: rgba(255, 255, 255, 0.75);
-    --glass-border: rgba(0, 0, 0, 0.07);
+    /* 统一亮色毛玻璃背景及透明度（常规/沉浸模式同步复用，明亮模式高透设计） */
+    --glass-bg: rgba(255, 255, 255, 0.45);
+    --glass: var(--glass-bg);
+    --glass-hover: rgba(255, 255, 255, 0.65);
+    --glass-border: rgba(0, 0, 0, 0.06);
     --text: #2c3e50;
     --text-dim: rgba(44, 62, 80, 0.7);
     --bg-overlay-opacity: 0.25;
@@ -59,7 +62,7 @@ body.light-theme::before {
 }
 
 body.light-theme .sidebar {
-    background: rgba(255, 255, 255, 0.72);
+    background: var(--glass-bg);
     border-color: rgba(0, 0, 0, 0.06);
 }
 
@@ -88,7 +91,7 @@ body.light-theme .tab-btn.active {
 }
 
 body.light-theme .card {
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--glass);
 }
 
 body.light-theme .card:hover {
@@ -145,7 +148,7 @@ body.light-theme .sidebar-footer {
 
 body.light-theme .category-section-title {
     color: #2c3e50;
-    background: rgba(255, 255, 255, 0.65);
+    background: var(--glass-bg);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(0, 0, 0, 0.05);
@@ -158,7 +161,7 @@ body.light-theme .sidebar-toggle {
 }
 
 body.light-theme .video-card {
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--glass);
     border-color: rgba(0, 0, 0, 0.06);
 }
 
@@ -275,6 +278,11 @@ body.page-manage-active .sidebar-nav-item:hover .nav-actions {
 }
 
 .nav-action-btn:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.nav-action-btn.active {
     background: var(--primary);
     color: white;
 }
@@ -1205,7 +1213,7 @@ body.is-searching .grid-container {
     left: 0;
     bottom: 0;
     width: var(--sidebar-width);
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--glass-bg);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-right: 1px solid var(--glass-border);
@@ -1231,6 +1239,7 @@ body.sidebar-folded .sidebar-title,
 body.sidebar-folded .sidebar:not(:hover) .sidebar-pin-btn,
 body.sidebar-folded .sidebar:not(:hover) .nav-label,
 body.sidebar-folded .sidebar:not(:hover) .sidebar-user-info span,
+body.sidebar-folded .sidebar:not(:hover) .sidebar-quick-logout,
 body.sidebar-folded .sidebar:not(:hover) .sidebar-admin-toolbar .nav-label,
 body.sidebar-folded .sidebar:not(:hover) .admin-tools-submenu .nav-label,
 body.sidebar-folded .sidebar:not(:hover) .nav-count {
@@ -1245,6 +1254,7 @@ body.sidebar-folded .sidebar:hover .sidebar-title,
 body.sidebar-folded .sidebar:hover .sidebar-pin-btn,
 body.sidebar-folded .sidebar:hover .nav-label,
 body.sidebar-folded .sidebar:hover .sidebar-user-info span,
+body.sidebar-folded .sidebar:hover .sidebar-quick-logout,
 body.sidebar-folded .sidebar:hover .sidebar-admin-toolbar .nav-label,
 body.sidebar-folded .sidebar:hover .admin-tools-submenu .nav-label,
 body.sidebar-folded .sidebar:hover .nav-count {
@@ -1552,101 +1562,127 @@ body.zen-active.zen-silent .mobile-fab-visual:hover {
 .sidebar-user-section {
     padding: 12px;
     border-bottom: 1px solid var(--glass-border);
-    background: rgba(0, 0, 0, 0.05);
+    background: rgba(0, 0, 0, 0.02);
     flex-shrink: 0;
+}
+
+.sidebar-user-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--glass-bg);
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-user-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(57, 157, 255, 0.25);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(57, 157, 255, 0.15);
+}
+
+body.light-theme .sidebar-user-card:hover {
+    background: rgba(255, 255, 255, 0.65);
+    border-color: rgba(57, 157, 255, 0.4);
+    box-shadow: 0 4px 15px rgba(57, 157, 255, 0.12);
 }
 
 .sidebar-user-info {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px;
-    font-size: 13px;
-    color: var(--text-dim);
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    margin-bottom: 12px;
+    gap: 10px;
+    flex: 1;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.user-avatar-wrapper {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(57, 157, 255, 0.15), rgba(57, 157, 255, 0.05));
+    border: 1px solid rgba(57, 157, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
     transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.sidebar-user-info:hover {
-    background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-1px);
+.sidebar-user-card:hover .user-avatar-wrapper {
+    transform: scale(1.05);
+    background: linear-gradient(135deg, rgba(57, 157, 255, 0.25), rgba(57, 157, 255, 0.1));
+    border-color: rgba(57, 157, 255, 0.4);
 }
 
-.sidebar-user-info .ri-user-smile-line {
-    font-size: 22px;
+.user-avatar-wrapper i {
+    font-size: 16px;
     color: var(--primary);
-    background: rgba(57, 157, 255, 0.1);
-    padding: 6px;
-    border-radius: 10px;
 }
 
 .user-meta-box {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
 }
 
 .user-name {
+    font-size: 12px;
     font-weight: 600;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 150px;
     display: flex;
     align-items: center;
 }
 
+body.light-theme .user-name {
+    color: #2c3e50;
+}
+
 .user-uid {
-    font-size: 11px;
+    font-size: 10px;
     opacity: 0.5;
     font-family: monospace;
 }
 
-.sidebar-user-info .admin-badge {
-    font-size: 9px;
-    background: var(--primary);
-    color: white;
-    padding: 1px 4px;
+.user-role-badge {
+    font-size: 8px;
+    font-weight: bold;
+    padding: 1px 5px;
     border-radius: 4px;
     margin-left: 6px;
     line-height: 1.2;
-}
-
-/* Task 7.2: 侧边栏用户卡片布局 */
-.sidebar-user-card {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.sidebar-user-card .sidebar-user-info {
-    flex: 1;
-    margin-bottom: 0; /* 抵消原有的 margin */
-    cursor: pointer;
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .sidebar-quick-logout {
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    background: rgba(231, 76, 60, 0.1);
-    color: #e74c3c;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
 }
 
 .sidebar-quick-logout:hover {
-    background: #e74c3c;
-    color: white;
-    transform: scale(1.05);
+    background: rgba(231, 76, 60, 0.15);
+    color: #e74c3c;
+    transform: scale(1.08);
 }
 
 .logout-btn {
@@ -1812,7 +1848,7 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
     top: 0;
     z-index: 10;
     border-radius: 20px;
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--glass-bg);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.05);
@@ -2776,6 +2812,7 @@ body.page-manage-active .card:hover .icon-wrapper::after {
     font-size: 13px;
     font-weight: bold;
     transition: all 0.2s ease;
+    white-space: nowrap;
 }
 
 .batch-btn.delete {
@@ -4079,6 +4116,26 @@ body.page-manage-active .card:hover .card-admin-btns {
     transform: scale(1.1);
 }
 
+.card-delete-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.card-delete-btn:hover {
+    background: #e74c3c;
+    transform: scale(1.1);
+}
+
 .icon-btn-action {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -4371,7 +4428,7 @@ body.light-theme .notice-item {
     color: #888;
 }
 
-.form-group input, .form-group textarea {
+.form-group input, .form-group textarea, .form-group select {
     width: 100%;
     background: rgba(255,255,255,0.05);
     border: 1px solid var(--glass-border);
@@ -4380,6 +4437,7 @@ body.light-theme .notice-item {
     border-radius: 8px;
     font-size: 14px;
     transition: all 0.2s ease;
+    box-sizing: border-box;
 }
 
 .form-group input:focus, .form-group textarea:focus {
@@ -4417,10 +4475,12 @@ body.light-theme .icon-preview-box:hover {
 }
 
 body.light-theme .form-group input, 
-body.light-theme .form-group textarea {
-    background: #fff;
-    color: #2c3e50;
-    border-color: #ddd;
+body.light-theme .form-group textarea,
+body.light-theme .form-group select,
+body.light-theme .admin-search-body select {
+    background: #fff !important;
+    color: #2c3e50 !important;
+    border-color: #ddd !important;
 }
 
 /* Task 6.4: 针对公告管理编辑器的深度兼容性修复 - 增加原生媒体查询支持 */
@@ -4936,6 +4996,7 @@ body.admin-mode .sidebar-toggle {
     background: rgba(57, 157, 255, 0.1) !important;
 }
 
+/* 用户端悬浮批量工具栏 */
 .user-batch-bar {
     position: fixed;
     bottom: 30px;
@@ -4951,27 +5012,107 @@ body.admin-mode .sidebar-toggle {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     z-index: 2500;
     transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    max-width: 90vw;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .user-batch-bar.visible {
     transform: translateX(-50%) translateY(0);
 }
 
-.batch-action-btn {
+.batch-action-btn, 
+.user-batch-bar .batch-btn {
     background: rgba(255, 255, 255, 0.2);
     border: none;
-    color: white;
+    color: white !important;
     padding: 6px 15px;
     border-radius: 20px;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
 }
 
-.batch-action-btn:hover {
-    background: white;
-    color: var(--primary);
+.batch-action-btn:hover, 
+.user-batch-bar .batch-btn:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.user-batch-bar .batch-btn.danger {
+    background: rgba(231, 76, 60, 0.85);
+    color: white !important;
+}
+
+.user-batch-bar .batch-btn.danger:hover {
+    background: rgba(231, 76, 60, 1);
+}
+
+/* 后台管理一体化批量工具卡片 (Task NT-V2.5) */
+.admin-batch-bar {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px dashed var(--glass-border);
+    border-radius: 8px;
+    padding: 0 15px;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-bottom: 0;
+    box-sizing: border-box;
+}
+
+.admin-batch-bar.visible {
+    max-height: 100px;
+    opacity: 1;
+    padding: 10px 15px;
+    margin-bottom: 15px;
+}
+
+.admin-batch-bar span {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.admin-batch-bar .batch-btn {
+    background: var(--primary);
+    color: white !important;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.admin-batch-bar .batch-btn:hover {
+    background: var(--primary-hover, rgba(57, 157, 255, 0.8));
+    transform: translateY(-1px);
+}
+
+.admin-batch-bar .batch-btn.danger {
+    background: #e74c3c;
+}
+
+.admin-batch-bar .batch-btn.danger:hover {
+    background: #c0392b;
+}
+
+body.light-theme .admin-batch-bar {
+    background: rgba(0, 0, 0, 0.03);
 }
 
 /* 状态标签增强 */
@@ -4986,6 +5127,20 @@ body.admin-mode .sidebar-toggle {
 .status-badge.active { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
 .status-badge.frozen { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
 .status-badge.pending { background: rgba(241, 196, 15, 0.2); color: #f1c40f; }
+
+/* 公告状态样式适配 (Task NT.4) */
+.status-badge.published { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+.status-badge.draft { background: rgba(241, 196, 15, 0.2); color: #f1c40f; }
+.status-badge.archived { background: rgba(149, 165, 166, 0.2); color: #95a5a6; }
+
+/* 邀请码状态样式适配 */
+.status-badge.unused { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+.status-badge.used { background: rgba(149, 165, 166, 0.2); color: #95a5a6; }
+
+/* 用户角色与账户状态样式适配 */
+.status-badge.admin { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+.status-badge.super_user { background: rgba(52, 152, 219, 0.2); color: #3498db; }
+.status-badge.user { background: rgba(255, 255, 255, 0.1); color: var(--text-dim); }
 
 /* 亮色模式适配 */
 body.light-theme .admin-search-panel { background: rgba(0, 0, 0, 0.02); }

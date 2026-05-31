@@ -35,8 +35,98 @@ export async function onRequestPost(context) {
       .bind(admin.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config))
       .run();
 
+    // 即时高危告警 (Task N.5)
+    if (config.enableAdminInstantAlert) {
+      context.waitUntil(dispatchInstantAdminAlert('UPDATE_SITE_CONFIG', JSON.stringify(config), admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+    }
+
     return new Response(JSON.stringify({ success: true }));
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+  }
+}
+
+async function dispatchInstantAdminAlert(action, details, admin, ip, env) {
+  const subject = `【CloudNav 安全警报】管理员执行了业务级高危敏感操作`;
+  const text = `🚨 系统安全警报：管理员于后台执行了业务级高危敏感操作！\n\n` +
+               `👤 执行管理员: ${admin.username || '未知 (ID: ' + admin.id + ')'}\n` +
+               `🎬 操作行为: ${action}\n` +
+               `📝 详情细节: ${details}\n` +
+               `🌐 来源 IP: ${ip}\n` +
+               `🕒 发生时间: ${new Date().toLocaleString('zh-CN')} (本地时区)\n\n` +
+               `此消息为实时安全警报，仅派发至授权紧急告警的账户。`;
+
+  if (env.TELEGRAM_BOT_TOKEN) {
+    try {
+      const receivers = await env.DB.prepare(`
+        SELECT u.telegram_chat_id 
+        FROM users u 
+        JOIN user_settings s ON u.id = s.user_id 
+        WHERE s.is_alert_receiver = 1 AND u.telegram_chat_id IS NOT NULL
+      `).all();
+
+      if (receivers.results && receivers.results.length > 0) {
+        const htmlContent = text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+
+        for (const r of receivers.results) {
+          await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: r.telegram_chat_id,
+              text: `🚨 <b>${subject}</b>\n\n${htmlContent}`,
+              parse_mode: 'HTML'
+            })
+          }).catch(e => console.error('[TG Instant Alert] failed for', r.telegram_chat_id, e));
+        }
+      }
+      if (env.TELEGRAM_CHAT_ID) {
+        await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: env.TELEGRAM_CHAT_ID,
+            text: `🚨 <b>${subject}</b>\n\n${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}`,
+            parse_mode: 'HTML'
+          })
+        }).catch(e => console.error('[TG Global Instant Alert] failed', e));
+      }
+    } catch (e) {
+      console.error('[TG Alert] Send failed:', e);
+    }
+  }
+
+  if (env.RESEND_API_KEY) {
+    try {
+      const receivers = await env.DB.prepare(`
+        SELECT u.email 
+        FROM users u 
+        JOIN user_settings s ON u.id = s.user_id 
+        WHERE s.is_alert_receiver = 1 AND u.email IS NOT NULL
+      `).all();
+
+      if (receivers.results && receivers.results.length > 0) {
+        for (const r of receivers.results) {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              from: env.EMAIL_FROM || 'CloudNav Alerts <alerts@cloudnav.tech>',
+              to: r.email,
+              subject: subject,
+              text: text
+            })
+          }).catch(e => console.error('[Email Instant Alert] failed for', r.email, e));
+        }
+      }
+    } catch (e) {
+      console.error('[Email Alert] Send failed:', e);
+    }
   }
 }

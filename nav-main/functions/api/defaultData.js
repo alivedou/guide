@@ -9,7 +9,6 @@
 export const defaultData = {
   // 全局设置
   settings: { 
-    cardWidth: 125, 
     zenMode: false, 
     openInNewTab: true, 
     link_target: '_blank',
@@ -67,7 +66,7 @@ export const defaultData = {
  * 当外部模板和内置 defaultData 都损坏时的最终防线
  */
 export const MINIMAL_SAFE_DATA = {
-  settings: { cardWidth: 125, zenMode: true, openInNewTab: true, themeMode: "auto" },
+  settings: { zenMode: true, openInNewTab: true, themeMode: "auto" },
   categories: [
     { id: "f-cat-1", name: "常用搜索", icon: "🔍", hidden: false },
     { id: "f-cat-2", name: "影音视频", icon: "🎬", hidden: false },

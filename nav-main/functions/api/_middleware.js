@@ -1,10 +1,97 @@
 import * as jose from 'jose';
 
+async function sendEmailHelper(recipient, subject, content, env) {
+  if (env.RESEND_API_KEY) {
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: env.EMAIL_FROM || 'CloudNav Alerts <alerts@cloudnav.tech>',
+          to: recipient,
+          subject: subject,
+          text: content
+        })
+      });
+    } catch (e) {
+      console.error('[Email] Resend send failed:', e);
+    }
+  }
+}
+
+async function triggerExceptionAlert(err, request, env) {
+  const subject = `【CloudNav 紧急异常告警】边缘节点未捕获严重异常`;
+  const text = `🚨 系统于 Edge Network Serverless 运行时遇到了严重未捕获异常！\n\n` +
+               `异常消息: ${err.message || 'Unknown Error'}\n` +
+               `堆栈轨迹: ${err.stack || 'No Stack'}\n` +
+               `请求路径: ${request.url}\n` +
+               `触发客户端 IP: ${request.headers.get("cf-connecting-ip") || "unknown"}\n` +
+               `发生时间: ${new Date().toLocaleString('zh-CN')} (本地时区)\n\n` +
+               `本邮件由安全网关中间件自动触发，已将事件记录审计并告警分发。`;
+
+  // 1. 发送 Telegram Bot
+  if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+    try {
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: env.TELEGRAM_CHAT_ID,
+          text: `🚨 <b>${subject}</b>\n\n${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}`,
+          parse_mode: 'HTML'
+        })
+      });
+    } catch (e) {
+      console.error('[TG] Failed to send Telegram alert:', e);
+    }
+  }
+
+  // 2. 查询授权接收的管理员邮箱进行派发
+  try {
+    const receivers = await env.DB.prepare(`
+      SELECT u.email 
+      FROM users u 
+      JOIN user_settings s ON u.id = s.user_id 
+      WHERE s.is_alert_receiver = 1 AND u.email IS NOT NULL
+    `).all();
+    
+    if (receivers.results && receivers.results.length > 0) {
+      for (const r of receivers.results) {
+        await sendEmailHelper(r.email, subject, text, env);
+      }
+    }
+  } catch (e) {
+    console.error('[Email] Failed to query receivers or send email:', e);
+  }
+}
+
 /**
  * 权限中心中间件
  * 负责解析 JWT 并进行初步的角色检查
  */
 export async function onRequest(context) {
+  const { request, env, next } = context;
+  
+  try {
+    return await handleRequest(context);
+  } catch (err) {
+    // 异步执行告警，不阻塞客户端主线程，实现极限非阻塞体验 (Task N.3)
+    context.waitUntil(triggerExceptionAlert(err, request, env));
+    
+    return new Response(JSON.stringify({ 
+      error: "Internal Server Error", 
+      message: "系统检测到边缘运行期发生未捕获严重异常。事件已安全审计并自动发送紧急告警至管理员。" 
+    }), { 
+      status: 500, 
+      headers: { "Content-Type": "application/json" } 
+    });
+  }
+}
+
+async function handleRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
   const path = url.pathname;

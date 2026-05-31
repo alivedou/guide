@@ -57,6 +57,54 @@
 - [x] **Task NT.1: 开放全站公告路由并将接口纳入安全白名单** (在 _middleware.js 中注册公开路由，使游客能安全无阻地读取全站公告数据)
 - [x] **Task NT.2: 实现 Cloudflare D1 联合已读状态查询与 read 批量写入接口** (在 D1 层面联合 announcement_read_states 表查询多端同步状态，并新增 read.js 进行云端已读存储)
 - [x] **Task NT.3: 重构前端红点与横幅逻辑，完美分流游客与登录态交互机制** (游客态置顶公告会话级可关闭、刷新或再次进入时强制重新显现以引导注册，小红点恒定保留；登录态多设备同步已读状态，关闭立即消除)
+- [x] **Task NT.4: 补全管理中心所有公告/邀请码/角色的状态标签高对比度材质，解决可读性障碍** (为 published, draft, archived, unused, used, admin, super_user, user 补齐高亮磨砂背景，彻底统一表格视觉语调)
+
+## 📹 Phase Video: 视频导航与单卡片高频管理 (Video Navigation & Individual Card Delete)
+- [x] **Task V.1: 书签卡片悬浮“垃圾桶”单删功能与局部重绘** (追加 .card-delete-btn 按钮并实现 deleteItem(id) 单删逻辑与确认气泡)
+- [x] **Task V.2: 侧边栏分类“视频模式”一键切换功能** (追加 ri-video-line/fill 分类操作按钮并绑定 toggleCategoryVideoMode(catId))
+- [x] **Task V.3: 视频卡片自适应渲染与免流量 YouTube 封面提取** (若分类开启视频模式，卡片重排为 .video-card，自适应提取 YouTube 高画质封面与 Bilibili 专属徽章)
+- [x] **Task V.4: 视频无缝内嵌预览播放弹窗与时效销毁** (常规态点击视频卡片直接拉起 #video-modal 播放，且点击遮罩或 Esc 时，清空 iframe 杜绝后台残留播放音频)
+
+## ✉️ Phase Notify: 个人资料与通知渠道授权 (User Profile & Notification Authorization)
+- [x] **Task N.1: 数据库迁移与个人资料中心实现** (migrations 库表扩展，后端 `/api/user/profile` 的 CF 与本地 Mock 路由及前端绑定邮箱模态窗)
+- [x] **Task N.2: 后台“角色授权”关联邮件显示与通知开关** (角色管理中显示绑定邮箱并支持 [ ] 授权接收安全告警 与 [ ] 授权接收审计日报 更改写入 D1)
+- [x] **Task N.3: 后端异常告警分发机制与定时审计 Cron 实现** (在 Cloudflare scheduled trigger 下定时读取 D1 24h 日志发送 Markdown 邮件，并在核心错误拦截器实现 Telegram/Email 即时告警分发)
+- [x] **Task N.4: “微光一体化用户卡片”视觉美构与折叠对齐** (重构 sidebar-user-card 样式，整合头像圆形渐变框、内嵌式退出按钮，以及悬浮呼吸光晕效果)
+- [x] **Task N.5: 后台高危操作即时通知开关与业务级安全告警机制** (系统安全配置中追加“即时告警推送”开关控制，当开启时，管理员修改配置、变动权限、重置密码或销号时自动触发毫秒级 TG & 邮箱私信安全告警)
 
 ---
 *注：之前的基础建设 Phase 1-3 已成功执行。*
+
+## 🎨 Phase LM: 明亮模式视觉兼容性修复与精细优化 (Light Mode Visual Compatibility & Refinements)
+- [x] **Task LM.1: 优化系统配置注册策略与告警标签文字** (将“开放注册”、“强制邀请码”和“即时告警推送”的硬编码白色修改为 `color: var(--text);`)
+- [x] **Task LM.2: 优化公告管理中心编辑器标题文字** (将公告编辑器头部的 “发布新公告 / 修改公告” 标题的硬编码白色样式修改为 `color: var(--text);`)
+- [x] **Task LM.3: 统合批量操作栏样式与按钮高对比度** (在 CSS 中统合 `.admin-batch-bar` 与 `.user-batch-bar` 样式定位与深色背景，优化 `.batch-btn` 在暗/亮主题下的可见性，为批量删除定义高醒目度红色 `.danger`)
+- [x] **Task LM.4: 优化本地备份与导出单选框文字** (将本地导出数据弹窗中多处选项标题的硬编码白色修改为 `color: var(--text);`，消除亮色模式下的视觉遮挡)
+
+## 📢 Phase NT-V2: 公告中心与批量操作栏精细化补强 (Announcements & Batch Bar Refinements)
+- [x] **Task NT-V2.1: 彻底修复后端“草稿功能”失效并增强前端存为草稿联动** (解构并保存 `status` 状态字段；前端勾选存为草稿时，保存按钮文字智能联动为“保存为草稿”，未勾选恢复为“发布公告”)
+- [x] **Task NT-V2.2: 公告层级精简命名为“静默通知”与“横幅通知”并汉化审计** (公告显示层级去掉括号等冗余文字，并在后端审计详情 details 中加入对应的汉化中文修饰)
+- [x] **Task NT-V2.3: 解决批量按钮文字变竖缺陷并强化其自适应** (CSS中为 `.batch-btn` 强制设定 `white-space: nowrap;` 永不竖行排布，优化悬浮条在窄屏下的流式换行自适应)
+
+- [x] **Task NT-V2.4: 彻底修复后端公告 DELETE 类型匹配失效与 PATCH 缺失其它字段被清空的缺陷** (后端 `DELETE` 增加 `Number` 整型转换，`PATCH` 升级为高扩展的动态局部更新，彻底解决批量删除与批量状态操作失效问题)
+- [x] **Task NT-V2.5: 将前端公告与邀请码批量栏整合并风格统合至搜索与表格控制组** (摒弃悬浮药丸样式，将其改造成紧贴表格上方、拥有相同玻璃边框与背景、根据选中数弹性折叠/展开的 inline 一体化工具卡片)
+
+- [x] **Task NT-V2.6: 重构用户管理批量工具栏为静态整合卡片** (将 `admin-user-batch-bar` 改为表格上方静态内嵌卡片，删除 JS 动态 append 冗余代码，并配以 `[ri-download-2-line] CSV 批量导出` 规范微光胶囊按钮)
+- [x] **Task NT-V2.7: 为审计日志增设同款一体化控制卡片** (设计并加入静态磨砂控制栏，配以 `[ri-download-2-line] 导出过滤日志 (CSV)` 动作，实现安全审计与全后台视觉风格的大一统)
+- [x] **Task NT-V2.8: 完成全站配置菜单与角色授权的像素级高保真微调** (解决系统配置的角色授权及所有子 Tab 输入控件在明亮模式下的文字遮挡及边缘微调，达成极致的后台视觉闭环)
+
+- [x] **Task NT-V2.9: 补齐 SyncUI 动作反馈引擎中缺失的批量词条** (在反馈矩阵中添加对 `'ADMIN_ANNOUNCE'` 与 `'INVITE_BATCH'` 声明，彻底修复批量删除公告时 `loading of undefined` 阻断崩溃)
+- [x] **Task NT-V2.10: 对全局键盘监听 e.key 实施非空防御** (解决全域 `keydown` 事件在中文输入法输入期间由于 `e.key` 未定义调用 `toLowerCase()` 产生的崩溃报错)
+
+- [x] **Task NT-V2.11: 解决卡片尺寸与个性化密度不一致缺陷** (清除 `:root` 行内尺寸硬编码强制强占权并彻底交还给 CSS 密度控制，清洗后端默认配置 `defaultData.js` 的 `cardWidth` 冲突设置)
+- [x] **Task NT-V2.12: 全数据流通路智能清洗 cardWidth 配置保障布局物理稳定** (前端 JSON 备份导出、专家模式配置导入以及标准配置导入时一律智能过滤删除 Settings 内的 `cardWidth` 字段，彻底隔绝老数据回灌导致的局部排版错乱风险)
+- [x] **Task NT-V2.13: 前端补齐 MINIMAL_SAFE_DATA 兜底** (补齐缺失的全局防空变量声明，规避离线及异常情况下的 `ReferenceError`)
+
+- [x] **Task NT-V2.14: 6级自愈引擎终极保底支持首汉字或首字母提取** (在渲染卡片和搜索列表时注入 `data-title` 属性，当所有 Favicon 接口失效时，终极保底能够高智商、美观地展现书签的首字汉字或首个英文字母)
+- [x] **Task NT-V2.15: Emoji 选择框输入域名智能推荐 Favicon 磁贴与预览** (在选择器内输入含有 `.` 明显的域名时，自动于网格顶端置顶生成高精细智能 Favicon 推荐选项，并可在选择时即时触发编辑弹窗内的图片高保真渲染预览)
+- [x] **Task NT-V2.16: 魔法棒填充智能转换为全域极速互通通用 Favicon 代理源** (触发魔法抓取时，将原始易裂开的目标站内图标自动重塑推荐为中国大陆和世界均能畅通无阻、秒开不裂的 `favicon.qqsuu.cn` 高稳定图标源)
+
+- [x] **Task NT-V2.17: 彻底修复管理员登录态生命周期失效死锁Bug** (解决由于长时间不操作、开发者禁用缓存刷新 (Ctrl+F5) 等情况下，系统初首载与缓存秒开渲染未对齐已保存 currentUser 凭证导致 `isAdmin` 重置为 `false` 的权限失效缺陷)
+
+- [x] **Task NT-V2.18: 建立大一统核验子弹窗并修补 REQUIREMENTS 需求文档** (在 `REQUIREMENTS.md` 需求文档中深度整理补充 5 大高危特权操作的安全规约；并在 `index.html` 中静态追加高层级磨砂密码二次核验弹窗，实现 100% 结构复用与 0 开销)
+- [x] **Task NT-V2.19: Promise 异步拦截重构全站 4 大敏感高危操作** (全面对接 `window.requireAdminAuth` 密码自锁拦截器，彻底剿灭原先暴露明文密码且界面割裂的浏览器原生 `prompt()` 弹窗，实现安全性和体验的极致跃升)

@@ -204,6 +204,23 @@
         </div>
     </div>
 
+    <!-- 管理员高危操作二次验证弹窗 (Task NT-V2.18) -->
+    <div id="admin-auth-modal" class="modal" style="z-index: 11000;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; position: relative;">
+            <div style="font-size: 32px; color: #f1c40f; margin-bottom: 15px;"><i class="ri-shield-keyhole-line"></i></div>
+            <h4 id="auth-modal-title" style="margin-bottom:10px; font-size:16px; color: var(--text);">管理员二次核验</h4>
+            <p id="auth-modal-message" style="font-size:12px; color: var(--text-dim); margin-bottom: 20px; line-height: 1.5;"></p>
+            <div class="form-group" style="text-align: left;">
+                <label>验证密码</label>
+                <input type="password" id="auth-modal-password" placeholder="请输入管理员密码..." style="width: 100%;">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button id="btn-auth-cancel" class="tab-btn" style="flex: 1;">取消</button>
+                <button id="btn-auth-confirm" class="tab-btn active" style="flex: 1;">确认</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 视频播放弹窗 -->
     <div id="video-modal" class="modal">
         <div class="video-modal-content">

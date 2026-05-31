@@ -750,13 +750,13 @@ app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
     const status = req.query.status || '';
 
     try {
-        let query = 'SELECT id, uid, username, role, status, last_login, created_at FROM users WHERE 1=1';
+        let query = 'SELECT u.id, u.uid, u.username, u.role, u.status, u.last_login, u.created_at, u.email, s.is_alert_receiver, s.is_digest_receiver FROM users u LEFT JOIN user_settings s ON u.id = s.user_id WHERE 1=1';
         let countQuery = 'SELECT COUNT(*) as total FROM users WHERE 1=1';
         let params = [];
 
         if (keyword) {
             const kw = `%${keyword}%`;
-            query += ' AND (username LIKE ? OR uid LIKE ?)';
+            query += ' AND (u.username LIKE ? OR u.uid LIKE ?)';
             countQuery += ' AND (username LIKE ? OR uid LIKE ?)';
             params.push(kw, kw);
         }
@@ -776,7 +776,7 @@ app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
         const adminCount = adminCountRow ? adminCountRow.count : 0;
 
         // 排序与分页
-        query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        query += ' ORDER BY u.created_at DESC LIMIT ? OFFSET ?';
         const users = db.prepare(query).bind(...params, pageSize, (page - 1) * pageSize).all();
         
         res.json({ 
@@ -795,7 +795,7 @@ app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
 });
 
 app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
-    const { userId, status, role, adminPassword } = req.body;
+    const { userId, status, role, adminPassword, isAlertReceiver, isDigestReceiver } = req.body;
     try {
         // Task 3.1: 二次身份验证
         if (adminPassword) {
@@ -804,6 +804,13 @@ app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
             if (adminUser.password_hash !== adminHash) {
                 return res.status(401).json({ error: '管理员身份验证失败' });
             }
+        }
+
+        if (isAlertReceiver !== undefined) {
+            db.prepare('UPDATE user_settings SET is_alert_receiver = ? WHERE user_id = ?').run(isAlertReceiver ? 1 : 0, userId);
+        }
+        if (isDigestReceiver !== undefined) {
+            db.prepare('UPDATE user_settings SET is_digest_receiver = ? WHERE user_id = ?').run(isDigestReceiver ? 1 : 0, userId);
         }
 
         if (status) {
@@ -835,6 +842,61 @@ app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: '更新用户失败', details: e.message });
+    }
+});
+
+// ====== 4.4 定时审计日报 API (Task N.3) ======
+
+app.get('/api/admin/cron-digest', authenticate, adminOnly, (req, res) => {
+    try {
+        // 查询 24 小时内增量审计日志 (使用 local SQLite)
+        const logs = db.prepare(`
+            SELECT l.id, u.username, l.action, l.details, l.ip, l.created_at 
+            FROM audit_logs l 
+            LEFT JOIN users u ON l.user_id = u.id 
+            WHERE l.created_at >= datetime('now', '-1 day') 
+            ORDER BY l.created_at DESC
+        `).all();
+
+        if (logs.length === 0) {
+            return res.json({ success: true, message: "过去 24 小时内无任何高危审计日志，不发送空日报" });
+        }
+
+        const reportSubject = `【CloudNav 每日审计日报】增量管理日志摘要`;
+        let reportText = `您好，这是过去 24 小时内生成的系统审计日志增量汇总：\n\n`;
+        reportText += `📊 日志条数: ${logs.length} 条\n`;
+        reportText += `----------------------------------------\n\n`;
+
+        logs.forEach((log, index) => {
+            reportText += `[${index + 1}] 操作行为: ${log.action}\n`;
+            reportText += `    👤 操作用户: ${log.username || '未知 (ID: ' + log.user_id + ')'}\n`;
+            reportText += `    🌐 来源 IP: ${log.ip || 'unknown'}\n`;
+            reportText += `    🕒 操作时间: ${log.created_at} (UTC)\n`;
+            reportText += `    📝 详情细节: ${log.details || ''}\n\n`;
+        });
+
+        // 查询授权接收日报的用户
+        const receivers = db.prepare(`
+            SELECT u.email, u.telegram_chat_id 
+            FROM users u 
+            JOIN user_settings s ON u.id = s.user_id 
+            WHERE s.is_digest_receiver = 1
+        `).all();
+
+        console.log(`\n📬 =================== ${reportSubject} ===================`);
+        console.log(reportText);
+        console.log(`授权接收用户数: ${receivers.length} 个`);
+        console.log(`分发邮箱列表: ${receivers.filter(r => r.email).map(r => r.email).join(', ') || '无'}`);
+        console.log(`分发 TG 账号列表: ${receivers.filter(r => r.telegram_chat_id).map(r => r.telegram_chat_id).join(', ') || '无'}`);
+        console.log(`=========================================================\n`);
+
+        res.json({ 
+            success: true, 
+            message: `[Mock] 每日审计日报打包成功！已模拟打印至控制台。授权用户数: ${receivers.length}`,
+            receivers: receivers.map(r => ({ email: r.email, tg: r.telegram_chat_id }))
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
@@ -1026,6 +1088,90 @@ app.delete('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: '删除公告失败', details: e.message });
+    }
+});
+
+// ====== 4.4 个人资料 API (Task N.1) ======
+
+app.get('/api/user/profile', authenticate, (req, res) => {
+    if (req.user.id === 'guest') {
+        return res.status(401).json({ error: 'Unauthorized', code: 'ERR_UNAUTHORIZED' });
+    }
+    try {
+        const user = db.prepare('SELECT id, uid, username, email, telegram_chat_id, role FROM users WHERE id = ?').get(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        
+        res.json({
+            success: true,
+            uid: user.uid,
+            username: user.username,
+            email: user.email || '',
+            telegramChatId: user.telegram_chat_id || '',
+            role: user.role
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/user/profile', authenticate, async (req, res) => {
+    if (req.user.id === 'guest') {
+        return res.status(401).json({ error: 'Unauthorized', code: 'ERR_UNAUTHORIZED' });
+    }
+    try {
+        const { username, email, telegramChatId, password, newPassword } = req.body;
+        if (!username || !username.trim()) {
+            return res.status(400).json({ error: '用户名不能为空' });
+        }
+
+        const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        if (newPassword && newPassword.trim()) {
+            if (!password) {
+                return res.status(400).json({ error: '修改密码需要输入原密码' });
+            }
+            const oldHash = crypto.createHash('sha256').update(password).digest('hex');
+            if (user.password_hash !== oldHash) {
+                return res.status(401).json({ error: '原密码验证失败' });
+            }
+        }
+
+        // 检测用户名冲突
+        const collide = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username.trim(), req.user.id);
+        if (collide) {
+            return res.status(400).json({ error: '用户名已被其他用户使用' });
+        }
+
+        if (email && email.trim()) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email.trim())) {
+                return res.status(400).json({ error: '邮箱格式不正确' });
+            }
+        }
+
+        db.transaction(() => {
+            if (newPassword && newPassword.trim()) {
+                const newHash = crypto.createHash('sha256').update(newPassword).digest('hex');
+                db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ? WHERE id = ?')
+                  .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, req.user.id);
+            } else {
+                db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ? WHERE id = ?')
+                  .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, req.user.id);
+            }
+        })();
+
+        // 同步更新本地 JSON 缓存中的用户名
+        const kvPath = path.join(__dirname, 'local_kv', `user_${req.user.id}.json`);
+        if (fs.existsSync(kvPath)) {
+            let data = JSON.parse(fs.readFileSync(kvPath, 'utf-8'));
+            data.username = username.trim();
+            fs.writeFileSync(kvPath, JSON.stringify(data, null, 4));
+        }
+
+        res.json({ success: true, message: '个人资料修改成功' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 

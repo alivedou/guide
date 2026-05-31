@@ -17,13 +17,13 @@ export async function onRequestGet(context) {
   
   // 权限已经在 _middleware.js 校验过，这里只需处理业务逻辑
   try {
-    let query = 'SELECT id, uid, username, role, status, last_login, created_at FROM users WHERE 1=1';
+    let query = 'SELECT u.id, u.uid, u.username, u.role, u.status, u.last_login, u.created_at, u.email, u.telegram_chat_id, s.is_alert_receiver, s.is_digest_receiver FROM users u LEFT JOIN user_settings s ON u.id = s.user_id WHERE 1=1';
     let countQuery = 'SELECT COUNT(*) as total FROM users WHERE 1=1';
     let params = [];
 
     if (keyword) {
       const kw = `%${keyword}%`;
-      query += ' AND (username LIKE ? OR uid LIKE ?)';
+      query += ' AND (u.username LIKE ? OR u.uid LIKE ?)';
       countQuery += ' AND (username LIKE ? OR uid LIKE ?)';
       params.push(kw, kw);
     }
@@ -43,7 +43,7 @@ export async function onRequestGet(context) {
     const adminCount = adminCountRow ? adminCountRow.count : 0;
 
     // 分页查询
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    query += ' ORDER BY u.created_at DESC LIMIT ? OFFSET ?';
     const finalParams = [...params, pageSize, (page - 1) * pageSize];
     
     const users = await env.DB.prepare(query).bind(...finalParams).all();
@@ -70,7 +70,7 @@ export async function onRequestPatch(context) {
   const admin = data.user;
   
   try {
-    const { userId, status, role, newPassword, adminPassword } = await request.json();
+    const { userId, status, role, newPassword, adminPassword, isAlertReceiver, isDigestReceiver } = await request.json();
     if (!userId) throw new Error("Missing userId");
 
     // Task UM.8.2 & Task 3.1: 强制敏感操作进行二次身份验证
@@ -82,6 +82,14 @@ export async function onRequestPatch(context) {
     const adminHash = await sha256(adminPassword);
     if (adminUser.password_hash !== adminHash) {
       return new Response(JSON.stringify({ error: "管理员身份验证失败，请检查密码" }), { status: 401 });
+    }
+
+    // 4. 更新通知授权设置
+    if (isAlertReceiver !== undefined) {
+      await env.DB.prepare('UPDATE user_settings SET is_alert_receiver = ? WHERE user_id = ?').bind(isAlertReceiver ? 1 : 0, userId).run();
+    }
+    if (isDigestReceiver !== undefined) {
+      await env.DB.prepare('UPDATE user_settings SET is_digest_receiver = ? WHERE user_id = ?').bind(isDigestReceiver ? 1 : 0, userId).run();
     }
 
     // 1. 更新用户状态
@@ -141,6 +149,21 @@ export async function onRequestPatch(context) {
         .run();
     }
 
+    // 高危操作即时告警判定 (Task N.5)
+    const configStr = await env.nav.get("system:site_config");
+    const config = configStr ? JSON.parse(configStr) : {};
+    if (config.enableAdminInstantAlert) {
+      if (status) {
+        context.waitUntil(dispatchInstantAdminAlert('CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+      }
+      if (newPassword) {
+        context.waitUntil(dispatchInstantAdminAlert('RESET_PASSWORD', `Force reset password for user ${userId}`, admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+      }
+      if (role) {
+        context.waitUntil(dispatchInstantAdminAlert('CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+      }
+    }
+
     return new Response(JSON.stringify({ success: true }));
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
@@ -174,8 +197,100 @@ export async function onRequestDelete(context) {
       .bind(admin.id, 'DELETE_USER', `Deleted user account ${userId}`, request.headers.get("cf-connecting-ip") || "unknown")
       .run();
 
+    // 高危操作即时告警判定 (Task N.5)
+    const configStr = await env.nav.get("system:site_config");
+    const config = configStr ? JSON.parse(configStr) : {};
+    if (config.enableAdminInstantAlert) {
+      context.waitUntil(dispatchInstantAdminAlert('DELETE_USER', `Deleted user account ${userId}`, admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+    }
+
     return new Response(JSON.stringify({ success: true }));
   } catch (e) {
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+  }
+}
+
+async function dispatchInstantAdminAlert(action, details, admin, ip, env) {
+  const subject = `【CloudNav 安全警报】管理员执行了业务级高危敏感操作`;
+  const text = `🚨 系统安全警报：管理员于后台执行了业务级高危敏感操作！\n\n` +
+               `👤 执行管理员: ${admin.username || '未知 (ID: ' + admin.id + ')'}\n` +
+               `🎬 操作行为: ${action}\n` +
+               `📝 详情细节: ${details}\n` +
+               `🌐 来源 IP: ${ip}\n` +
+               `🕒 发生时间: ${new Date().toLocaleString('zh-CN')} (本地时区)\n\n` +
+               `此消息为实时安全警报，仅派发至授权紧急告警的账户。`;
+
+  if (env.TELEGRAM_BOT_TOKEN) {
+    try {
+      const receivers = await env.DB.prepare(`
+        SELECT u.telegram_chat_id 
+        FROM users u 
+        JOIN user_settings s ON u.id = s.user_id 
+        WHERE s.is_alert_receiver = 1 AND u.telegram_chat_id IS NOT NULL
+      `).all();
+
+      if (receivers.results && receivers.results.length > 0) {
+        const htmlContent = text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+
+        for (const r of receivers.results) {
+          await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: r.telegram_chat_id,
+              text: `🚨 <b>${subject}</b>\n\n${htmlContent}`,
+              parse_mode: 'HTML'
+            })
+          }).catch(e => console.error('[TG Instant Alert] failed for', r.telegram_chat_id, e));
+        }
+      }
+      if (env.TELEGRAM_CHAT_ID) {
+        await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: env.TELEGRAM_CHAT_ID,
+            text: `🚨 <b>${subject}</b>\n\n${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}`,
+            parse_mode: 'HTML'
+          })
+        }).catch(e => console.error('[TG Global Instant Alert] failed', e));
+      }
+    } catch (e) {
+      console.error('[TG Alert] Send failed:', e);
+    }
+  }
+
+  if (env.RESEND_API_KEY) {
+    try {
+      const receivers = await env.DB.prepare(`
+        SELECT u.email 
+        FROM users u 
+        JOIN user_settings s ON u.id = s.user_id 
+        WHERE s.is_alert_receiver = 1 AND u.email IS NOT NULL
+      `).all();
+
+      if (receivers.results && receivers.results.length > 0) {
+        for (const r of receivers.results) {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              from: env.EMAIL_FROM || 'CloudNav Alerts <alerts@cloudnav.tech>',
+              to: r.email,
+              subject: subject,
+              text: text
+            })
+          }).catch(e => console.error('[Email Instant Alert] failed for', r.email, e));
+        }
+      }
+    } catch (e) {
+      console.error('[Email Alert] Send failed:', e);
+    }
   }
 }

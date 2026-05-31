@@ -60,17 +60,18 @@ export async function onRequestPost(context) {
   const admin = data.user;
   
   try {
-    const { title, content, type, is_top, expire_at } = await request.json();
+    const { title, content, type, is_top, expire_at, status } = await request.json();
     await env.DB.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(admin.id, title, content, type, is_top ? 1 : 0, expire_at || null, 'published')
+      .bind(admin.id, title, content, type, is_top ? 1 : 0, expire_at || null, status || 'published')
       .run();
 
     // Task 6.6: 更新全局公告版本号 (KV)
     await env.nav.put('announcements_last_update', Date.now().toString());
 
     // 记录审计日志
+    const typeLabel = type === 'important' ? '横幅通知' : '静默通知';
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .bind(admin.id, 'CREATE_ANNOUNCEMENT', `Created announcement: ${title}`, request.headers.get("cf-connecting-ip") || "unknown")
+      .bind(admin.id, 'CREATE_ANNOUNCEMENT', `Created announcement: [${typeLabel}] ${title}`, request.headers.get("cf-connecting-ip") || "unknown")
       .run();
 
     return new Response(JSON.stringify({ success: true }));
@@ -84,14 +85,48 @@ export async function onRequestPatch(context) {
   const admin = data.user;
   
   try {
-    const { id, title, content, type, is_top, expire_at } = await request.json();
+    const payload = await request.json();
+    const { id } = payload;
     if (!id) return new Response(JSON.stringify({ error: "Missing ID" }), { status: 400 });
 
     const targetId = Number(id);
-    const finalExpire = (expire_at && expire_at.trim() !== '') ? expire_at : null;
+    const updates = [];
+    const params = [];
+    
+    if (payload.title !== undefined) {
+        updates.push('title = ?');
+        params.push(payload.title);
+    }
+    if (payload.content !== undefined) {
+        updates.push('content = ?');
+        params.push(payload.content);
+    }
+    if (payload.type !== undefined) {
+        updates.push('type = ?');
+        params.push(payload.type);
+    }
+    if (payload.is_top !== undefined) {
+        updates.push('is_top = ?');
+        params.push(payload.is_top ? 1 : 0);
+    }
+    if (payload.expire_at !== undefined) {
+        updates.push('expire_at = ?');
+        params.push((payload.expire_at && payload.expire_at.trim() !== '') ? payload.expire_at : null);
+    }
+    if (payload.status !== undefined) {
+        updates.push('status = ?');
+        params.push(payload.status);
+    }
 
-    const result = await env.DB.prepare('UPDATE announcements SET title = ?, content = ?, type = ?, is_top = ?, expire_at = ? WHERE id = ?')
-      .bind(title, content, type, is_top ? 1 : 0, finalExpire, targetId)
+    if (updates.length === 0) {
+        return new Response(JSON.stringify({ error: "No fields to update" }), { status: 400 });
+    }
+
+    params.push(targetId);
+    const sql = `UPDATE announcements SET ${updates.join(', ')} WHERE id = ?`;
+
+    const result = await env.DB.prepare(sql)
+      .bind(...params)
       .run();
 
     if (!result.success) {
@@ -102,8 +137,11 @@ export async function onRequestPatch(context) {
     await env.nav.put('announcements_last_update', Date.now().toString());
 
     // 记录审计日志
+    const typeLabel = payload.type !== undefined ? (payload.type === 'important' ? '横幅通知' : '静默通知') : '';
+    const detailsExtra = typeLabel ? `, Type: ${typeLabel}` : '';
+    const statusExtra = payload.status !== undefined ? `, Status: ${payload.status}` : '';
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .bind(admin.id, 'UPDATE_ANNOUNCEMENT', `Updated announcement ID: ${id}, Title: ${title}`, request.headers.get("cf-connecting-ip") || "unknown")
+      .bind(admin.id, 'UPDATE_ANNOUNCEMENT', `Updated announcement ID: ${id}${detailsExtra}${statusExtra}`, request.headers.get("cf-connecting-ip") || "unknown")
       .run();
 
     return new Response(JSON.stringify({ success: true }));
@@ -121,15 +159,17 @@ export async function onRequestDelete(context) {
     const { id } = await request.json();
     if (!id) throw new Error("Missing ID");
 
+    const targetId = Number(id);
+
     // 权限检查
     if (admin.role !== 'admin') {
-      const target = await env.DB.prepare('SELECT creator_id FROM announcements WHERE id = ?').bind(id).first();
+      const target = await env.DB.prepare('SELECT creator_id FROM announcements WHERE id = ?').bind(targetId).first();
       if (!target || target.creator_id !== admin.id) {
         return new Response(JSON.stringify({ error: "权限不足：您只能删除自己发布的公告" }), { status: 403 });
       }
     }
 
-    await env.DB.prepare('DELETE FROM announcements WHERE id = ?').bind(id).run();
+    await env.DB.prepare('DELETE FROM announcements WHERE id = ?').bind(targetId).run();
 
     // Task 6.6: 更新全局公告版本号 (KV)
     await env.nav.put('announcements_last_update', Date.now().toString());

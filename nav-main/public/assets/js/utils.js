@@ -86,7 +86,17 @@ const handleIconError = (img, originalUrl) => {
         console.error(`[IconHeal] All fallbacks failed for ${domain}, using text placeholder.`);
         const parent = img.parentElement;
         if (parent) {
-            const char = domain.charAt(0).toUpperCase() || '🔗';
+            const title = img.getAttribute('data-title') || '';
+            let char = '';
+            if (title && title.trim() !== '') {
+                char = title.trim().charAt(0);
+                // 如果是单英文字母，强制大写以保持规整美观
+                if (/^[a-zA-Z]$/.test(char)) {
+                    char = char.toUpperCase();
+                }
+            } else {
+                char = domain.charAt(0).toUpperCase() || '🔗';
+            }
             const span = document.createElement('span');
             span.className = 'emoji-icon';
             span.innerText = char;

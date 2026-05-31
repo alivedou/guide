@@ -9,8 +9,16 @@ const getCoreDataFingerprint = (data) => {
 };
 
 // ==================== 全局状态 ====================
+const MINIMAL_SAFE_DATA = {
+    settings: { zenMode: false, openInNewTab: true, themeMode: "auto" },
+    categories: [
+        { id: "f-cat-1", name: "常用搜索", icon: "🔍", hidden: false }
+    ],
+    items: []
+};
+
 let appData = { 
-    settings: { cardWidth: 85, zenMode: false, isolatedView: false }, 
+    settings: { zenMode: false, isolatedView: false }, 
     categories: [
         { id: 'temp_init', name: '加载中...', icon: '⌛' }
     ], 
@@ -19,7 +27,7 @@ let appData = {
 let activeCatId = 'temp_init';
 let sysToken = localStorage.getItem('nav_token') || '';
 let currentUser = JSON.parse(localStorage.getItem('nav_current_user') || 'null'); // Task 39.4
-let isAdmin = false;
+let isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_user'); // Task NT-V2.17: 根据持久化凭证智能对齐管理员权限状态
 let isZenTempExpanded = true;
 let isActuallyZen = false;
 let isRendering = false; // 渲染防抖锁
@@ -50,6 +58,7 @@ let adminAnnounceFilters = { page: 1, pageSize: 20, keyword: '', status: '', typ
 let adminSelectedAnnounceIds = new Set(); // Task AN.3: 选中的公告 ID
 let adminInviteFilters = { page: 1, pageSize: 20, keyword: '', status: '' }; // Task STD.2: 邀请码筛选
 let adminSelectedInviteIds = new Set(); // Task STD.2: 选中的邀请码
+let adminSelectedAuditIds = new Set(); // Task NT-V2.10: 选中的审计日志
 let adminAuditFilters = { page: 1, pageSize: 20, keyword: '', actionType: '' }; // Task STD.3: 审计日志筛选
 let adminData = { users: [], invitations: [], announcements: [], logs: [], pagination: {} }; // 管理员全站数据缓存
 
@@ -89,7 +98,9 @@ const SyncUI = {
             };
         },
         'BACKUP_MANUAL': { loading: '正在执行手动云端备份...', success: '备份完成，你的数据已在云端安全存档' },
-        'CLIPBOARD': { loading: '正在准备数据...', success: '内容已加密复制至剪贴板' }
+        'CLIPBOARD': { loading: '正在准备数据...', success: '内容已加密复制至剪贴板' },
+        'ADMIN_ANNOUNCE': { loading: '正在批量处理公告中...', success: '批量操作完成' },
+        'INVITE_BATCH': { loading: '正在批量下架邀请凭证...', success: '批量操作完成' }
     },
 
     // 2. 统一动作包装器
@@ -572,10 +583,15 @@ const updateStyles = () => {
     document.body.classList.toggle('view-isolated', isEffectivelyIsolated);
     document.body.classList.toggle('zen-active', isZen);
 
-    // 4. 处理卡片宽度 (兼容旧配置)
-    const w = appData.settings?.cardWidth || (density === 'compact' ? 70 : (density === 'comfortable' ? 110 : 85));
-    document.documentElement.style.setProperty('--card-w', w + 'px');
-    document.documentElement.style.setProperty('--card-h', w + 'px');
+    // 4. 处理卡片宽度 (彻底与 CSS 密度规范一致)
+    const w = appData.settings?.cardWidth;
+    if (!w) {
+        document.documentElement.style.removeProperty('--card-w');
+        document.documentElement.style.removeProperty('--card-h');
+    } else {
+        document.documentElement.style.setProperty('--card-w', w + 'px');
+        document.documentElement.style.setProperty('--card-h', w + 'px');
+    }
 
     // 5. 处理禅意静默态逻辑 (Task 4.6.1) - 存在打开的弹窗时，强制禁用静默态以保留背景和操作面板 (Task NT.4)
     const isModalOpen = (document.getElementById('edit-modal')?.style.display === 'flex') || 
@@ -832,6 +848,121 @@ const openVisualLab = () => {
         modal.querySelector('.seg-btn')?.focus();
     }, 50);
 };
+
+const openProfileCenter = async () => {
+    if (!sysToken) return showAuthModal();
+    lastFocusedElement = document.activeElement;
+    closeAllModals(true);
+    showLoader('正在读取个人资料...');
+
+    try {
+        const res = await fetch('/api/user/profile', {
+            headers: { 'Authorization': sysToken }
+        });
+        const info = await res.json();
+        hideLoader();
+
+        if (!info.success) throw new Error(info.error || "读取资料失败");
+
+        const modal = document.getElementById('edit-modal');
+        const title = document.getElementById('edit-title');
+        const body = document.getElementById('edit-form-body');
+        const confirmBtn = document.getElementById('btn-confirm-edit');
+        
+        if (!modal || !body) return;
+
+        title.innerHTML = `<i class="ri-user-settings-line"></i> 个人资料中心`;
+        
+        body.innerHTML = `
+            <div class="form-row">
+                <label><i class="ri-user-line"></i> 用户名</label>
+                <input type="text" id="prof-username" value="${info.username || ''}" placeholder="用户名" required>
+            </div>
+            <div class="form-row">
+                <label><i class="ri-mail-line"></i> 绑定邮箱</label>
+                <input type="email" id="prof-email" value="${info.email || ''}" placeholder="可选，用于接收安全告警或日报邮件">
+            </div>
+            <div class="form-row">
+                <label><i class="ri-telegram-line"></i> TG ID</label>
+                <input type="text" id="prof-tg" value="${info.telegramChatId || ''}" placeholder="可选，您的个人 Telegram Chat ID">
+            </div>
+            <hr style="border-color: var(--glass-border); margin: 15px 0;">
+            <div class="form-row">
+                <label><i class="ri-lock-password-line"></i> 原密码 (仅修改密码时必填)</label>
+                <input type="password" id="prof-old-pass" placeholder="输入当前原密码">
+            </div>
+            <div class="form-row">
+                <label><i class="ri-lock-line"></i> 新密码 (留空则不修改)</label>
+                <input type="password" id="prof-new-pass" placeholder="输入新密码">
+            </div>
+        `;
+
+        modal.style.display = 'flex';
+        confirmBtn.style.display = 'block';
+        confirmBtn.innerText = "保存个人资料";
+
+        confirmBtn.onclick = async () => {
+            const username = document.getElementById('prof-username').value.trim();
+            const email = document.getElementById('prof-email').value.trim();
+            const telegramChatId = document.getElementById('prof-tg').value.trim();
+            const password = document.getElementById('prof-old-pass').value;
+            const newPassword = document.getElementById('prof-new-pass').value;
+
+            if (!username) {
+                return showToast("用户名不能为空", "#e74c3c");
+            }
+
+            if (email) {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                    return showToast("邮箱格式不正确", "#e74c3c");
+                }
+            }
+
+            if (newPassword && !password) {
+                return showToast("修改密码需要输入原密码", "#e74c3c");
+            }
+
+            showLoader('正在保存个人资料...');
+            try {
+                const saveRes = await fetch('/api/user/profile', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': sysToken
+                    },
+                    body: JSON.stringify({ username, email, telegramChatId, password, newPassword })
+                });
+                const saveResult = await saveRes.json();
+                hideLoader();
+
+                if (saveResult.success) {
+                    showToast("个人资料修改成功！", "#27ae60");
+                    // 局部更新本地用户信息
+                    const storedUser = JSON.parse(localStorage.getItem('nav_current_user') || '{}');
+                    storedUser.username = username;
+                    localStorage.setItem('nav_current_user', JSON.stringify(storedUser));
+                    currentUser = storedUser;
+                    appData.username = username;
+
+                    modal.style.display = 'none';
+                    renderNav();
+                    renderTools();
+                } else {
+                    showToast(saveResult.error || "修改失败，请重试", "#e74c3c");
+                }
+            } catch (e) {
+                hideLoader();
+                showToast("连接服务器失败，请检查网络", "#e74c3c");
+            }
+        };
+
+    } catch (e) {
+        hideLoader();
+        showToast(e.message || "加载资料失败，请重试", "#e74c3c");
+    }
+};
+window.openProfileCenter = openProfileCenter;
 
 window.setVisualSetting = (key, value) => {
     if (!appData.settings) appData.settings = {};
@@ -1290,6 +1421,8 @@ const init = async (forceRender = false) => {
     if (cached) {
         try {
             appData = JSON.parse(cached);
+            // Task NT-V2.17: 缓存秒开加载时重新对齐 isAdmin 状态，确保本地缓存权限逻辑无缝连接
+            isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_user');
             hasLoadedCache = true;
             toggleSkeleton(false); // 立即关闭骨架屏
             renderNav();
@@ -1452,10 +1585,103 @@ const buildCardHtml = (i) => {
     const target = appData.settings?.link_target || '_blank';
     const rel = target === '_blank' ? 'rel="noopener noreferrer"' : '';
     const icon = i.icon && i.icon.startsWith('http') 
-        ? `<img src="${i.icon}" loading="lazy" data-retry-index="0" onerror="utils.handleIconError(this, '${i.url}')">` 
+        ? `<img src="${i.icon}" loading="lazy" data-retry-index="0" data-title="${escapeHTML(i.title)}" onerror="utils.handleIconError(this, '${i.url}')">` 
         : `<span class="emoji-icon">${i.icon || '🔗'}</span>`;
     return `<a href="${i.url}" target="${target}" ${rel}><div class="icon-wrapper">${icon}</div><h3>${i.title}</h3></a>`;
 };
+
+const buildVideoCardHtml = (item) => {
+    const isBili = item.url.includes('bilibili.com');
+    const isYt = item.url.includes('youtube.com') || item.url.includes('youtu.be');
+    
+    let coverUrl = item.icon || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop&q=60';
+    let badgeClass = '';
+    let badgeText = '';
+    
+    if (isBili) {
+        badgeClass = 'bilibili';
+        badgeText = 'Bilibili';
+    } else if (isYt) {
+        badgeClass = 'youtube';
+        badgeText = 'YouTube';
+        // 正则解析 YouTube 视频 ID 从而免流量拉取官方高清封面 (hqdefault.jpg)
+        const ytMatch = item.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/i);
+        if (ytMatch && !item.icon) {
+            coverUrl = `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+        }
+    } else {
+        badgeClass = 'other';
+        badgeText = 'Video';
+    }
+
+    return `
+        <div class="video-card-cover">
+            <img src="${coverUrl}" alt="${item.title}" onerror="this.src='https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop&q=60'">
+            <div class="video-card-badge ${badgeClass}">${badgeText}</div>
+            <div class="video-play-overlay">
+                <div class="video-play-btn"><i class="ri-play-fill"></i></div>
+            </div>
+        </div>
+        <div class="video-card-body">
+            <h4 class="video-card-title">${item.title}</h4>
+            <p class="video-card-desc">${item.desc || '暂无描述'}</p>
+        </div>
+    `;
+};
+
+const playVideoInline = (item) => {
+    lastFocusedElement = document.activeElement;
+    closeAllModals(true);
+
+    const modal = document.getElementById('video-modal');
+    const iframe = document.getElementById('video-iframe');
+    const title = document.getElementById('video-title');
+    const desc = document.getElementById('video-desc');
+    const link = document.getElementById('video-link');
+    
+    if (!modal || !iframe) return;
+
+    let embedUrl = item.url;
+    const isBili = item.url.includes('bilibili.com');
+    const isYt = item.url.includes('youtube.com') || item.url.includes('youtu.be');
+
+    if (isBili) {
+        const bvMatch = item.url.match(/(BV[a-zA-Z0-9]+)/i);
+        if (bvMatch) {
+            embedUrl = `//player.bilibili.com/player.html?bvid=${bvMatch[1]}&high_quality=1&as_wide=1&autoplay=1`;
+        }
+    } else if (isYt) {
+        const ytMatch = item.url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([^&?]+)/i);
+        if (ytMatch) {
+            embedUrl = `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1`;
+        }
+    }
+
+    iframe.src = embedUrl;
+    if (title) title.innerText = item.title;
+    if (desc) desc.innerText = item.desc || '暂无描述';
+    if (link) {
+        link.href = item.url;
+        link.style.display = 'inline-block';
+    }
+
+    modal.style.display = 'flex';
+};
+window.playVideoInline = playVideoInline;
+
+const closeVideoModal = () => {
+    const modal = document.getElementById('video-modal');
+    const iframe = document.getElementById('video-iframe');
+    if (modal && iframe) {
+        iframe.src = ''; // 彻底清空，防止音频后台播放
+        modal.style.display = 'none';
+    }
+    if (lastFocusedElement) {
+        lastFocusedElement.focus();
+        lastFocusedElement = null;
+    }
+};
+window.closeVideoModal = closeVideoModal;
 
 const renderNav = () => {
     if (isRendering) return;
@@ -1585,6 +1811,9 @@ const renderNav = () => {
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
                 navHtml += `
                     <div class="nav-actions">
+                        <span class="nav-action-btn ${cat._isVideo ? 'active' : ''}" title="${cat._isVideo ? '视频分类：开启' : '普通分类：点击切换为视频分类'}" onclick="event.stopPropagation(); toggleCategoryVideoMode('${cat.id}')">
+                            <i class="${cat._isVideo ? 'ri-video-fill' : 'ri-video-line'}"></i>
+                        </span>
                         <span class="nav-action-btn" title="编辑分类" onclick="event.stopPropagation(); openCategoryEditModal('${cat.id}')">
                             <i class="ri-settings-4-line"></i>
                         </span>
@@ -1657,7 +1886,7 @@ const renderNav = () => {
             section.innerHTML = `<div class="category-section-title">${cat.icon} ${cat.name}</div>`;
 
             const grid = document.createElement('div');
-            grid.className = 'nav-grid';
+            grid.className = cat._isVideo ? 'video-grid' : 'nav-grid';
             
             // 健壮的过滤逻辑：同时支持 catId 和 cat_id (容错设计)
             const items = (cat.id === 'VIRTUAL_FREQ') 
@@ -1666,7 +1895,9 @@ const renderNav = () => {
                 
             items.forEach((item, idx) => {
                 const card = document.createElement('div');
-                card.className = `card ${item.hidden ? 'hidden-item' : ''}`;
+                card.className = cat._isVideo 
+                    ? `video-card ${item.hidden ? 'hidden-item' : ''}` 
+                    : `card ${item.hidden ? 'hidden-item' : ''}`;
                 // 为磁贴增加 Tab 索引与唯一 ID，方便键盘流转 (Task 2.5.3)
                 card.setAttribute('tabindex', '0');
                 card.setAttribute('data-id', item.id);
@@ -1677,12 +1908,13 @@ const renderNav = () => {
                 }
                 card.style.animationDelay = `${idx * 0.03}s`;
                 
-                let html = buildCardHtml(item);
+                let html = cat._isVideo ? buildVideoCardHtml(item) : buildCardHtml(item);
                 
                 // 编辑入口 (Task 3.2: 页面管理模式下对所有人开放，常规模式下仅限管理员)
                 if (isPageManagementMode || isAdmin) {
                     html += `<div class="card-admin-btns">
                         <button class="card-edit-btn" onclick="event.stopPropagation(); openEditModal('${item.id}')" title="编辑"><i class="ri-edit-line"></i></button>
+                        ${isPageManagementMode ? `<button class="card-delete-btn" onclick="event.stopPropagation(); deleteItem('${item.id}')" title="删除"><i class="ri-delete-bin-line"></i></button>` : ''}
                     </div>`;
                 }
                 
@@ -1699,9 +1931,19 @@ const renderNav = () => {
                         card.classList.toggle('selected', selectedIds.has(id));
                         updateBatchBar();
                     } else {
-                        // 如果点击的是链接或其子元素，由 <a> 标签原生处理跳转
-                        // JS 仅负责记录点击频率
-                        recordClick(item.id);
+                        if (cat._isVideo) {
+                            e.preventDefault();
+                            recordClick(item.id);
+                            if (window.playVideoInline) {
+                                window.playVideoInline(item);
+                            } else {
+                                window.open(item.url, '_blank');
+                            }
+                        } else {
+                            // 如果点击的是链接或其子元素，由 <a> 标签原生处理跳转
+                            // JS 仅负责记录点击频率
+                            recordClick(item.id);
+                        }
                     }
                 };
                 
@@ -1712,8 +1954,16 @@ const renderNav = () => {
                             card.click();
                         } else {
                             recordClick(item.id);
-                            const target = appData.settings?.link_target || '_blank';
-                            window.open(item.url, target);
+                            if (cat._isVideo) {
+                                if (window.playVideoInline) {
+                                    window.playVideoInline(item);
+                                } else {
+                                    window.open(item.url, '_blank');
+                                }
+                            } else {
+                                const target = appData.settings?.link_target || '_blank';
+                                window.open(item.url, target);
+                            }
                         }
                     }
                 };
@@ -1852,27 +2102,48 @@ const renderTools = () => {
     if (!sysToken) {
         // 游客态显示登录引导
         userArea.innerHTML = `
-            <div class="sidebar-user-card guest" onclick="showAuthModal()">
-                <div class="sidebar-user-info">
+            <div class="sidebar-user-card guest" onclick="showAuthModal()" title="点击登录同步云端">
+                <div class="user-avatar-wrapper">
                     <i class="ri-user-received-2-line"></i>
-                    <div class="user-meta-box">
-                        <span class="user-name">访客模式</span>
-                        <span class="user-uid">点击登录同步云端</span>
-                    </div>
+                </div>
+                <div class="user-meta-box">
+                    <span class="user-name">访客模式 <span class="user-role-badge" style="background: rgba(255, 255, 255, 0.08); color: var(--text-dim);">GUEST</span></span>
+                    <span class="user-uid">点击登录同步</span>
                 </div>
             </div>
         `;
     } else {
         const userDisplayName = info.username || appData.username || '已登录用户';
         const displayUid = info.uid 
-            ? `<span class="user-uid" title="完整内部 ID: ${info.id}">id: ${info.uid}</span>` 
-            : `<span class="user-uid">id: ${info.id?.substring(0, 8) || '---'}</span>`;
-        const roleBadge = isAdmin ? '<span class="admin-badge">ADMIN</span>' : (info.role === 'super_user' ? '<span class="admin-badge" style="background:#3498db">SUP</span>' : '');
+            ? `<span class="user-uid" title="完整内部 ID: ${info.id}">ID: ${info.uid}</span>` 
+            : `<span class="user-uid">ID: ${info.id?.substring(0, 8) || '---'}</span>`;
+        
+        let badgeText = 'USER';
+        let badgeColor = 'rgba(255, 255, 255, 0.1)';
+        let badgeTextCol = 'var(--text-dim)';
+
+        if (info.role === 'admin') {
+            badgeText = 'ADMIN';
+            badgeColor = '#e74c3c';
+            badgeTextCol = '#fff';
+        } else if (info.role === 'super_user') {
+            badgeText = 'SUPER';
+            badgeColor = '#3498db';
+            badgeTextCol = '#fff';
+        } else if (info.hasInvite || info.has_invite) {
+            badgeText = 'INVITED';
+            badgeColor = '#2ecc71';
+            badgeTextCol = '#fff';
+        }
+
+        const roleBadge = `<span class="user-role-badge" style="background: ${badgeColor}; color: ${badgeTextCol};">${badgeText}</span>`;
         
         userArea.innerHTML = `
             <div class="sidebar-user-card">
-                <div class="sidebar-user-info">
-                    <i class="ri-user-smile-line"></i>
+                <div class="sidebar-user-info" onclick="openProfileCenter()" title="修改个人资料">
+                    <div class="user-avatar-wrapper">
+                        <i class="ri-user-smile-line"></i>
+                    </div>
                     <div class="user-meta-box">
                         <span class="user-name">${userDisplayName} ${roleBadge}</span>
                         ${displayUid}
@@ -2247,7 +2518,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                 <div class="admin-config-section">
                     <div class="form-group" style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <div>
-                            <div style="font-size:14px; color:white;">开放注册</div>
+                            <div style="font-size:14px; color:var(--text);">开放注册</div>
                             <div style="font-size:11px; color:#888;">允许新用户直接注册账号</div>
                         </div>
                         <label class="switch-ui">
@@ -2257,7 +2528,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                     </div>
                     <div class="form-group" style="display:flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <div style="font-size:14px; color:white;">强制要求邀请码</div>
+                            <div style="font-size:14px; color:var(--text);">强制要求邀请码</div>
                             <div style="font-size:11px; color:#888;">注册时必须填写有效的邀请码</div>
                         </div>
                         <label class="switch-ui">
@@ -2298,6 +2569,18 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                             <label>注册封禁时长 (时)</label>
                             <input type="number" id="sys-reg-lock" value="${sec.registerLockoutHours}">
                         </div>
+                    </div>
+                    
+                    <h4 style="font-size:12px; color:#888; text-transform:uppercase; margin: 15px 0 10px 0;"><i class="ri-notification-3-line"></i> 敏感操作即时告警</h4>
+                    <div class="form-group" style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <div>
+                            <div style="font-size:14px; color:var(--text);">即时告警推送</div>
+                            <div style="font-size:11px; color:#888;">管理员修改配置、变动权限、重置密码或销号时即时发送 TG 及邮件通知</div>
+                        </div>
+                        <label class="switch-ui">
+                            <input type="checkbox" id="sys-instant-alert" ${config.enableAdminInstantAlert ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
                     </div>
                     
                     <h4 style="font-size:12px; color:#888; text-transform:uppercase; margin: 15px 0 10px 0;"><i class="ri-time-line"></i> 系统时区控制</h4>
@@ -2391,10 +2674,45 @@ window.handleSysRoleSearch = debounce(async (kw) => {
                     <tbody>
                         ${data.users.map(u => {
                             const isAdminFull = adminCount >= 5 && u.role !== 'admin';
+                            const hasEmail = !!u.email;
+                            const hasTg = !!u.telegram_chat_id;
+                            const hasChannel = hasEmail || hasTg;
+                            
+                            let channelText = '';
+                            if (hasEmail && hasTg) {
+                                channelText = `<span style="font-size:11px; opacity:0.6; margin-left:6px;">(${escapeHTML(u.email)} | TG:${escapeHTML(u.telegram_chat_id)})</span>`;
+                            } else if (hasEmail) {
+                                channelText = `<span style="font-size:11px; opacity:0.6; margin-left:6px;">(${escapeHTML(u.email)})</span>`;
+                            } else if (hasTg) {
+                                channelText = `<span style="font-size:11px; opacity:0.6; margin-left:6px;">(TG:${escapeHTML(u.telegram_chat_id)})</span>`;
+                            } else {
+                                channelText = `<span style="font-size:11px; opacity:0.3; margin-left:6px;">(未绑定通知通道)</span>`;
+                            }
                             return `
-                                <tr>
-                                    <td><b>${escapeHTML(u.username)}</b><br><small style="opacity:0.5">${u.uid}</small></td>
-                                    <td style="text-align:right">
+                                <tr style="border-bottom: 1px solid var(--glass-border);">
+                                    <td style="padding:10px 5px;">
+                                        <b>${escapeHTML(u.username)}</b> ${channelText}<br>
+                                        <small style="opacity:0.5">${u.uid}</small>
+                                        
+                                        <!-- 通知授权开关 -->
+                                        <div style="display:flex; gap:12px; margin-top:6px; font-size:11px;">
+                                            <label style="display:flex; align-items:center; gap:4px; ${!hasChannel ? 'opacity:0.4; cursor:not-allowed;' : 'cursor:pointer;'}">
+                                                <input type="checkbox" 
+                                                       ${u.is_alert_receiver ? 'checked' : ''} 
+                                                       ${!hasChannel ? 'disabled' : ''} 
+                                                       onchange="toggleUserNotification('${u.id}', 'alert', this.checked)"> 
+                                                <span>紧急告警</span>
+                                            </label>
+                                            <label style="display:flex; align-items:center; gap:4px; ${!hasChannel ? 'opacity:0.4; cursor:not-allowed;' : 'cursor:pointer;'}">
+                                                <input type="checkbox" 
+                                                       ${u.is_digest_receiver ? 'checked' : ''} 
+                                                       ${!hasChannel ? 'disabled' : ''} 
+                                                       onchange="toggleUserNotification('${u.id}', 'digest', this.checked)"> 
+                                                <span>审计日报</span>
+                                            </label>
+                                        </div>
+                                    </td>
+                                    <td style="text-align:right; padding:10px 5px; vertical-align:top;">
                                         <select onchange="updateUserRoleConfirm('${u.id}', this.value)" style="width:auto; height:32px; padding:0 10px;">
                                             <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
                                             <option value="super_user" ${u.role === 'super_user' ? 'selected' : ''}>Super User</option>
@@ -2420,7 +2738,7 @@ window.handleSysRoleSearch = debounce(async (kw) => {
 }, 400);
 
 window.updateUserRoleConfirm = async (userId, newRole) => {
-    const adminPassword = prompt(`⚠️ 正在将该用户角色变更为 [${newRole.toUpperCase()}]，请输入您的管理员密码确认操作：`);
+    const adminPassword = await window.requireAdminAuth(`正在将该用户角色变更为 [${newRole.toUpperCase()}]`);
     if (!adminPassword) return;
 
     await SyncUI.perform('USER_MANAGE', async () => {
@@ -2435,6 +2753,49 @@ window.updateUserRoleConfirm = async (userId, newRole) => {
     });
 };
 
+const toggleUserNotification = async (userId, type, checked) => {
+    const adminPassword = await window.requireAdminAuth("正在修改接收通知权限");
+    if (!adminPassword) {
+        // 复位状态
+        const kwInput = document.getElementById('sys-role-search-kw');
+        if (kwInput) handleSysRoleSearch(kwInput.value);
+        return;
+    }
+
+    try {
+        const body = {
+            userId,
+            adminPassword
+        };
+        if (type === 'alert') body.isAlertReceiver = checked;
+        if (type === 'digest') body.isDigestReceiver = checked;
+
+        const res = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': sysToken
+            },
+            body: JSON.stringify(body)
+        });
+        const result = await res.json();
+        if (res.ok) {
+            showToast("通知安全授权修改成功！", "#27ae60");
+        } else {
+            showToast(result.error || "授权修改失败", "#e74c3c");
+            // 复位状态
+            const kwInput = document.getElementById('sys-role-search-kw');
+            if (kwInput) handleSysRoleSearch(kwInput.value);
+        }
+    } catch (e) {
+        showToast("连接服务器失败，请检查网络", "#e74c3c");
+        // 复位状态
+        const kwInput = document.getElementById('sys-role-search-kw');
+        if (kwInput) handleSysRoleSearch(kwInput.value);
+    }
+};
+window.toggleUserNotification = toggleUserNotification;
+
 const saveSystemConfig = async () => {
     const payload = {
         siteTitle: document.getElementById('sys-site-title').value.trim(),
@@ -2443,6 +2804,7 @@ const saveSystemConfig = async () => {
         seoDescription: document.getElementById('sys-seo-desc').value.trim(),
         allowOpenRegistration: document.getElementById('sys-allow-reg').checked,
         requireInvitation: document.getElementById('sys-require-invite').checked,
+        enableAdminInstantAlert: document.getElementById('sys-instant-alert').checked,
         superUserInviteQuota: parseInt(document.getElementById('sys-su-quota').value) || 10,
         systemTimezone: document.getElementById('sys-timezone').value,
         security: {
@@ -2881,7 +3243,7 @@ const initSearch = () => {
             if (matches.length > 0) {
                 resultsList.innerHTML = matches.map((m, idx) => `
                     <div class="local-result-item ${idx === 0 ? 'active' : ''}" onclick="recordClick('${m.id}'); window.open('${m.url}', '${appData.settings?.link_target || '_blank'}')">
-                        <span class="result-icon">${m.icon?.startsWith('http') ? `<img src="${m.icon}" data-retry-index="0" onerror="utils.handleIconError(this, '${m.url}')">` : (m.icon || '🔗')}</span>
+                        <span class="result-icon">${m.icon?.startsWith('http') ? `<img src="${m.icon}" data-retry-index="0" data-title="${escapeHTML(m.title)}" onerror="utils.handleIconError(this, '${m.url}')">` : (m.icon || '🔗')}</span>
                         <div class="result-info">
                             <div class="result-title">${m.title}</div>
                             <div class="result-url">${m.url}</div>
@@ -2965,6 +3327,14 @@ const closeAllModals = (silent = false) => {
     // 3. 关闭认证遮罩
     const authOverlay = document.getElementById('auth-overlay');
     if (authOverlay) authOverlay.style.display = 'none';
+
+    // 4. 关闭视频预览弹窗并清除源 (Task V.4)
+    const videoModal = document.getElementById('video-modal');
+    if (videoModal && getComputedStyle(videoModal).display !== 'none') {
+        const iframe = document.getElementById('video-iframe');
+        if (iframe) iframe.src = ''; // 彻底阻断后台残留音频
+        videoModal.style.display = 'none';
+    }
 
     // Task 37.2: 焦点还原
     if (!silent && lastFocusedElement) {
@@ -3151,6 +3521,27 @@ window.initEmojiPicker = (activeCategory = 'officeAndBookmarks', searchQuery = '
 
     // 渲染网格
     let emojis = [];
+    let faviconUrl = null;
+    let faviconDomain = '';
+
+    if (searchQuery) {
+        const cleanQuery = searchQuery.trim();
+        const hasDot = cleanQuery.includes('.');
+        const isUrlLike = cleanQuery.startsWith('http') || hasDot;
+        
+        let domain = cleanQuery;
+        if (cleanQuery.startsWith('http')) {
+            try {
+                domain = new URL(cleanQuery).hostname;
+            } catch(e) {}
+        }
+        
+        if (isUrlLike && domain.length > 3) {
+            faviconDomain = domain;
+            faviconUrl = `https://favicon.qqsuu.cn/${domain}`;
+        }
+    }
+
     try {
         if (searchQuery) {
             emojis = window.emojiPool.searchEmojisByKeyword(searchQuery);
@@ -3164,14 +3555,28 @@ window.initEmojiPicker = (activeCategory = 'officeAndBookmarks', searchQuery = '
         emojis = ['⚠️', '❓'];
     }
     
-    if (emojis.length === 0) {
+    let htmlContent = '';
+    if (faviconUrl) {
+        htmlContent += `
+            <div class="emoji-item favicon-suggest" 
+                 style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11px; font-weight: bold; background: rgba(57, 157, 255, 0.15); border: 1px dashed var(--primary); padding: 8px; border-radius: 8px; margin-bottom: 10px; cursor: pointer; color: var(--text);" 
+                 onclick="event.stopPropagation(); selectEmoji('${faviconUrl}')"
+                 title="点击将此网络图标作为您的自定义书签图标">
+                <img src="${faviconUrl}" style="width: 16px; height: 16px; border-radius: 4px;" onerror="this.src='https://api.iowen.cn/favicon/${faviconDomain}.png'">
+                <span>使用智能网络图标: ${faviconDomain}</span>
+            </div>
+        `;
+    }
+
+    if (emojis.length === 0 && !faviconUrl) {
         gridContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 30px; text-align: center; color: var(--text-dim); font-size: 13px;">
             未找到相关图标
         </div>`;
     } else {
-        gridContainer.innerHTML = emojis.map(emoji => `
+        htmlContent += emojis.map(emoji => `
             <div class="emoji-item" title="点击选择" onclick="event.stopPropagation(); selectEmoji('${emoji}')">${emoji}</div>
         `).join('');
+        gridContainer.innerHTML = htmlContent;
     }
 };
 
@@ -3192,10 +3597,14 @@ window.selectEmoji = (emoji) => {
         const previewBox = document.getElementById('cat-icon-preview');
         if (previewBox) previewBox.innerText = emoji;
 
-        // 针对书签图标编辑框，显式同步更新其预览框结构
+        // 针对书签图标编辑框，显式同步更新其预览框结构 (支持 Emoji 和网络 Favicon)
         const editIconPreview = document.getElementById('edit-icon-preview');
         if (editIconPreview) {
-            editIconPreview.innerHTML = `<span>${emoji}</span>`;
+            if (emoji.startsWith('http')) {
+                editIconPreview.innerHTML = `<img src="${emoji}" style="width:100%; height:100%; border-radius:4px;" onerror="utils.handleIconError(this, '${emoji}')">`;
+            } else {
+                editIconPreview.innerHTML = `<span>${emoji}</span>`;
+            }
         }
 
         // 触发一次 input 事件，确保如果有其他联动逻辑可以感知
@@ -3210,6 +3619,48 @@ window.selectEmoji = (emoji) => {
     }
 };
 
+window.requireAdminAuth = (message) => {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('admin-auth-modal');
+        const msgEl = document.getElementById('auth-modal-message');
+        const passInput = document.getElementById('auth-modal-password');
+        const confirmBtn = document.getElementById('btn-auth-confirm');
+        const cancelBtn = document.getElementById('btn-auth-cancel');
+        
+        if (!modal || !msgEl || !passInput) return resolve(null);
+        
+        msgEl.innerText = message || "此操作属于敏感安全授权变更，请输入管理员密码进行核验。";
+        passInput.value = '';
+        modal.style.display = 'flex';
+        
+        setTimeout(() => passInput.focus(), 150);
+
+        const cleanup = (val) => {
+            modal.style.display = 'none';
+            confirmBtn.onclick = null;
+            cancelBtn.onclick = null;
+            passInput.onkeydown = null;
+            resolve(val);
+        };
+
+        confirmBtn.onclick = () => {
+            const val = passInput.value.trim();
+            if (!val) {
+                showToast("请输入密码以继续", "#e67e22");
+                return;
+            }
+            cleanup(val);
+        };
+
+        cancelBtn.onclick = () => cleanup(null);
+
+        passInput.onkeydown = (e) => {
+            if (e.key === 'Enter') confirmBtn.click();
+            else if (e.key === 'Escape') cancelBtn.click();
+        };
+    });
+};
+
 const toggleCategoryVisibility = (catId) => {
     const cat = appData.categories.find(c => c.id === catId);
     if (!cat) return;
@@ -3219,6 +3670,17 @@ const toggleCategoryVisibility = (catId) => {
     showToast(cat.hidden ? `分类 ${cat.name} 已本地隐藏` : `分类 ${cat.name} 已本地显示`, "#3498db");
     renderNav();
 };
+
+const toggleCategoryVideoMode = (catId) => {
+    const cat = appData.categories.find(c => c.id === catId);
+    if (!cat) return;
+    
+    cat._isVideo = !cat._isVideo;
+    isDataDirty = true;
+    showToast(`分类 ${cat.name} 已切换为${cat._isVideo ? '视频分类' : '普通分类'}`, "#3498db");
+    renderNav();
+};
+window.toggleCategoryVideoMode = toggleCategoryVideoMode;
 
 const deleteCategory = async (catId) => {
     const cat = appData.categories.find(c => c.id === catId);
@@ -3413,6 +3875,21 @@ const doBatchDelete = async () => {
     updateBatchBar();
 };
 
+const deleteItem = (itemId) => {
+    const item = appData.items.find(i => i.id === itemId);
+    if (!item) return;
+    if (!confirm(`确定要删除书签 "${item.title}" 吗？`)) return;
+
+    appData.items = appData.items.filter(i => i.id !== itemId);
+    selectedIds.delete(itemId); // 从选中集中清除，防止残留影响
+    isDataDirty = true;
+    showToast(`书签 "${item.title}" 已从本地删除`, "#e67e22");
+    
+    renderNav();
+    updateBatchBar();
+};
+window.deleteItem = deleteItem;
+
 const doBatchToggleHidden = async () => {
     if (selectedIds.size === 0) return;
     
@@ -3515,9 +3992,11 @@ const openAdminHub = async (defaultTab = 'users') => {
     adminInviteFilters = { page: 1, pageSize: 20, keyword: '', status: '' };
     adminSelectedInviteIds.clear();
     adminAuditFilters = { page: 1, pageSize: 20, keyword: '', actionType: '' };
+    adminSelectedAuditIds.clear();
     updateAdminBatchBar();
     updateAnnounceBatchBar();
     updateInviteBatchBar();
+    updateAuditBatchBar();
 
     try {
         const [usersRes, inviteRes, announceRes, auditRes] = await Promise.all([
@@ -3571,6 +4050,15 @@ const openAdminHub = async (defaultTab = 'users') => {
                     </div>
                 </div>
 
+                <!-- 批量操作栏 (Task NT-V2.6) -->
+                <div id="admin-user-batch-bar" class="admin-batch-bar">
+                    <span id="user-batch-count">已选中 0 名用户</span>
+                    <div style="display:flex; gap:10px;">
+                        <button class="batch-btn" onclick="exportUsersCSV()"><i class="ri-download-2-line"></i> CSV 批量导出</button>
+                        <button class="batch-btn" style="background: rgba(255,255,255,0.08); color: var(--text) !important;" onclick="clearAdminUserSelection()"><i class="ri-close-line"></i> 清除选择</button>
+                    </div>
+                </div>
+
                 <div id="admin-users-table-container">
                     ${renderAdminUserTableHTML(userData.users || [])}
                 </div>
@@ -3601,21 +4089,21 @@ const openAdminHub = async (defaultTab = 'users') => {
                     </div>
                 </div>
 
-                <div id="admin-invite-table-container" style="margin-top:15px;">
-                    ${renderAdminInviteTableHTML(inviteData.invitations || [], inviteData.pagination)}
-                </div>
-
                 <!-- 批量操作栏 (Task STD.2) -->
                 <div id="admin-invite-batch-bar" class="admin-batch-bar">
                     <span id="invite-batch-count">已选中 0 项</span>
                     <div style="display:flex; gap:10px;">
-                        <button class="batch-btn danger" onclick="batchInviteAction('delete')">批量下架</button>
+                        <button class="batch-btn danger" onclick="batchInviteAction('delete')"><i class="ri-close-circle-line"></i> 批量下架</button>
                     </div>
+                </div>
+
+                <div id="admin-invite-table-container" style="margin-top:15px;">
+                    ${renderAdminInviteTableHTML(inviteData.invitations || [], inviteData.pagination)}
                 </div>
             </div>
             <div id="hub-content-announcements" class="hub-pane ${defaultTab === 'announcements' ? 'active' : ''}">
                 <div class="admin-announce-editor" style="padding:12px; background:rgba(255,255,255,0.03); border:1px dashed var(--glass-border); border-radius:8px;">
-                    <div style="font-size:12px; font-weight:bold; margin-bottom:10px; color:#fff; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:12px; font-weight:bold; margin-bottom:10px; color:var(--text); display:flex; justify-content:space-between; align-items:center;">
                         <span><i class="ri-edit-line"></i> 发布新公告 / 修改公告</span>
                         <button class="action-link" id="btn-toggle-editor" onclick="toggleAnnounceEditor()">收起编辑器</button>
                     </div>
@@ -3630,8 +4118,8 @@ const openAdminHub = async (defaultTab = 'users') => {
                             <div class="form-group" style="flex:1">
                                 <label style="font-size:11px; opacity:0.7">展示层级</label>
                                 <select id="announce-type">
-                                    <option value="quiet">Quiet (右下角静默铃铛)</option>
-                                    <option value="important">Important (全屏顶部条幅)</option>
+                                    <option value="quiet">静默通知</option>
+                                    <option value="important">横幅通知</option>
                                 </select>
                             </div>
                             <div class="form-group" style="flex:1">
@@ -3644,7 +4132,7 @@ const openAdminHub = async (defaultTab = 'users') => {
                                 <input type="checkbox" id="announce-top"> 置顶公告
                             </label>
                             <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px;">
-                                <input type="checkbox" id="announce-is-draft"> 存为草稿
+                                <input type="checkbox" id="announce-is-draft" onchange="handleAnnounceDraftChange(this.checked)"> 存为草稿
                             </label>
                         </div>
                         <div id="announce-actions" style="display:flex; gap:10px; margin-top:10px;">
@@ -3671,25 +4159,25 @@ const openAdminHub = async (defaultTab = 'users') => {
                             </select>
                             <select id="announce-filter-type" onchange="handleAdminAnnounceFilter('type', this.value)">
                                 <option value="">全部类型</option>
-                                <option value="quiet">静默 (Quiet)</option>
-                                <option value="important">重要 (Important)</option>
+                                <option value="quiet">静默通知</option>
+                                <option value="important">横幅通知</option>
                             </select>
                         </div>
                     </div>
                 </div>
 
-                <div id="admin-announce-table-container" style="margin-top:15px;">
-                    ${renderAdminAnnounceTableHTML(announceData.announcements || [], announceData.pagination)}
-                </div>
-                
                 <!-- 批量操作栏 (Task AN.3) -->
                 <div id="admin-announce-batch-bar" class="admin-batch-bar">
                     <span id="announce-batch-count">已选中 0 项</span>
                     <div style="display:flex; gap:10px;">
-                        <button class="batch-btn" onclick="batchAnnounceAction('publish')">一键发布</button>
-                        <button class="batch-btn" onclick="batchAnnounceAction('archive')">一键归档</button>
-                        <button class="batch-btn danger" onclick="batchAnnounceAction('delete')">批量删除</button>
+                        <button class="batch-btn" onclick="batchAnnounceAction('publish')"><i class="ri-checkbox-circle-line"></i> 一键发布</button>
+                        <button class="batch-btn" onclick="batchAnnounceAction('archive')"><i class="ri-archive-line"></i> 一键归档</button>
+                        <button class="batch-btn danger" onclick="batchAnnounceAction('delete')"><i class="ri-delete-bin-line"></i> 批量删除</button>
                     </div>
+                </div>
+
+                <div id="admin-announce-table-container" style="margin-top:15px;">
+                    ${renderAdminAnnounceTableHTML(announceData.announcements || [], announceData.pagination)}
                 </div>
             </div>
             <div id="hub-content-audit" class="hub-pane ${defaultTab === 'audit' ? 'active' : ''}">
@@ -3708,6 +4196,14 @@ const openAdminHub = async (defaultTab = 'users') => {
                                 `).join('')}
                             </select>
                         </div>
+                    </div>
+                </div>
+
+                <!-- 批量控制条 (Task NT-V2.7) -->
+                <div id="admin-audit-batch-bar" class="admin-batch-bar visible" style="margin-bottom:15px;">
+                    <span><i class="ri-history-line"></i> 审计安全日志管理</span>
+                    <div style="display:flex; gap:10px;">
+                        <button class="batch-btn" style="background: var(--primary); color: white !important;" onclick="exportAuditCSV()"><i class="ri-download-2-line"></i> 导出页筛选日志 (CSV)</button>
                     </div>
                 </div>
 
@@ -4199,7 +4695,62 @@ window.handleAdminAuditPageChange = (page) => {
     performAdminAuditSearch();
 };
 
+window.toggleAdminAuditSelect = (id, checked) => {
+    if (checked) adminSelectedAuditIds.add(id.toString());
+    else adminSelectedAuditIds.delete(id.toString());
+    
+    const tr = document.querySelector(`#admin-audit-table-container tr[data-id="${id}"]`);
+    if (tr) tr.classList.toggle('selected', checked);
+    
+    updateAuditBatchBar();
+};
+
+window.toggleAdminAuditSelectAll = (checked) => {
+    if (checked) {
+        adminData.logs.forEach(log => adminSelectedAuditIds.add(log.id.toString()));
+    } else {
+        adminSelectedAuditIds.clear();
+    }
+    const container = document.getElementById('admin-audit-table-container');
+    if (container) {
+        container.innerHTML = renderAdminAuditTableHTML(adminData.logs, { ...adminData.pagination, page: adminAuditFilters.page });
+    }
+    updateAuditBatchBar();
+};
+
+window.clearAdminAuditSelection = () => {
+    adminSelectedAuditIds.clear();
+    updateAuditBatchBar();
+    const container = document.getElementById('admin-audit-table-container');
+    if (container) {
+        container.innerHTML = renderAdminAuditTableHTML(adminData.logs, { ...adminData.pagination, page: adminAuditFilters.page });
+    }
+};
+
+window.updateAuditBatchBar = () => {
+    const bar = document.getElementById('admin-audit-batch-bar');
+    if (!bar) return;
+
+    if (adminSelectedAuditIds.size > 0) {
+        bar.innerHTML = `
+            <span id="audit-batch-count">已选中 <b>${adminSelectedAuditIds.size}</b> 条审计日志</span>
+            <div style="display:flex; gap:10px;">
+                <button class="batch-btn" style="background: var(--primary); color: white !important;" onclick="exportAuditCSV()"><i class="ri-download-2-line"></i> 导出选中日志 (CSV)</button>
+                <button class="batch-btn" style="background: rgba(255,255,255,0.08); color: var(--text) !important;" onclick="clearAdminAuditSelection()"><i class="ri-close-line"></i> 清除选择</button>
+            </div>
+        `;
+    } else {
+        bar.innerHTML = `
+            <span><i class="ri-history-line"></i> 审计安全日志管理</span>
+            <div style="display:flex; gap:10px;">
+                <button class="batch-btn" style="background: var(--primary); color: white !important;" onclick="exportAuditCSV()"><i class="ri-download-2-line"></i> 导出页筛选日志 (CSV)</button>
+            </div>
+        `;
+    }
+};
+
 const renderAdminAuditTableHTML = (logs, pagination) => {
+    const isAllSelected = logs.length > 0 && logs.every(l => adminSelectedAuditIds.has(l.id.toString()));
     const { total, page, pageSize } = pagination || { total: 0, page: 1, pageSize: 20 };
     const totalPages = Math.ceil(total / pageSize);
 
@@ -4208,6 +4759,9 @@ const renderAdminAuditTableHTML = (logs, pagination) => {
             <table class="admin-table">
                 <thead>
                     <tr>
+                        <th class="col-checkbox">
+                            <input type="checkbox" ${isAllSelected ? 'checked' : ''} onchange="toggleAdminAuditSelectAll(this.checked)">
+                        </th>
                         <th style="width:100px;">记录时间</th>
                         <th>操作人</th>
                         <th>动作</th>
@@ -4216,7 +4770,7 @@ const renderAdminAuditTableHTML = (logs, pagination) => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${logs.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:30px; opacity:0.5;">暂无日志数据</td></tr>' : 
+                    ${logs.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:30px; opacity:0.5;">暂无日志数据</td></tr>' : 
                       logs.map(l => {
                         const dateStr = formatSystemDate(l.created_at, false);
                         const tz = window.sysSiteConfig?.systemTimezone || 'Asia/Shanghai';
@@ -4228,9 +4782,13 @@ const renderAdminAuditTableHTML = (logs, pagination) => {
                             timeStr = new Date(l.created_at).toLocaleTimeString('zh-CN', { hour12: false });
                         }
                         const actionInfo = AuditActionMap[l.action] || { label: l.action, color: '#3498db' };
+                        const isSelected = adminSelectedAuditIds.has(l.id.toString());
                         
                         return `
-                        <tr>
+                        <tr class="${isSelected ? 'selected' : ''}" data-id="${l.id}">
+                            <td class="col-checkbox">
+                                <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleAdminAuditSelect('${l.id}', this.checked)">
+                            </td>
                             <td style="font-family:monospace; line-height:1.2;">
                                 <div style="font-size:10px; opacity:0.5;">${dateStr}</div>
                                 <div style="font-size:12px; font-weight:bold; color:var(--text-main);">${timeStr}</div>
@@ -4379,23 +4937,22 @@ window.toggleAdminSelectAll = (checked) => {
     updateAdminBatchBar();
 };
 
-window.updateAdminBatchBar = () => {
-    let bar = document.getElementById('admin-user-batch-bar');
-    if (!bar) {
-        bar = document.createElement('div');
-        bar.id = 'admin-user-batch-bar';
-        bar.className = 'user-batch-bar';
-        document.body.appendChild(bar);
+window.clearAdminUserSelection = () => {
+    adminSelectedUserIds.clear();
+    updateAdminBatchBar();
+    const container = document.getElementById('admin-users-table-container');
+    if (container) {
+        container.innerHTML = renderAdminUserTableHTML(adminData.users);
     }
+};
+
+window.updateAdminBatchBar = () => {
+    const bar = document.getElementById('admin-user-batch-bar');
+    const countSpan = document.getElementById('user-batch-count');
+    if (!bar || !countSpan) return;
 
     if (adminSelectedUserIds.size > 0) {
-        bar.innerHTML = `
-            <span>已选中 <b>${adminSelectedUserIds.size}</b> 名用户</span>
-            <div class="batch-btns">
-                <button class="batch-action-btn" onclick="exportUsersCSV()">CSV 导出</button>
-                <button class="batch-action-btn" onclick="adminSelectedUserIds.clear(); updateAdminBatchBar(); const container = document.getElementById('admin-users-table-container'); if(container) container.innerHTML = renderAdminUserTableHTML(adminData.users);">取消选择</button>
-            </div>
-        `;
+        countSpan.innerHTML = `已选中 <b>${adminSelectedUserIds.size}</b> 名用户`;
         bar.classList.add('visible');
     } else {
         bar.classList.remove('visible');
@@ -4439,38 +4996,79 @@ window.exportUsersCSV = () => {
     link.click();
     document.body.removeChild(link);
     
-    showToast(`成功导出 ${selectedUsers.size} 条记录`, "#2ecc71");
+    showToast("成功导出 CSV 记录", "#2ecc71");
+};
+
+// Task NT-V2.7: CSV 审计日志导出实现
+window.exportAuditCSV = () => {
+    let targetLogs = [];
+    if (adminSelectedAuditIds.size > 0) {
+        targetLogs = adminData.logs.filter(log => adminSelectedAuditIds.has(log.id.toString()));
+    } else {
+        targetLogs = adminData.logs || [];
+    }
+
+    if (targetLogs.length === 0) return showToast("当前筛选条件下无可导出的日志", "#e67e22");
+
+    // 1. 构建 CSV 内容
+    const headers = ['ID', 'Username (User ID)', 'Action', 'Details', 'IP Address', 'Timestamp'];
+    const rows = targetLogs.map(log => {
+        const actionLabel = AuditActionMap[log.action]?.label || log.action;
+        return [
+            log.id,
+            log.username ? `${log.username} (${log.user_id})` : `System (${log.user_id})`,
+            actionLabel,
+            log.details || '-',
+            log.ip || '-',
+            log.created_at
+        ];
+    });
+
+    let csvContent = "\ufeff"; // 添加 BOM 支持中文 Excel
+    csvContent += headers.join(',') + "\n";
+    rows.forEach(row => {
+        csvContent += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',') + "\n";
+    });
+
+    // 2. 触发下载
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const timestamp = new Date().toISOString().slice(0,10).replace(/-/g, '');
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `CloudNav_Audit_Logs_${timestamp}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast(adminSelectedAuditIds.size > 0 ? "已成功导出选中日志" : "已成功导出当前页全部筛选日志", "#2ecc71");
 };
 
 window.switchHubTab = (tab) => {
     document.querySelectorAll('.hub-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     document.querySelectorAll('.hub-pane').forEach(p => p.classList.toggle('active', p.id === `hub-content-${tab}`));
     
-    if (tab !== 'users' && tab !== 'announcements' && tab !== 'invites') {
-        const userBar = document.getElementById('admin-user-batch-bar');
-        const announceBar = document.getElementById('admin-announce-batch-bar');
-        const inviteBar = document.getElementById('admin-invite-batch-bar');
-        if (userBar) userBar.classList.remove('visible');
-        if (announceBar) announceBar.classList.remove('visible');
-        if (inviteBar) inviteBar.classList.remove('visible');
-    } else if (tab === 'users') {
+    // 复位所有批量状态的可见性类 (Task NT-V2.10)
+    const userBar = document.getElementById('admin-user-batch-bar');
+    const announceBar = document.getElementById('admin-announce-batch-bar');
+    const inviteBar = document.getElementById('admin-invite-batch-bar');
+    const auditBar = document.getElementById('admin-audit-batch-bar');
+
+    if (userBar) userBar.classList.remove('visible');
+    if (announceBar) announceBar.classList.remove('visible');
+    if (inviteBar) inviteBar.classList.remove('visible');
+    // 审计常驻工具栏无需移除 visible 类
+    
+    if (tab === 'users') {
         updateAdminBatchBar();
-        const announceBar = document.getElementById('admin-announce-batch-bar');
-        const inviteBar = document.getElementById('admin-invite-batch-bar');
-        if (announceBar) announceBar.classList.remove('visible');
-        if (inviteBar) inviteBar.classList.remove('visible');
     } else if (tab === 'announcements') {
         updateAnnounceBatchBar();
-        const userBar = document.getElementById('admin-user-batch-bar');
-        const inviteBar = document.getElementById('admin-invite-batch-bar');
-        if (userBar) userBar.classList.remove('visible');
-        if (inviteBar) inviteBar.classList.remove('visible');
     } else if (tab === 'invites') {
         updateInviteBatchBar();
-        const userBar = document.getElementById('admin-user-batch-bar');
-        const announceBar = document.getElementById('admin-announce-batch-bar');
-        if (userBar) userBar.classList.remove('visible');
-        if (announceBar) announceBar.classList.remove('visible');
+    } else if (tab === 'audit') {
+        updateAuditBatchBar();
     }
 };
 
@@ -4504,9 +5102,8 @@ window.deleteInvite = async (code) => {
 
 window.updateUserAdmin = async (userId, payload) => {
     // Task UM.8.5: 统一二次验证逻辑
-    const adminPassword = prompt("执行管理操作，请输入您的管理员密码进行二次验证:");
-    if (adminPassword === null) return;
-    if (!adminPassword) return showToast("请输入密码以继续", "#e67e22");
+    const adminPassword = await window.requireAdminAuth("正在更改用户的安全与状态配置");
+    if (!adminPassword) return;
 
     await SyncUI.perform('USER_MANAGE', async () => {
         const res = await fetch('/api/admin/users', {
@@ -4524,7 +5121,7 @@ window.resetUserPasswordAdmin = async (userId) => {
     const newPassword = prompt("请输入为该用户设置的新密码:");
     if (!newPassword) return;
     
-    const adminPassword = prompt("请输入您的管理员密码确认修改:");
+    const adminPassword = await window.requireAdminAuth("强行改写其它用户登录密码");
     if (!adminPassword) return;
 
     await SyncUI.perform('USER_MANAGE', async () => {
@@ -4542,7 +5139,7 @@ window.resetUserPasswordAdmin = async (userId) => {
 window.deleteUserAdmin = async (userId) => {
     if (!confirm("⚠️ 警告：删除用户将永久清除其所有数据（分类、书签、设置），且不可恢复！确认删除吗？")) return;
 
-    const adminPassword = prompt("【最后确认】请输入您的管理员密码执行删除操作:");
+    const adminPassword = await window.requireAdminAuth("【终极大警告】彻底删除并抹去该用户及其全站数据");
     if (!adminPassword) return;
 
     await SyncUI.perform('USER_MANAGE', async () => {
@@ -4604,6 +5201,17 @@ window.deleteAnnouncement = async (id) => {
     });
 };
 
+window.handleAnnounceDraftChange = (checked) => {
+    const btn = document.getElementById('btn-save-announce');
+    if (!btn) return;
+    const isEdit = currentEditingAnnounceId !== null;
+    if (checked) {
+        btn.innerText = "保存为草稿";
+    } else {
+        btn.innerText = isEdit ? "确认保存修改" : "发布公告";
+    }
+};
+
 window.editAnnouncement = (a) => {
     currentEditingAnnounceId = a.id;
     document.getElementById('announce-title').value = a.title;
@@ -4620,8 +5228,11 @@ window.editAnnouncement = (a) => {
         document.getElementById('announce-expire').value = '';
     }
 
+    const isDraft = a.status === 'draft';
+    document.getElementById('announce-is-draft').checked = isDraft;
+
     // UI 状态切换
-    document.getElementById('btn-save-announce').innerText = "确认保存修改";
+    document.getElementById('btn-save-announce').innerText = isDraft ? "保存为草稿" : "确认保存修改";
     document.getElementById('btn-save-announce').classList.add('warning-btn'); // 提示是修改操作
     document.getElementById('btn-cancel-announce').style.display = 'inline-block';
     
@@ -4637,6 +5248,7 @@ window.cancelEditAnnounce = () => {
     document.getElementById('announce-type').value = 'quiet';
     document.getElementById('announce-expire').value = '';
     document.getElementById('announce-top').checked = false;
+    document.getElementById('announce-is-draft').checked = false;
 
     document.getElementById('btn-save-announce').innerText = "发布公告";
     document.getElementById('btn-save-announce').classList.remove('warning-btn');
@@ -4730,19 +5342,24 @@ window.openNoticeCenter = async (targetId = null) => {
         const isGuest = !sysToken;
 
         body.innerHTML = `
-            <div class="notice-center-header">
-                <div class="notice-header-actions">
-                    <label class="toggle-hide-read" ${isGuest ? 'style="opacity:0.5; cursor:not-allowed;" title="登录后可同步阅读状态"' : ''}>
+            <div id="notice-center-batch-bar" class="admin-batch-bar visible" style="margin-bottom:15px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; width:100%; box-sizing:border-box;">
+                <span style="font-size:12px; font-weight:bold; color:var(--text);"><i class="ri-notification-3-line"></i> 公告实时公示</span>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <label class="toggle-hide-read" ${isGuest ? 'style="opacity:0.5; cursor:not-allowed; font-size:11px;" title="登录后可同步阅读状态"' : 'style="font-size:11px; cursor:pointer;"'}>
                         <input type="checkbox" ${hideRead ? 'checked' : ''} ${isGuest ? 'disabled' : 'onchange="toggleHideRead(this.checked)"'}> 隐藏已读
                     </label>
                     ${isGuest 
-                        ? `<button class="btn-mark-all-read guest-mode" onclick="openLoginModal()">登录同步状态</button>`
-                        : (unreadCount > 0 ? `<button class="btn-mark-all-read" onclick="markAllNoticesRead()">全部标记已读</button>` : '')
+                        ? `<button class="batch-btn" onclick="openLoginModal()"><i class="ri-user-shared-line"></i> 登录同步</button>`
+                        : (unreadCount > 0 ? `<button class="batch-btn" onclick="markAllNoticesRead()"><i class="ri-checkbox-multiple-line"></i> 全部标记已读</button>` : '')
                     }
                 </div>
-                ${isGuest ? `<div style="font-size: 11px; color: #f1c40f; margin-bottom: 5px;"><i class="ri-information-line"></i> 您当前以游客身份访问，阅读记录无法持久化</div>` : ''}
-                <div style="font-size: 12px; opacity: 0.5;">共 ${announcements.length} 条公告</div>
             </div>
+            
+            <div class="form-group" style="margin-bottom:15px;">
+                <input type="text" id="notice-search-kw" placeholder="输入关键字模糊检索公告..." style="width:100%;" oninput="handleNoticeCenterSearch(this.value)">
+            </div>
+            
+            <div style="font-size: 12px; opacity: 0.5; margin-bottom:10px;">共 ${announcements.length} 条公告</div>
             <div class="notice-list-container">
                 ${announcements.map(a => {
                     const isRead = a.is_read || localStorage.getItem(`read_notice_${a.id}`) === 'true';
@@ -4816,6 +5433,17 @@ window.openNoticeCenter = async (targetId = null) => {
                 </div>`;
         }
     }
+};
+
+window.handleNoticeCenterSearch = (kw) => {
+    const keyword = kw.trim().toLowerCase();
+    const items = document.querySelectorAll('.notice-list-container .notice-list-item');
+    items.forEach(el => {
+        const title = el.querySelector('.title-text')?.innerText.toLowerCase() || '';
+        const content = el.querySelector('.notice-item-content')?.innerText.toLowerCase() || '';
+        const matched = title.includes(keyword) || content.includes(keyword);
+        el.style.display = matched ? 'block' : 'none';
+    });
 };
 
 window.toggleNotice = async (el, id) => {
@@ -4946,6 +5574,11 @@ const openJsonEditor = () => {
             // 简单结构校验
             if (!parsed.categories || !parsed.items) throw new Error("缺少核心字段 (categories/items)");
             
+            // 智能清洗脏配置 (Task NT-V2.12)
+            if (parsed.settings) {
+                delete parsed.settings.cardWidth;
+            }
+            
             // Task 4.3: 专家模式配额校验
             const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
             if (parsed.categories.length > quota.maxCategories) throw new Error(`分类数量超出上限 (${quota.maxCategories})`);
@@ -5072,14 +5705,14 @@ const exportConfig = () => {
                 <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; cursor: pointer; border: 1px solid var(--glass-border);">
                     <input type="radio" name="export-format" value="json" checked style="margin-top: 3px;" onchange="toggleExportOptions(this.value)">
                     <div style="margin-left: 8px;">
-                        <div style="font-weight: bold; color: #fff;">原生 JSON 备份文件</div>
+                        <div style="font-weight: bold; color: var(--text);">原生 JSON 备份文件</div>
                         <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">包含所有配置、分类和网址的完整数据。可再次通过“本地数据导入”来100%还原。</div>
                     </div>
                 </label>
                 <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; cursor: pointer; border: 1px solid var(--glass-border);">
                     <input type="radio" name="export-format" value="html" style="margin-top: 3px;" onchange="toggleExportOptions(this.value)">
                     <div style="margin-left: 8px;">
-                        <div style="font-weight: bold; color: #fff;">标准 HTML 书签文件</div>
+                        <div style="font-weight: bold; color: var(--text);">标准 HTML 书签文件</div>
                         <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">导出为 Netscape 格式，可直接导入到 Edge, Chrome, Safari 等浏览器。</div>
                     </div>
                 </label>
@@ -5092,7 +5725,7 @@ const exportConfig = () => {
                 <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
                     <input type="radio" name="html-mode" value="clean" checked style="margin-top: 2px;">
                     <div style="margin-left: 6px;">
-                        <span style="font-weight: bold; color: #fff;">清爽模式 (强烈推荐 ⭐)</span>
+                        <span style="font-weight: bold; color: var(--text);">清爽模式 (强烈推荐 ⭐)</span>
                         <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
                             Edge 导入后书签只显示短标题，不会把网址描述拼到标题里。描述将存放在标准 &lt;DD&gt; 标签与 comment 属性中，干净且支持重新导入本站还原。
                         </div>
@@ -5101,7 +5734,7 @@ const exportConfig = () => {
                 <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin-top: 4px;">
                     <input type="radio" name="html-mode" value="merge" style="margin-top: 2px;">
                     <div style="margin-left: 6px;">
-                        <span style="font-weight: bold; color: #fff;">标题拼接模式</span>
+                        <span style="font-weight: bold; color: var(--text);">标题拼接模式</span>
                         <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
                             将描述内容合并写入书签标题中（形如：'标题 - 描述'）。适合不支持显示描述的极简浏览器书签栏，但会导致 Edge 收藏夹里的标题极其冗长。
                         </div>
@@ -5137,7 +5770,14 @@ const doExportJson = () => {
     try {
         const date = new Date();
         const filename = `CloudNav_Config_${date.getMonth() + 1}${date.getDate()}.json`;
-        const dataStr = JSON.stringify(appData, null, 2);
+        
+        // 智能清洗脏配置 (Task NT-V2.12)
+        const exportData = JSON.parse(JSON.stringify(appData));
+        if (exportData.settings) {
+            delete exportData.settings.cardWidth;
+        }
+        
+        const dataStr = JSON.stringify(exportData, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         
@@ -5603,6 +6243,11 @@ const initGlobalEvents = () => {
 
                     if (!confirm("导入将覆盖当前所有配置，确定继续吗？")) return;
                     
+                    // 智能清洗脏配置 (Task NT-V2.12)
+                    if (parsed.settings) {
+                        delete parsed.settings.cardWidth;
+                    }
+                    
                     appData = parsed;
                     showLoader('正在导入并同步...');
                     await syncConfigToCloud();
@@ -5723,7 +6368,7 @@ const initGlobalEvents = () => {
         const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
         const focusedCard = document.activeElement.closest('.card');
         const isCtrl = e.ctrlKey || e.metaKey;
-        const key = e.key.toLowerCase();
+        const key = e.key ? e.key.toLowerCase() : '';
         
         // Task 37.4: 预检测活跃弹窗
         const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
@@ -5877,7 +6522,7 @@ const initGlobalEvents = () => {
 
         // 3. Ctrl+B 视图调度 (核心快捷键 - Task 11.3/15.2 对齐)
         if (isCtrl && key === 'b') {
-            if (activeModal) return; // Task 37.4: 弹窗时屏蔽
+            if (activeModal || isPageManagementMode) return; // 弹窗 or 页面管理时屏蔽
             e.preventDefault();
             
             const sidebar = document.getElementById('sidebar');
@@ -5892,17 +6537,19 @@ const initGlobalEvents = () => {
             return;
         }
 
-        // 3.1 Alt+Z 一键切换禅意模式 (Task 15.3 新增)
-        if (e.altKey && key === 'z') {
-            if (activeModal) return; // Task 37.4: 弹窗时屏蔽
-            e.preventDefault();
-            toggleZenMode(undefined, true);
+        // 3.1 Alt+Z 或 Ctrl+Z 一键切换禅意模式 (Alt+Z 为系统标配热键，对 Ctrl+Z 增加防呆屏蔽)
+        if ((e.altKey || isCtrl) && key === 'z') {
+            if (activeModal || isPageManagementMode) return; // 弹窗 or 页面管理时屏蔽
+            if (e.altKey) {
+                e.preventDefault();
+                toggleZenMode(undefined, true);
+            }
             return;
         }
 
         // 4. 键入即唤醒 (Task 2.2 / S.2)
         if (!isInput && (e.key.length === 1 || key === '/') && !isCtrl && !e.altKey) {
-            if (activeModal) return; // Task 37.4: 弹窗时屏蔽
+            if (activeModal || isPageManagementMode) return; // 弹窗 or 页面管理时屏蔽
             const sea = document.getElementById('sea-input');
             if (sea) {
                 // 如果是 / 键，不输入到搜索框中
@@ -5916,6 +6563,7 @@ const initGlobalEvents = () => {
 
         // 5. Ctrl + L 或 Alt + L 唤起登录/用户中心 (Task 39.2)
         if ((isCtrl || e.altKey) && key === 'l') {
+            if (activeModal || isPageManagementMode) return; // 弹窗 or 页面管理时屏蔽
             e.preventDefault();
             showAuthModal();
             return;
@@ -5923,6 +6571,7 @@ const initGlobalEvents = () => {
 
         // 6. Ctrl+K 快速聚焦
         if (isCtrl && key === 'k') {
+            if (activeModal || isPageManagementMode) return; // 弹窗 or 页面管理时屏蔽
             e.preventDefault();
             const sea = document.getElementById('sea-input');
             if (sea) {
@@ -5986,6 +6635,20 @@ const initGlobalEvents = () => {
             }
         }
     });
+
+    // 绑定视频预览窗关闭及遮罩事件 (Task V.4)
+    const btnCloseVideo = document.getElementById('btn-close-video');
+    const videoModal = document.getElementById('video-modal');
+    if (btnCloseVideo) {
+        btnCloseVideo.onclick = () => closeVideoModal();
+    }
+    if (videoModal) {
+        videoModal.addEventListener('click', (e) => {
+            if (e.target === videoModal) {
+                closeVideoModal();
+            }
+        });
+    }
 };
 
 // ==================== 7. Task 3.2: 魔法棒与编辑逻辑 ====================
@@ -6100,9 +6763,20 @@ const triggerMagicWand = async () => {
             if (!titleInput.value) titleInput.value = title;
             if (!descInput.value) descInput.value = desc;
             
+            // 智能转换：使用国内和世界都极其稳定通用的 Favicon 代理源，防止原图标链接裂开 (Task NT-V2.14)
+            let finalIcon = icon;
+            try {
+                const domain = new URL(url).hostname;
+                if (domain) {
+                    finalIcon = `https://favicon.qqsuu.cn/${domain}`;
+                }
+            } catch (err) {
+                console.warn('[MagicWand] Failed to extract domain for stable favicon mapping', err);
+            }
+
             // 竞态防御：只有在用户等待期间没有手动修改过图标时，才予以自动覆盖填充
             if (iconInput.value === initialIcon || !iconInput.value) {
-                iconInput.value = icon;
+                iconInput.value = finalIcon;
                 iconInput.dispatchEvent(new Event('input'));
             } else {
                 console.log("[MagicWand] User manually specified emoji, skipping auto icon overwrite.");
