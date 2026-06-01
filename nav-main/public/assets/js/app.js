@@ -1589,7 +1589,7 @@ const buildCardHtml = (i) => {
     
     let iconUrl = i.icon;
     // 智能防追踪过滤：如果卡片图标是指向外部原域名的 Favicon (如 mail.qq.com/favicon.ico)，自动转换为通用的 api.iowen.cn 代理源，防止 Tracking Prevention 警告 (Task NT-V2.24)
-    if (iconUrl && iconUrl.startsWith('http') && !iconUrl.includes('api.iowen.cn') && !iconUrl.includes('images.unsplash.com')) {
+    if (iconUrl && iconUrl.startsWith('http') && !iconUrl.includes('api.iowen.cn') && !iconUrl.includes('images.unsplash.com') && !iconUrl.includes('api.iconify.design')) {
         try {
             const domain = new URL(iconUrl).hostname;
             if (domain) {
@@ -6662,7 +6662,7 @@ const initGlobalEvents = () => {
 
 // ==================== 7. Task 3.2: 魔法棒与编辑逻辑 ====================
 
-const EMOJI_KEYWORDS = {
+const RECOMMENDED_EMOJI_KEYWORDS = {
     'github': '🐙', 'git': '📦', 'code': '💻', '编程': '💻', '开发': '🛠️',
     'google': '🔍', 'search': '🔍', '搜索': '🔍',
     'youtube': '📺', 'video': '🎬', '视频': '🎬', 'music': '🎵', '音乐': '🎵',
@@ -6700,7 +6700,7 @@ const EMOJI_KEYWORDS = {
 const getRecommendedEmojis = (title) => {
     const results = new Set();
     const lowerTitle = (title || "").toLowerCase();
-    for (const [keyword, emoji] of Object.entries(EMOJI_KEYWORDS)) {
+    for (const [keyword, emoji] of Object.entries(RECOMMENDED_EMOJI_KEYWORDS)) {
         if (lowerTitle.includes(keyword)) results.add(emoji);
     }
     if (results.size === 0) {
@@ -6841,7 +6841,7 @@ const openEditModal = (id) => {
         ${getEmojiPickerHTML()}
 
         <!-- ==================== 1. 多源图标备份 (自动抓取测速) ==================== -->
-        <div style="background:rgba(255,255,255,0.03); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
+        <div style="display: none;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span style="font-size:12px; color:#aaa;"><i class="ri-refresh-line"></i> 多源图标备份 (自动抓取)</span>
             </div>
@@ -6875,29 +6875,26 @@ const openEditModal = (id) => {
             </div>
         </div>
 
-        <!-- ==================== 2. Iconify 矢量图标库搜索 ==================== -->
+        <!-- ==================== 2. 智能图标联合搜索 (Iconify + Emoji) ==================== -->
         <div class="form-row" style="background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
-            <label style="font-size:12px; font-weight:bold; color:#ccc; margin-bottom:6px;"><i class="ri-search-eye-line"></i> Iconify 矢量搜索</label>
-            <div style="display:flex; flex-direction:column; width:100%; gap:5px;">
+            <label style="font-size:12px; font-weight:bold; color:#ccc; margin-bottom:6px;"><i class="ri-search-eye-line"></i> 智能图标搜索与推荐</label>
+            <div style="display:flex; flex-direction:column; width:100%; gap:6px;">
                 <div style="display:flex; gap:8px;">
-                    <input id="iconify-search" placeholder="输入英文关键词, 如 github" style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; height:36px; padding:0 10px; color:#fff;">
-                    <button type="button" class="icon-btn-action" id="btn-iconify-search" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">搜索</button>
+                    <input id="emoji-recommend-title" value="${safeTitle}" placeholder="输入英文/拼音/中文关键词, 如 github" style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; height:36px; padding:0 10px; color:#fff;">
+                    <button type="button" class="icon-btn-action" id="btn-emoji-recommend" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">搜索</button>
+                    <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组 Emoji" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); color:#fff;"><i class="ri-refresh-line"></i></button>
                 </div>
-                <div id="iconify-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:80px; overflow-y:auto; margin-top:5px; padding:4px 0;"></div>
-            </div>
-        </div>
+                
+                <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+                    <div style="font-size:11px; color:#aaa; display:flex; align-items:center; gap:4px;"><i class="ri-magic-line"></i> 智能 Emoji 推荐:</div>
+                    <div id="emoji-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:60px; overflow-y:auto; padding:2px 0;">
+                        ${safeIcon && !safeIcon.startsWith('http') ? `<span class="emoji-suggestion selected" data-emoji="${safeIcon}">${safeIcon}</span>` : ''}
+                    </div>
+                </div>
 
-        <!-- ==================== 3. 智能 Emoji 语义化推荐 ==================== -->
-        <div class="form-row" style="background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
-            <label style="font-size:12px; font-weight:bold; color:#ccc; margin-bottom:6px;"><i class="ri-magic-line"></i> 智能 Emoji 推荐</label>
-            <div style="display:flex; flex-direction:column; width:100%; gap:5px;">
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <input id="emoji-recommend-title" value="${safeTitle}" placeholder="输入网站名称获取推荐" style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; height:36px; padding:0 10px; color:#fff;">
-                    <button type="button" class="icon-btn-action" id="btn-emoji-recommend" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">推荐</button>
-                    <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); color:#fff;"><i class="ri-refresh-line"></i></button>
-                </div>
-                <div id="emoji-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:60px; overflow-y:auto; margin-top:5px; padding:4px 0;">
-                    ${safeIcon && !safeIcon.startsWith('http') ? `<span class="emoji-suggestion selected" data-emoji="${safeIcon}">${safeIcon}</span>` : ''}
+                <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+                    <div style="font-size:11px; color:#aaa; display:flex; align-items:center; gap:4px;"><i class="ri-search-eye-line"></i> Iconify 矢量图标:</div>
+                    <div id="iconify-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:80px; overflow-y:auto; padding:2px 0;"></div>
                 </div>
             </div>
         </div>
@@ -6942,14 +6939,42 @@ const openEditModal = (id) => {
         });
     });
 
-    // 绑定 Iconify 矢量搜索
-    document.getElementById('btn-iconify-search').addEventListener('click', async () => {
-        const query = document.getElementById('iconify-search').value.trim();
-        if (!query) return;
+    // 绑定智能 Emoji 推荐与 Iconify 联合搜索
+    const renderEmojiSuggestions = (emojis) => {
+        const container = document.getElementById('emoji-results');
+        if (!container) return;
+        container.innerHTML = '';
+        emojis.forEach(emoji => {
+            const span = document.createElement('span');
+            span.className = 'emoji-suggestion';
+            span.textContent = emoji;
+            span.dataset.emoji = emoji;
+            span.onclick = () => {
+                document.querySelectorAll('.emoji-suggestion').forEach(el => el.classList.remove('selected'));
+                span.classList.add('selected');
+                selectIcon(emoji);
+            };
+            container.appendChild(span);
+        });
+    };
+
+    const recommendEmojisAndSearchIconify = async (isRefreshEmojiOnly = false) => {
+        const query = document.getElementById('emoji-recommend-title').value.trim();
+        const fallbackTitle = document.getElementById('edit-title-input').value.trim();
+        const searchWord = query || fallbackTitle;
+
+        // 1. 智能 Emoji 推荐
+        renderEmojiSuggestions(getRecommendedEmojis(searchWord));
+
+        if (isRefreshEmojiOnly) return; // 换一组 Emoji 时不重复拉取 Iconify
+
+        // 2. Iconify 矢量搜索
+        if (!searchWord) return;
         const resBox = document.getElementById('iconify-results');
+        if (!resBox) return;
         resBox.innerHTML = '<span style="font-size:12px; color:#aaa;">搜索中...</span>';
         try {
-            const req = await fetch(`https://api.iconify.design/search?query=${query}&limit=12`);
+            const req = await fetch(`https://api.iconify.design/search?query=${encodeURIComponent(searchWord)}&limit=12`);
             const data = await req.json();
             resBox.innerHTML = '';
             if (data.icons && data.icons.length > 0) {
@@ -6969,36 +6994,12 @@ const openEditModal = (id) => {
         } catch (e) {
             resBox.innerHTML = '<span style="font-size:12px; color:#e74c3c;">网络或接口错误</span>';
         }
-    });
-
-    // 绑定智能 Emoji 推荐
-    const renderEmojiSuggestions = (emojis) => {
-        const container = document.getElementById('emoji-results');
-        if (!container) return;
-        container.innerHTML = '';
-        emojis.forEach(emoji => {
-            const span = document.createElement('span');
-            span.className = 'emoji-suggestion';
-            span.textContent = emoji;
-            span.dataset.emoji = emoji;
-            span.onclick = () => {
-                document.querySelectorAll('.emoji-suggestion').forEach(el => el.classList.remove('selected'));
-                span.classList.add('selected');
-                selectIcon(emoji);
-            };
-            container.appendChild(span);
-        });
     };
 
-    const recommendEmojis = () => {
-        const title = document.getElementById('emoji-recommend-title').value.trim();
-        renderEmojiSuggestions(getRecommendedEmojis(title || document.getElementById('edit-title-input').value.trim()));
-    };
-
-    document.getElementById('btn-emoji-recommend').addEventListener('click', recommendEmojis);
-    document.getElementById('btn-emoji-refresh').addEventListener('click', recommendEmojis);
+    document.getElementById('btn-emoji-recommend').addEventListener('click', () => recommendEmojisAndSearchIconify(false));
+    document.getElementById('btn-emoji-refresh').addEventListener('click', () => recommendEmojisAndSearchIconify(true));
     document.getElementById('emoji-recommend-title').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') recommendEmojis();
+        if (e.key === 'Enter') recommendEmojisAndSearchIconify(false);
     });
 
     // 自动触发初始 Emoji 推荐和 URL 图标加载
