@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>个人网站导航</title>
     
-    <!-- DNS 预解析与预连接（优化图标加载速度） -->
+    <!-- DNS 预解析与预连接（优化图标及静态资源加载速度） -->
     <link rel="dns-prefetch" href="https://api.iowen.cn">
     <link rel="preconnect" href="https://api.iowen.cn" crossorigin>
+    <link rel="dns-prefetch" href="https://lib.baomitu.com">
+    <link rel="preconnect" href="https://lib.baomitu.com" crossorigin>
+    <link rel="dns-prefetch" href="https://images.unsplash.com">
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin>
     
     <!-- 引入外部样式资源 (使用国内加速节点) -->
     <link href="https://lib.baomitu.com/remixicon/3.5.0/remixicon.css" rel="stylesheet">
@@ -57,7 +61,6 @@
         <!-- 左侧导航栏 -->
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
-                <span class="sidebar-logo">🌐</span>
                 <span class="sidebar-title">个人导航</span>
                 <button id="btn-notice-center" class="notice-center-btn" title="公告中心" tabindex="0">
                     <i class="ri-notification-3-line"></i>
@@ -295,6 +298,47 @@
         <button id="scroll-to-bottom" class="quick-nav-btn" title="直达底部">
             <i class="ri-arrow-down-s-line"></i>
         </button>
+    </div>
+
+    <!-- 键盘快捷键帮助手册弹窗 -->
+    <div id="keyboard-help-modal" class="modal" style="z-index: 10500;">
+        <div class="modal-content" style="max-width: 450px; text-align: left; position: relative;">
+            <button id="btn-close-keyboard-help" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#777; cursor:pointer; font-size:24px">×</button>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="font-size: 36px; color: var(--primary-color);"><i class="ri-keyboard-line"></i></div>
+                <h4 style="font-size:16px; color: var(--text); margin-top: 5px;">键盘快捷键指南</h4>
+            </div>
+            <div class="keyboard-shortcuts-list" style="display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px;">
+                    <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">/</kbd> 或 <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">A-Z</kbd></span>
+                    <span style="color: var(--text-dim);">自动聚焦到中央搜索框</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px;">
+                    <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Tab</kbd> / <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Shift + Tab</kbd></span>
+                    <span style="color: var(--text-dim);">在分类、书签卡片之间流转焦点</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px;">
+                    <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">↓</kbd> / <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">↑</kbd></span>
+                    <span style="color: var(--text-dim);">流转联想搜索列表（或卡片列表）</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px;">
+                    <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Enter</kbd></span>
+                    <span style="color: var(--text-dim);">直接访问选中高亮的书签或提交表单</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px;">
+                    <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Esc</kbd></span>
+                    <span style="color: var(--text-dim);">清除搜索内容、退出搜索、关闭当前所有弹窗</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 8px;">
+                    <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Ctrl</kbd> 或 <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Cmd + B</kbd></span>
+                    <span style="color: var(--text-dim);">快速切入/退出极简沉浸禅意模式</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 4px;">
+                    <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Shift + /</kbd> (即 <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">?</kbd> 键)</span>
+                    <span style="color: var(--text-dim);">唤起/关闭当前快捷键说明手册</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- JavaScript 文件 -->

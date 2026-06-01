@@ -140,6 +140,48 @@ document.addEventListener('DOMContentLoaded', () => {
     initAuthUI();
     initGlobalEvents();
 
+    // Task 2: PWA 离线感知与状态自愈
+    window.updateNetworkStatus = () => {
+        const dot = document.getElementById('network-status');
+        if (!dot) return;
+        if (navigator.onLine) {
+            dot.className = 'network-status-dot online';
+            dot.title = '网络状态：云端在线同步中';
+            if (sysToken && isDataDirty) {
+                console.log('[Network] Connection restored. Auto-syncing to cloud...');
+                showToast("检测到网络已恢复，正在自动同步本地修改...", "#2ecc71");
+                manualSyncCloud();
+            }
+        } else {
+            dot.className = 'network-status-dot offline';
+            dot.title = '网络状态：本地离线暂存中';
+            showToast("网络连接已断开，您当前处于离线模式。修改将暂存本地！", "#e67e22");
+        }
+    };
+    window.addEventListener('online', window.updateNetworkStatus);
+    window.addEventListener('offline', window.updateNetworkStatus);
+    window.updateNetworkStatus();
+
+    // Task 3: 键盘快捷键帮助指南
+    window.toggleKeyboardHelp = (show) => {
+        const modal = document.getElementById('keyboard-help-modal');
+        if (!modal) return;
+        if (show === undefined) {
+            show = getComputedStyle(modal).display === 'none';
+        }
+        modal.style.display = show ? 'flex' : 'none';
+    };
+    const btnCloseKbd = document.getElementById('btn-close-keyboard-help');
+    if (btnCloseKbd) {
+        btnCloseKbd.onclick = () => window.toggleKeyboardHelp(false);
+    }
+    const kbdModal = document.getElementById('keyboard-help-modal');
+    if (kbdModal) {
+        kbdModal.onclick = (e) => {
+            if (e.target === kbdModal) window.toggleKeyboardHelp(false);
+        };
+    }
+
     // 2. 初始视觉校准 (使用默认配置防止白屏)
     updateStyles();
     
@@ -1879,6 +1921,9 @@ const renderNav = () => {
             });
         }
 
+        const sidebarFragment = document.createDocumentFragment();
+        const containerFragment = document.createDocumentFragment();
+
         cats.forEach(cat => {
             const navItem = document.createElement('div');
             navItem.className = `sidebar-nav-item ${activeCatId === cat.id ? 'active' : ''} ${cat.hidden ? 'is-hidden-cat' : ''}`;
@@ -1968,7 +2013,7 @@ const renderNav = () => {
                     navItem.classList.add('active');
                 }
             };
-            sidebarNav.appendChild(navItem);
+            sidebarFragment.appendChild(navItem);
 
             // 视图隔离核心逻辑 (Task 11.2 深度对齐)
             // 1. 禅意模式开启时：强制执行单一视图原则，无视 isolatedView 设置
@@ -2102,8 +2147,10 @@ const renderNav = () => {
             }
 
             section.appendChild(grid);
-            container.appendChild(section);
+            containerFragment.appendChild(section);
         });
+        sidebarNav.appendChild(sidebarFragment);
+        container.appendChild(containerFragment);
 
         // Task 4.4: 侧边栏新增分类入口 (仅管理模式)
         if (isPageManagementMode) {
@@ -2198,7 +2245,10 @@ const renderTools = () => {
                     <img src="${guestAvatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
                 </div>
                 <div class="user-meta-box">
-                    <span class="user-name" style="margin-bottom: 4px;">访客模式</span>
+                    <span class="user-name" style="margin-bottom: 4px; display: inline-flex; align-items: center; gap: 6px;">
+                        访客模式
+                        <div id="network-status" class="network-status-dot online" tabindex="0"></div>
+                    </span>
                     <span class="user-uid" style="background: rgba(255, 255, 255, 0.08); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; opacity: 1; display: inline-block; width: max-content; font-family: monospace;">GUEST (点击登录)</span>
                 </div>
             </div>
@@ -2238,7 +2288,10 @@ const renderTools = () => {
                         ${avatarHtml}
                     </div>
                     <div class="user-meta-box">
-                        <span class="user-name" style="margin-bottom: 4px;">${userDisplayName}</span>
+                        <span class="user-name" style="margin-bottom: 4px; display: inline-flex; align-items: center; gap: 6px;">
+                            ${userDisplayName}
+                            <div id="network-status" class="network-status-dot online" tabindex="0"></div>
+                        </span>
                         ${displayUid}
                     </div>
                 </div>
@@ -2389,6 +2442,11 @@ const renderTools = () => {
             ` : ''}
         </div>
     `;
+
+    // 即时根据真实网络状态校准指示灯
+    if (typeof window.updateNetworkStatus === 'function') {
+        window.updateNetworkStatus();
+    }
 };
 
 // Task 10.1: 唤起云端备份中心 (风格对齐视觉实验室)
@@ -2501,7 +2559,7 @@ window.pullBackupFromCloud = () => {
     body.innerHTML = `
         <div style="text-align: center; padding: 20px 10px;">
             <div style="font-size: 48px; color: #e67e22; margin-bottom: 12px; animation: focus-pulse 1.5s infinite;"><i class="ri-alert-line"></i></div>
-            <h3 style="font-size: 15px; font-weight: bold; color: #fff; margin-bottom: 8px;">云端拉取全量覆盖确认</h3>
+            <h3 style="font-size: 15px; font-weight: bold; color: var(--text); margin-bottom: 8px;">云端拉取全量覆盖确认</h3>
             <p style="font-size: 12px; color: var(--text-dim); line-height: 1.6; margin: 0 10px 15px;">
                 您即将从云端下载并还原您之前安全存档备份的数据！<br><br>
                 <span style="color:#e67e22; font-weight:bold;"><i class="ri-error-warning-line"></i> 警告：拉取操作将完全覆写并清空您当前设备上的本地分类与网址！此操作不可撤销，确定继续吗？</span>
@@ -3552,6 +3610,10 @@ const closeAllModals = (silent = false) => {
         videoModal.style.display = 'none';
     }
 
+    // 关闭键盘快捷键指南弹窗
+    const keyboardHelpModal = document.getElementById('keyboard-help-modal');
+    if (keyboardHelpModal) keyboardHelpModal.style.display = 'none';
+
     // Task 37.2: 焦点还原
     if (!silent && lastFocusedElement) {
         lastFocusedElement.focus();
@@ -3665,13 +3727,13 @@ const openCategoryEditModal = (catId) => {
         </div>
 
         <!-- ==================== 2. 智能图标联合搜索 (Iconify + Emoji) ==================== -->
-        <div class="form-row" style="background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
-            <label style="font-size:12px; font-weight:bold; color:#ccc; margin-bottom:6px;"><i class="ri-search-eye-line"></i> 智能图标搜索与推荐</label>
+        <div class="form-row" style="background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid var(--glass-border);">
+            <label style="font-size:12px; font-weight:bold; color:var(--text); margin-bottom:6px;"><i class="ri-search-eye-line"></i> 智能图标搜索与推荐</label>
             <div style="display:flex; flex-direction:column; width:100%; gap:6px;">
                 <div style="display:flex; gap:8px;">
-                    <input id="emoji-recommend-title" value="${safeTitle}" placeholder="输入英文/拼音/中文关键词, 如 github" style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; height:36px; padding:0 10px; color:#fff;">
+                    <input id="emoji-recommend-title" value="${safeTitle}" placeholder="输入英文/拼音/中文关键词, 如 github" style="flex:1; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:8px; height:36px; padding:0 10px; color:var(--text);">
                     <button type="button" class="icon-btn-action" id="btn-emoji-recommend" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">搜索</button>
-                    <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组 Emoji" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); color:#fff;"><i class="ri-refresh-line"></i></button>
+                    <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组 Emoji" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:var(--glass-bg); border:1px solid var(--glass-border); color:var(--text);"><i class="ri-refresh-line"></i></button>
                 </div>
                 
                 <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
@@ -6052,7 +6114,7 @@ const openImportExportModal = () => {
                 <span class="visual-option-label"><i class="ri-file-settings-line"></i> 选择数据格式</span>
                 <div class="visual-btn-group">
                     <button class="tab-btn ${currentExportFormat === 'json' ? 'active' : ''}" onclick="setExportFormat('json')">JSON 格式</button>
-                    <button class="tab-btn ${currentExportFormat === 'html' ? 'active' : ''}" onclick="setExportFormat('html')">Edge浏览器收藏夹格式</button>
+                    <button class="tab-btn ${currentExportFormat === 'html' ? 'active' : ''}" onclick="setExportFormat('html')">HTML格式</button>
                 </div>
                 <p style="font-size: 11px; opacity: 0.6; margin-top: 8px; line-height: 1.4;">
                     ${currentExportFormat === 'json' 
@@ -6679,7 +6741,7 @@ const initGlobalEvents = () => {
                         body.innerHTML = `
                             <div style="text-align: center; padding: 20px 10px;">
                                 <div style="font-size: 48px; color: #e67e22; margin-bottom: 12px; animation: focus-pulse 1.5s infinite;"><i class="ri-alert-line"></i></div>
-                                <h3 style="font-size: 15px; font-weight: bold; color: #fff; margin-bottom: 8px;">全量覆盖导入确认</h3>
+                                <h3 style="font-size: 15px; font-weight: bold; color: var(--text); margin-bottom: 8px;">全量覆盖导入确认</h3>
                                 <p style="font-size: 12px; color: var(--text-dim); line-height: 1.6; margin: 0 10px 15px;">
                                     系统成功解析到有效的备份文件！<br>
                                     包含 <strong style="color:var(--primary);">${parsed.categories.length}</strong> 个分类和 <strong style="color:var(--primary);">${parsed.items.length}</strong> 个书签。<br><br>
@@ -6827,6 +6889,15 @@ const initGlobalEvents = () => {
         const focusedCard = document.activeElement.closest('.card');
         const isCtrl = e.ctrlKey || e.metaKey;
         const key = e.key ? e.key.toLowerCase() : '';
+        
+        // 键盘帮助手册 (?) 热键监听 (Task 3)
+        if (e.key === '?' && !isInput) {
+            e.preventDefault();
+            if (typeof window.toggleKeyboardHelp === 'function') {
+                window.toggleKeyboardHelp();
+            }
+            return;
+        }
         
         // Task 37.4: 预检测活跃弹窗
         const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
@@ -7381,13 +7452,13 @@ const openEditModal = (id) => {
         </div>
 
         <!-- ==================== 2. 智能图标联合搜索 (Iconify + Emoji) ==================== -->
-        <div class="form-row" style="background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
-            <label style="font-size:12px; font-weight:bold; color:#ccc; margin-bottom:6px;"><i class="ri-search-eye-line"></i> 智能图标搜索与推荐</label>
+        <div class="form-row" style="background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid var(--glass-border);">
+            <label style="font-size:12px; font-weight:bold; color:var(--text); margin-bottom:6px;"><i class="ri-search-eye-line"></i> 智能图标搜索与推荐</label>
             <div style="display:flex; flex-direction:column; width:100%; gap:6px;">
                 <div style="display:flex; gap:8px;">
-                    <input id="emoji-recommend-title" value="${safeTitle}" placeholder="输入英文/拼音/中文关键词, 如 github" style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; height:36px; padding:0 10px; color:#fff;">
+                    <input id="emoji-recommend-title" value="${safeTitle}" placeholder="输入英文/拼音/中文关键词, 如 github" style="flex:1; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:8px; height:36px; padding:0 10px; color:var(--text);">
                     <button type="button" class="icon-btn-action" id="btn-emoji-recommend" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">搜索</button>
-                    <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组 Emoji" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); color:#fff;"><i class="ri-refresh-line"></i></button>
+                    <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组 Emoji" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:var(--glass-bg); border:1px solid var(--glass-border); color:var(--text);"><i class="ri-refresh-line"></i></button>
                 </div>
                 
                 <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
@@ -7406,7 +7477,7 @@ const openEditModal = (id) => {
 
         <div class="form-row">
             <label><i class="ri-text-snippet"></i> 描述</label>
-            <textarea id="edit-desc" rows="2" placeholder="可选描述" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#fff; padding:8px;">${item.desc || ''}</textarea>
+            <textarea id="edit-desc" rows="2" placeholder="可选描述" style="width:100%; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:8px; color:var(--text); padding:8px;">${item.desc || ''}</textarea>
         </div>
         <div class="form-row">
             <label><i class="ri-folders-line"></i> 分类</label>

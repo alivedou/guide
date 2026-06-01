@@ -8,6 +8,20 @@
 // 缓存版本号
 const CACHE_NAME = 'nav-core-v8';
 const ICON_CACHE_NAME = 'nav-icons-v2';
+const MAX_ICON_CACHE_ITEMS = 150; // 图标缓存自限容量
+
+// 安全限制缓存条数，避免无限膨胀
+function trimCache(cacheName, maxItems) {
+  caches.open(cacheName).then(cache => {
+    cache.keys().then(keys => {
+      if (keys.length > maxItems) {
+        cache.delete(keys[0]).then(() => {
+          trimCache(cacheName, maxItems);
+        });
+      }
+    });
+  });
+}
 
 // 需要缓存的核心静态资源
 const URLS_TO_CACHE = [
@@ -71,7 +85,11 @@ self.addEventListener('fetch', event => {
         return cache.match(event.request).then(response => {
           if (response) return response;
           return fetch(event.request).then(networkResponse => {
-            if (networkResponse.ok) cache.put(event.request, networkResponse.clone());
+            if (networkResponse.ok) {
+              cache.put(event.request, networkResponse.clone());
+              // 触发异步修剪，不阻塞加载
+              trimCache(ICON_CACHE_NAME, MAX_ICON_CACHE_ITEMS);
+            }
             return networkResponse;
           });
         });

@@ -5493,3 +5493,70 @@ body.light-theme .page-btn { background: rgba(0, 0, 0, 0.04); }
     color: white;
     box-shadow: 0 4px 12px rgba(57, 157, 255, 0.3);
 }
+
+/* ==================== Task 2 & Task 3: PWA 离线感知与高斯呼吸焦点环 ==================== */
+.network-status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-left: 8px;
+    display: inline-block;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+    outline: none;
+    box-shadow: 0 0 6px rgba(0,0,0,0.5);
+    cursor: help;
+}
+.network-status-dot.online {
+    background-color: #2ecc71;
+    box-shadow: 0 0 8px rgba(46, 204, 113, 0.7);
+    animation: online-pulse 1.8s infinite;
+}
+.network-status-dot.offline {
+    background-color: #e67e22;
+    box-shadow: 0 0 8px rgba(230, 126, 34, 0.7);
+    animation: offline-pulse 1.8s infinite;
+}
+@keyframes online-pulse {
+    0% { transform: scale(1); box-shadow: 0 0 4px rgba(46, 204, 113, 0.4); }
+    50% { transform: scale(1.2); box-shadow: 0 0 10px rgba(46, 204, 113, 0.8); }
+    100% { transform: scale(1); box-shadow: 0 0 4px rgba(46, 204, 113, 0.4); }
+}
+@keyframes offline-pulse {
+    0% { transform: scale(1); box-shadow: 0 0 4px rgba(230, 126, 34, 0.4); }
+    50% { transform: scale(1.2); box-shadow: 0 0 10px rgba(230, 126, 34, 0.8); }
+    100% { transform: scale(1); box-shadow: 0 0 4px rgba(230, 126, 34, 0.4); }
+}
+
+/* 极客无障碍高斯呼吸灯焦点环 */
+*:focus-visible {
+    outline: 2px solid var(--primary-color, #3498db) !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 12px var(--primary-color, #3498db) !important;
+    transition: outline-offset 0.15s, box-shadow 0.15s !important;
+}
+
+/* 键盘快捷键 kbd 视觉美化 - 自适应亮暗双重主题 */
+kbd {
+    display: inline-block;
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    color: var(--text) !important; /* 👈 自适应文字颜色，暗黑为纯白，明亮为深灰，100% 可见 */
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-family: monospace;
+    font-weight: bold;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    text-shadow: none !important;
+}
+
+body.light-theme kbd {
+    background-color: rgba(0, 0, 0, 0.06) !important; /* 👈 明亮模式下改用半透明淡黑色背景，避免白底白字 */
+    border-color: rgba(0, 0, 0, 0.15) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+}
+
+.keyboard-shortcuts-list span {
+    color: var(--text) !important; /* 👈 强力确保在所有模式下左侧按键文本或连字符都是清晰可见的主文字颜色 */
+}
