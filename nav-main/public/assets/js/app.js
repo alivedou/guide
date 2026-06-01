@@ -1,3 +1,11 @@
+/**
+ * @fileoverview 
+ * @author adou
+ * @copyright Copyright (c) 2026 adou. All rights reserved.
+ * @license MIT
+ * @disclaimer 免责声明：本软件及相关代码仅用于学术研究与个人学习，作者不对因使用本软件产生的任何直接或间接损失承担责任。
+ */
+
 // Task SYNC.GUARD.2: 获取核心数据指纹（仅包含分类和网址内容）
 const getCoreDataFingerprint = (data) => {
     if (!data) return '';
@@ -63,6 +71,95 @@ let adminSelectedInviteIds = new Set(); // Task STD.2: 选中的邀请码
 let adminSelectedAuditIds = new Set(); // Task NT-V2.10: 选中的审计日志
 let adminAuditFilters = { page: 1, pageSize: 20, keyword: '', actionType: '' }; // Task STD.3: 审计日志筛选
 let adminData = { users: [], invitations: [], announcements: [], logs: [], pagination: {} }; // 管理员全站数据缓存
+let navLocalBgImage = null; // 本地缓存的高清 Base64 壁纸全局缓存，支持 10MB (Task UI.25)
+
+// IndexedDB 辅助函数
+const dbName = "nav_local_db";
+const storeName = "bg_store";
+
+const openDB = () => {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(dbName, 1);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(storeName)) {
+                db.createObjectStore(storeName, { keyPath: "id" });
+            }
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e.target.error);
+    });
+};
+
+const getBgFromDB = async () => {
+    try {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([storeName], "readonly");
+            const store = transaction.objectStore(storeName);
+            const request = store.get("nav_local_bg_image");
+            request.onsuccess = (e) => {
+                resolve(e.target.result ? e.target.result.value : null);
+            };
+            request.onerror = (e) => reject(e.target.error);
+        });
+    } catch (err) {
+        console.error("IndexedDB getBg error:", err);
+        return null;
+    }
+};
+
+const saveBgToDB = async (value) => {
+    try {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([storeName], "readwrite");
+            const store = transaction.objectStore(storeName);
+            const request = store.put({ id: "nav_local_bg_image", value });
+            request.onsuccess = () => resolve(true);
+            request.onerror = (e) => reject(e.target.error);
+        });
+    } catch (err) {
+        console.error("IndexedDB saveBg error:", err);
+        return false;
+    }
+};
+
+const deleteBgFromDB = async () => {
+    try {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([storeName], "readwrite");
+            const store = transaction.objectStore(storeName);
+            const request = store.delete("nav_local_bg_image");
+            request.onsuccess = () => resolve(true);
+            request.onerror = (e) => reject(e.target.error);
+        });
+    } catch (err) {
+        console.error("IndexedDB deleteBg error:", err);
+        return false;
+    }
+};
+
+const initLocalBgImage = async () => {
+    try {
+        const dbBg = await getBgFromDB();
+        if (dbBg) {
+            navLocalBgImage = dbBg;
+        } else {
+            // 兜底与老用户 localStorage 迁移
+            const oldBg = localStorage.getItem('nav_local_bg_image');
+            if (oldBg) {
+                navLocalBgImage = oldBg;
+                await saveBgToDB(oldBg);
+                localStorage.removeItem('nav_local_bg_image');
+                console.log('[Style] Migrated local bg image from localStorage to IndexedDB.');
+            }
+        }
+    } catch (e) {
+        console.error('[Style] Failed to initialize local bg image from IndexedDB:', e);
+    }
+};
 
 // Task AL.1: 审计日志动作语义化映射
 const AuditActionMap = {
@@ -182,13 +279,15 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // 2. 初始视觉校准 (使用默认配置防止白屏)
-    updateStyles();
-    
-    // 3. 异步获取 Bing 壁纸 (Task 12.1)
-    if (!appData.settings?.bgUrl) {
-        getBingWallpaper().then(() => updateStyles());
-    }
+    // 2. 初始视觉校准 & 本地大壁纸预载 (IndexedDB 异步) (Task UI.25)
+    initLocalBgImage().then(() => {
+        updateStyles();
+        
+        // 3. 异步获取 Bing 壁纸 (Task 12.1)
+        if (!appData.settings?.bgUrl) {
+            getBingWallpaper().then(() => updateStyles());
+        }
+    });
 
     // 4. 异步获取云端配置与公告
     initSiteConfig();
@@ -663,7 +762,7 @@ const updateStyles = () => {
         document.body.dataset.bgType = 'custom';
         if (bg === 'local_upload') {
             // 🚀 读取本地缓存的高清 Base64 格式壁纸 (Task UI.25)
-            const localBg = localStorage.getItem('nav_local_bg_image');
+            const localBg = navLocalBgImage || localStorage.getItem('nav_local_bg_image');
             if (localBg) {
                 document.body.style.background = `url("${localBg}") center/cover fixed`;
             } else {
@@ -817,7 +916,7 @@ const openVisualLab = () => {
                 ` : ''}
             </div>
             <p style="font-size: 11px; opacity: 0.6; margin-top: 6px; line-height: 1.4;">
-                提示: 支持外链网络图片，或直接上传本地壁纸（建议 3MB 内以保障性能。图片纯本地缓存，零服务器开销，强制刷新不丢失）。
+                提示: 支持外链网络图片，或直接上传本地壁纸（建议 10MB 内以保障性能。使用浏览器 IndexedDB 纯本地缓存，零服务器开销，强制刷新不丢失）。
             </p>
         </div>
         <div class="visual-option-group">
@@ -1095,17 +1194,18 @@ window.triggerBgUpload = () => {
             const file = e.target.files[0];
             if (!file) return;
             
-            // 安全限制：localStorage 上限 5MB，限制图片在 3MB 内是绝对安全的 (Task UI.25)
-            if (file.size > 3 * 1024 * 1024) {
-                return showToast("上传失败：本地图片大小请限制在 3MB 以内，防止存储溢出", "#e74c3c");
+            // 安全限制：使用 IndexedDB 存储本地大文件，轻松支持 10MB 本地图片，零服务器开销 (Task UI.25)
+            if (file.size > 10 * 1024 * 1024) {
+                return showToast("上传失败：本地图片大小请限制在 10MB 以内", "#e74c3c");
             }
             
             showLoader('正在载入并处理图片...');
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => {
                 try {
                     const base64Data = event.target.result;
-                    localStorage.setItem('nav_local_bg_image', base64Data);
+                    await saveBgToDB(base64Data);
+                    navLocalBgImage = base64Data;
                     setVisualSetting('bgUrl', 'local_upload');
                     showToast("本地壁纸载入成功 (数据纯本地缓存，不占用服务器空间)");
                     openVisualLab(); // 重新刷新弹窗以呈现“清除”按钮
@@ -1121,7 +1221,9 @@ window.triggerBgUpload = () => {
     input.click();
 };
 
-window.clearBgUpload = () => {
+window.clearBgUpload = async () => {
+    await deleteBgFromDB();
+    navLocalBgImage = null;
     localStorage.removeItem('nav_local_bg_image');
     setVisualSetting('bgUrl', '');
     showToast("本地自定壁纸已清除");

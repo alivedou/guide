@@ -1,4 +1,12 @@
 /**
+ * @fileoverview 
+ * @author adou
+ * @copyright Copyright (c) 2026 adou. All rights reserved.
+ * @license MIT
+ * @disclaimer 免责声明：本软件及相关代码仅用于学术研究与个人学习，作者不对因使用本软件产生的任何直接或间接损失承担责任。
+ */
+
+/**
  * ==========================================
  * defaultData.js - 默认初始化数据
  * 包含分类和网站条目的默认配置

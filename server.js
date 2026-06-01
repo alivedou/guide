@@ -1,3 +1,11 @@
+/**
+ * @fileoverview 
+ * @author adou
+ * @copyright Copyright (c) 2026 adou. All rights reserved.
+ * @license MIT
+ * @disclaimer 免责声明：本软件及相关代码仅用于学术研究与个人学习，作者不对因使用本软件产生的任何直接或间接损失承担责任。
+ */
+
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
@@ -132,6 +140,34 @@ const secret = new TextEncoder().encode(JWT_SECRET);
 // ====== Task 4.3: 登录防爆破模拟 ======
 const loginAttempts = new Map(); // IP -> { count, lockUntil }
 const registerAttempts = new Map(); // Task 11.4: 注册防爆破 IP -> { count, lockUntil }
+
+// ====== Task 4.3.1: 资源配额管理 ======
+const QUOTA_CONFIG = {
+    guest: { maxCategories: 5, maxItemsPerCategory: 10 },
+    user: { maxCategories: 8, maxItemsPerCategory: 15 },
+    invited_user: { maxCategories: 10, maxItemsPerCategory: 20 },
+    super_user: { maxCategories: 15, maxItemsPerCategory: 30 },
+    admin: { maxCategories: 100, maxItemsPerCategory: 500 }
+};
+
+function getQuota(user) {
+    if (!user || !user.id || user.id === 'guest') return QUOTA_CONFIG.guest;
+    if (user.role === 'admin') return QUOTA_CONFIG.admin;
+    if (user.role === 'super_user') return QUOTA_CONFIG.super_user;
+    if (user.role === 'user') {
+        // 本地 SQLite 实时查询 has_invite 状态
+        try {
+            const dbUser = db.prepare('SELECT has_invite FROM users WHERE id = ?').get(user.id);
+            if (dbUser && dbUser.has_invite === 1) {
+                return QUOTA_CONFIG.invited_user;
+            }
+        } catch (e) {
+            console.error('[Quota] Failed to query user invite status from DB:', e.message);
+        }
+        return QUOTA_CONFIG.user;
+    }
+    return QUOTA_CONFIG.guest;
+}
 
 // ====== 鉴权中间件 ======
 const authenticate = async (req, res, next) => {
@@ -1208,17 +1244,28 @@ app.get('/api/config', authenticate, (req, res) => {
         data.categories = data.categories.filter(c => !c.hidden);
         data.items = data.items.filter(i => !i.hidden);
     }
-    res.json({ ...data, isAdmin: req.user.role === 'admin' || req.user.role === 'super_user' });
+    
+    const quota = getQuota(req.user);
+    res.json({ 
+        ...data, 
+        isAdmin: req.user.role === 'admin' || req.user.role === 'super_user',
+        user: userId,
+        uid: req.user.uid,
+        username: req.user.username,
+        role: req.user.role,
+        quota
+    });
 });
 
 app.post('/api/config', authenticate, (req, res) => {
     if (req.user.id === 'guest') return res.status(401).end();
     const { categories, items, settings, clicks_history } = req.body;
     const userId = req.user.id;
+    const quota = getQuota(req.user);
 
     // Task 4.3: 资源配额硬核校验
-    if (categories && categories.length > 20) {
-        return res.status(403).json({ error: '分类数量超出上限 (20)', code: 'ERR_QUOTA_EXCEEDED' });
+    if (categories && categories.length > quota.maxCategories) {
+        return res.status(403).json({ error: `分类数量已达到上限 (${quota.maxCategories})`, code: 'ERR_QUOTA_EXCEEDED' });
     }
     
     // 统计每个分类下的书签数量
@@ -1227,8 +1274,8 @@ app.post('/api/config', authenticate, (req, res) => {
         for (const item of items) {
             const cId = item.catId || item.cat_id;
             catCounts[cId] = (catCounts[cId] || 0) + 1;
-            if (catCounts[cId] > 100) {
-                return res.status(403).json({ error: '单个分类下的书签不能超过 100 个', code: 'ERR_QUOTA_EXCEEDED' });
+            if (catCounts[cId] > quota.maxItemsPerCategory) {
+                return res.status(403).json({ error: `单个分类下的书签不能超过 ${quota.maxItemsPerCategory} 个`, code: 'ERR_QUOTA_EXCEEDED' });
             }
         }
     }
