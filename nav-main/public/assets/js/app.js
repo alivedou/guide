@@ -1280,7 +1280,8 @@ const doLogout = async () => {
                     await manualSyncCloud();
                     isDataDirty = false;
                 } catch (e) {
-                    if (!confirm(`云端同步失败：${e.message}\n仍要退出登录吗？(未同步的内容将仅保留在此浏览器中)`)) {
+                    const ok = await window.requireSystemConfirm("退出登录确认", `云端同步失败：${e.message}\n仍要退出登录吗？(未同步的内容将仅保留在此浏览器中)`, true);
+                    if (!ok) {
                         return;
                     }
                 }
@@ -1542,12 +1543,16 @@ const init = async (forceRender = false) => {
             const cloudData = await res.json();
             console.log('[Init] Cloud config received:', cloudData);
             
-                // 3. 【冷启动判定】仅在本地没有任何缓存时，才执行云端数据自动覆盖
+                // 3. 【冷启动与多端同步判定】
                 const localFingerprint = getCoreDataFingerprint(appData || {});
                 const cloudFingerprint = getCoreDataFingerprint(cloudData || {});
                 
-                if (!hasLoadedCache) {
-                    console.log('[Init] No local cache found, cold starting with cloud data...');
+                // 判定：当前是否切换了账号（手机端新登录），或者本地缓存其实是未登录的访客默认数据，或者本地依然处于最初加载的占位状态
+                const isUserChanged = currentUser && cloudData.user && (cloudData.user !== appData.user);
+                const isLocalDefault = !appData.user || appData.user === 'guest' || (appData.categories && appData.categories.length === 1 && appData.categories[0].id === 'temp_init');
+
+                if (!hasLoadedCache || isUserChanged || isLocalDefault) {
+                    console.log('[Init] Force overwriting local cache with cloud data due to user change or cold start.');
                     
                     // Task 19.3: 渲染兜底
                     if (!cloudData.categories || !cloudData.items) {
@@ -1579,6 +1584,14 @@ const init = async (forceRender = false) => {
                         isAdmin = cloudData.isAdmin;
                     }
                     localStorage.setItem('nav_app_data', JSON.stringify(appData));
+                }
+
+                // 安全对齐云端最近备份时间到本地，防止多终端“从未备份”的视觉误导和自动备份时序错乱
+                if (cloudData.lastUpdated) {
+                    const parseTime = Date.parse(cloudData.lastUpdated.trim().replace(/-/g, '/'));
+                    if (!isNaN(parseTime)) {
+                        localStorage.setItem('nav_last_cloud_sync', parseTime.toString());
+                    }
                 }
             
             // 同步最新的用户信息 (包含 UID)
@@ -2531,6 +2544,18 @@ window.executePullBackupFromCloud = async () => {
             localStorage.setItem('nav_app_data', JSON.stringify(appData));
             lastSyncFingerprint = getCoreDataFingerprint(appData);
 
+            // 写入云端最新备份时间到本地，保持多终端同步状态实时一致
+            if (data.lastUpdated) {
+                const parseTime = Date.parse(data.lastUpdated.trim().replace(/-/g, '/'));
+                if (!isNaN(parseTime)) {
+                    localStorage.setItem('nav_last_cloud_sync', parseTime.toString());
+                } else {
+                    localStorage.setItem('nav_last_cloud_sync', Date.now().toString());
+                }
+            } else {
+                localStorage.setItem('nav_last_cloud_sync', Date.now().toString());
+            }
+
             // 重新刷新与渲染
             renderNav();
             renderTools();
@@ -2564,8 +2589,9 @@ window.manualSyncCloud = async (refreshUI = false) => {
         return showToast("本地数据结构异常，取消上传以保护云端数据", "#e74c3c");
     }
 
-    if (appData.categories.length === 0 && !confirm("检测到本地没有分类数据，确定要清空云端备份吗？")) {
-        return;
+    if (appData.categories.length === 0) {
+        const ok = await window.requireSystemConfirm("清空备份确认", "检测到本地没有分类数据，确定要清空云端备份吗？", true);
+        if (!ok) return;
     }
 
     await SyncUI.perform('BACKUP_MANUAL', async () => {
@@ -3009,6 +3035,13 @@ const checkAutoSyncSchedule = async () => {
     const intervalDays = appData.settings?.syncInterval || 0;
     if (intervalDays <= 0) return;
 
+    // 安全防御：如果本地数据根本没有未同步的更改 (isDataDirty 为 false)，则绝对不触发向云端自动备份，
+    // 从而 100% 避免新终端登录时，本地默认旧数据在不知情的情况下覆盖了云端的珍贵自定义数据！
+    if (!isDataDirty) {
+        console.log('[Sync] Local data is clean. Skip automatic cloud backup to protect customized cloud data.');
+        return;
+    }
+
     const lastSync = parseInt(localStorage.getItem('nav_last_cloud_sync') || '0');
     const now = Date.now();
     const threshold = intervalDays * 24 * 60 * 60 * 1000;
@@ -3016,8 +3049,6 @@ const checkAutoSyncSchedule = async () => {
     if (now - lastSync > threshold) {
         console.log(`[Sync] Auto-sync triggered. Interval: ${intervalDays} days. Last sync: ${formatSystemDate(lastSync, false)}`);
         
-        // 自动同步前进行静默检查：如果数据没变（isDataDirty 为 false），则仅更新时间戳而不发请求
-        // 或者简单起见，既然是自动备份，直接执行一次上传以确保云端是最新的
         showToast(`自动备份中 (周期: ${intervalDays} 天)...`, "#3498db");
         await manualSyncCloud();
     }
@@ -4817,11 +4848,26 @@ window.batchAnnounceAction = async (action) => {
     
     const ids = Array.from(adminSelectedAnnounceIds);
     let msg = "";
-    if (action === 'delete') msg = `确定要批量删除这 ${ids.length} 条公告吗？此操作不可撤销！`;
-    else if (action === 'publish') msg = `确定要批量发布这 ${ids.length} 条公告吗？`;
-    else if (action === 'archive') msg = `确定要批量归档这 ${ids.length} 条公告吗？`;
+    let title = "";
+    let isDanger = false;
+    if (action === 'delete') {
+        title = "批量删除公告";
+        msg = `确定要批量删除这 ${ids.length} 条公告吗？此操作不可撤销！`;
+        isDanger = true;
+    } else if (action === 'publish') {
+        title = "批量发布公告";
+        msg = `确定要批量发布这 ${ids.length} 条公告吗？`;
+        isDanger = false;
+    } else if (action === 'archive') {
+        title = "批量归档公告";
+        msg = `确定要批量归档这 ${ids.length} 条公告吗？`;
+        isDanger = false;
+    }
     
-    if (msg && !confirm(msg)) return;
+    if (msg) {
+        const ok = await window.requireSystemConfirm(title, msg, isDanger);
+        if (!ok) return;
+    }
 
     await SyncUI.perform('ADMIN_ANNOUNCE', async () => {
         // 依次处理或批量处理 (目前后端暂未提供批量接口，采用循环或批量更新 API)
@@ -4990,7 +5036,10 @@ window.updateInviteBatchBar = () => {
 window.batchInviteAction = async (action) => {
     if (adminSelectedInviteIds.size === 0) return;
     const codes = Array.from(adminSelectedInviteIds);
-    if (action === 'delete' && !confirm(`确定要批量下架这 ${codes.length} 个未使用邀请码吗？`)) return;
+    if (action === 'delete') {
+        const ok = await window.requireSystemConfirm("批量下架邀请码", `确定要批量下架这 ${codes.length} 个未使用邀请码吗？`, true);
+        if (!ok) return;
+    }
 
     await SyncUI.perform('INVITE_BATCH', async () => {
         for (const code of codes) {
