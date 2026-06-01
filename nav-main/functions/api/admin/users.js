@@ -189,7 +189,24 @@ export async function onRequestDelete(context) {
       return new Response(JSON.stringify({ error: "管理员身份验证失败，请检查密码" }), { status: 401 });
     }
 
-    // 执行删除 (级联删除会自动处理其他表)
+    // 执行 D1 全关联地毯式提前清理，阻断任何外键冲突 (FOREIGN KEY constraint failed) 并彻底销账
+    // 1. 彻底删除该用户占用的邀请码，防止随着账号删除而“复活”导致重复注册
+    await env.DB.prepare('DELETE FROM invitation_codes WHERE used_by = ?').bind(userId).run();
+    
+    // 2. 删除该管理员生成的邀请码
+    await env.DB.prepare('DELETE FROM invitation_codes WHERE creator_id = ?').bind(userId).run();
+
+    // 3. 提前删除其主表下的所有子表业务行
+    await env.DB.prepare('DELETE FROM user_settings WHERE user_id = ?').bind(userId).run();
+    await env.DB.prepare('DELETE FROM items WHERE user_id = ?').bind(userId).run();
+    await env.DB.prepare('DELETE FROM categories WHERE user_id = ?').bind(userId).run();
+    await env.DB.prepare('DELETE FROM announcement_read_states WHERE user_id = ?').bind(userId).run();
+    await env.DB.prepare('DELETE FROM audit_logs WHERE user_id = ?').bind(userId).run();
+
+    // 4. 从 Workers KV 中物理擦除该用户的配置缓存，绝不留一丝脏数据
+    await env.nav.delete(`user_config:${userId}`);
+
+    // 5. 最终一击：安全删除 users 核心行
     await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
     
     // 记录审计日志
