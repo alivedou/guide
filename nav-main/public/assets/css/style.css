@@ -1680,6 +1680,10 @@ body.light-theme .user-name {
     border: 1px solid var(--glass-border);
     color: var(--text);
     transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+    
+    /* 默认平时闲置退缩贴边半遮挡（向左退 25px，保留 20px 在屏幕边缘可碰） */
+    opacity: 0.45;
+    transform: translateX(-25px);
 }
 
 /* 移动端/禅意模式搜索召唤按钮 (Task S.3) */
@@ -1701,13 +1705,34 @@ body.light-theme .user-name {
     border: 1px solid var(--glass-border);
     color: var(--text);
     transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+    
+    /* 默认平时闲置退缩贴边半遮挡（向右退 25px，保留 20px 在屏幕边缘可碰） */
+    opacity: 0.45;
+    transform: translateX(25px);
 }
 
-.sidebar-toggle:hover,
+/* 激活弹出态（正在滚动、侧边栏开启、或处于搜索激活状态时，完全弹出来） */
+body.scroll-active .sidebar-toggle,
+body.sidebar-open .sidebar-toggle,
+body.scroll-active .summon-search-btn,
+body.sidebar-open .summon-search-btn,
+body.search-active .summon-search-btn {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.sidebar-toggle:hover {
+    background: var(--glass-hover);
+    transform: scale(1.05) translateX(0) !important;
+    color: var(--primary);
+    opacity: 1;
+}
+
 .summon-search-btn:hover {
     background: var(--glass-hover);
-    transform: scale(1.05);
+    transform: scale(1.05) translateX(0) !important;
     color: var(--primary);
+    opacity: 1;
 }
 
 body.search-active .summon-search-btn {
@@ -1740,9 +1765,11 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
     }
     .sidebar-toggle {
         left: 15px;
+        transform: translateX(-20px); /* 手机端平时向左退 20px */
     }
     .summon-search-btn {
         right: 15px;
+        transform: translateX(20px); /* 手机端平时向右退 20px */
     }
 }
 
@@ -3406,6 +3433,15 @@ body.view-style-2 .card[data-tooltip]::before {
         --card-w: 75px;
         --card-h: 75px;
         --sidebar-width: 250px;
+    }
+
+    /* 彻底锁定手机端整个视窗、页面和容器横向无溢出，坚决遏制并抹杀任何由于元素溢出屏幕导致的横向滚动和挤偏 */
+    html,
+    body,
+    .app-layout {
+        overflow-x: hidden !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
     }
 
     /* 移动端：侧边栏变为滑出式，并给予绝对层级压制防止穿透 */

@@ -584,8 +584,10 @@ const updateStyles = () => {
     document.body.classList.toggle('zen-active', isZen);
 
     // 4. 处理卡片宽度 (彻底与 CSS 密度规范一致)
+    // 移动端/手机端下由于屏幕极窄，强行忽略用户自定义偏好，完美向未登录游客态看齐（无条件复用 CSS 默认 70px/75px 黄金标准）
     const w = appData.settings?.cardWidth;
-    if (!w) {
+    const isMobile = window.innerWidth <= 768;
+    if (!w || isMobile) {
         document.documentElement.style.removeProperty('--card-w');
         document.documentElement.style.removeProperty('--card-h');
     } else {
@@ -5919,6 +5921,7 @@ const initGlobalEvents = () => {
     const fabToBottom = document.getElementById('scroll-to-bottom');
     const fabGroup = document.getElementById('quick-nav-group');
     let fabTimer = null;
+    let scrollActiveTimer = null;
 
     if (fabToTop && fabToBottom && fabGroup) {
         fabToTop.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -5933,6 +5936,11 @@ const initGlobalEvents = () => {
             fabGroup.classList.add('active');
             clearTimeout(fabTimer);
             fabTimer = setTimeout(() => fabGroup.classList.remove('active'), 2000);
+
+            // 联动顶部悬浮控制按钮的全局闲置呼吸动效
+            document.body.classList.add('scroll-active');
+            clearTimeout(scrollActiveTimer);
+            scrollActiveTimer = setTimeout(() => document.body.classList.remove('scroll-active'), 2000);
         }, { passive: true });
     }
 
