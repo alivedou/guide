@@ -1984,7 +1984,10 @@ const renderNav = () => {
             const sectionIconHtml = cat.icon?.startsWith('http') 
                 ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">` 
                 : `<span style="font-size: 20px; line-height: 1; display: block;">${cat.icon || '📂'}</span>`;
-            section.innerHTML = `<div class="category-section-title" style="display: flex; align-items: center; gap: 8px;"><span style="width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle;">${sectionIconHtml}</span> ${cat.name}</div>`;
+            
+            // 🔒 限制当前分类名展示：最多 1 个图标加 5 个字，溢出自动截断
+            const truncatedCatName = cat.name.length > 5 ? cat.name.substring(0, 5) + '...' : cat.name;
+            section.innerHTML = `<div class="category-section-title" style="display: flex; align-items: center; gap: 8px;"><span style="width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle;">${sectionIconHtml}</span><span class="cat-title-text">${escapeHTML(truncatedCatName)}</span></div>`;
 
             const grid = document.createElement('div');
             grid.className = cat._isVideo ? 'video-grid' : 'nav-grid';
@@ -2005,7 +2008,6 @@ const renderNav = () => {
                 // 注入描述作为 Tooltip (Task 4.9.2)
                 if (item.desc) {
                     card.setAttribute('data-tooltip', item.desc);
-                    card.setAttribute('title', item.desc); // 浏览器原生兼容
                 }
                 card.style.animationDelay = `${idx * 0.03}s`;
                 

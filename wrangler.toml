@@ -2,7 +2,8 @@ name = "cloudnav"
 pages_build_output_dir = "./nav-main/public"
 
 [vars]
-JWT_SECRET = "cloudnav-secret-2026"
+JWT_SECRET = "dedf2048-702a-46d4-89bf-7d3a1b8e8e95"
+CRON_SECRET = "200a2ba0-efb8-4d51-a0e6-1ebb99f66607"
 
 [[kv_namespaces]]
 binding = "nav"

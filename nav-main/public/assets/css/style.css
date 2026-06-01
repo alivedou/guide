@@ -1845,10 +1845,10 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 15px;
+    font-size: 14px; /* 微调略小更显精致 */
     font-weight: 700;
     color: var(--text);
-    padding: 6px 16px;
+    padding: 6px 14px;
     margin-bottom: 16px;
     margin-left: 4px;
     position: sticky;
@@ -1860,6 +1860,20 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.05);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    
+    /* 🔒 固定大小设计（配合 1图标+5个字限制，给卡片向上弹出释放充裕空间） */
+    max-width: 160px; /* 固定的最大宽度 */
+    height: 32px; /* 固定的高度 */
+    box-sizing: border-box;
+    overflow: hidden; /* 强制裁剪溢出 */
+}
+
+/* 分类名文字样式（确保截断） */
+.category-section-title .cat-title-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100px;
 }
 
 .category-section-title .cat-icon {
@@ -2061,9 +2075,9 @@ body.light-theme .seg-btn {
 [data-tooltip]:not([data-tooltip=""])::after {
     content: attr(data-tooltip);
     position: absolute;
-    bottom: calc(100% + 12px);
+    bottom: calc(100% + 12px); /* 还原为向上弹出（优化空间后避免遮挡） */
     left: 50%;
-    transform: translateX(-50%) translateY(8px);
+    transform: translateX(-50%) translateY(8px); /* 还原初始向上偏移 */
     background: rgba(20, 20, 20, 0.85);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -2088,11 +2102,11 @@ body.light-theme .seg-btn {
 [data-tooltip]:not([data-tooltip=""])::before {
     content: '';
     position: absolute;
-    bottom: calc(100% + 4px);
+    bottom: calc(100% + 4px); /* 还原为向上弹出 */
     left: 50%;
-    transform: translateX(-50%) translateY(8px);
+    transform: translateX(-50%) translateY(8px); /* 还原初始动效 */
     border: 5px solid transparent;
-    border-top-color: rgba(20, 20, 20, 0.85);
+    border-top-color: rgba(20, 20, 20, 0.85); /* 还原小箭头朝下，指向卡片主体 */
     opacity: 0;
     visibility: hidden;
     transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
