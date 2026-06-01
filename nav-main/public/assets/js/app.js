@@ -6660,6 +6660,142 @@ const initGlobalEvents = () => {
 
 // ==================== 7. Task 3.2: 魔法棒与编辑逻辑 ====================
 
+// ==================== 7. Task 3.2: 魔法棒与编辑逻辑 ====================
+
+const EMOJI_KEYWORDS = {
+    'github': '🐙', 'git': '📦', 'code': '💻', '编程': '💻', '开发': '🛠️',
+    'google': '🔍', 'search': '🔍', '搜索': '🔍',
+    'youtube': '📺', 'video': '🎬', '视频': '🎬', 'music': '🎵', '音乐': '🎵',
+    'twitter': '🐦', 'facebook': '👥', 'social': '🌐', '社交': '🌐',
+    'mail': '📧', 'email': '📧', '邮箱': '📧', 'message': '💬', '消息': '💬',
+    'shop': '🛒', 'store': '🏪', '购物': '🛒', 'buy': '🛍️',
+    'game': '🎮', 'games': '🎲', '游戏': '🎮', 'play': '▶️',
+    'book': '📚', 'read': '📖', 'learn': '📝', '学习': '📚', '教育': '🎓',
+    'news': '📰', 'newspaper': '📰', '新闻': '📰', 'blog': '📝',
+    'weather': '🌤️', '天气': '🌤️',
+    'photo': '📷', 'image': '🖼️', '图片': '🖼️', 'camera': '📸',
+    'food': '🍔', 'restaurant': '🍽️', '美食': '🍜', 'eat': '🍕',
+    'travel': '✈️', 'trip': '🧳', '旅行': '🧳', 'map': '🗺️',
+    'money': '💰', 'finance': '💵', 'pay': '💳', '支付': '💳', 'bank': '🏦',
+    'cloud': '☁️', 'cloudflare': '☁️', 'aws': '☁️', 'server': '🖥️',
+    'chat': '💬', 'talk': '🗣️', 'ai': '🤖', 'bot': '🤖',
+    'home': '🏠', '生活': '🏠',
+    'work': '💼', 'office': '🏢', 'business': '💼', '工作': '💼',
+    'health': '🏥', 'medical': '🏥', '医院': '🏥', 'doctor': '👨‍⚕️',
+    'sport': '⚽', 'sports': '🏃', '运动': '⚽', 'fitness': '💪',
+    'star': '⭐', 'favorite': '⭐', '收藏': '⭐', 'bookmark': '🔖',
+    'setting': '⚙️', 'config': '🔧', '设置': '⚙️', 'tool': '🛠️',
+    'download': '⬇️', 'upload': '⬆️', 'file': '📁', 'folder': '📁',
+    'link': '🔗', 'connect': '🔗', 'chain': '🔗', '链接': '🔗',
+    'lock': '🔒', 'security': '🔐', 'secure': '🔒', '安全': '🔐',
+    'design': '🎨', 'art': '🎨', 'creative': '🎨', '设计': '🎨',
+    'api': '🔌', 'data': '📊', 'database': '🗄️', '数据': '📊',
+    'terminal': '💻', 'console': '⌨️', 'ssh': '🔐', '命令': '⌨️',
+    'wifi': '📶', 'network': '🌐', 'internet': '🌐', 'web': '🌐',
+    'notification': '🔔', 'bell': '🔔', 'alert': '⚠️', '通知': '🔔',
+    'fire': '🔥', 'hot': '🔥', 'trending': '📈', '热门': '🔥',
+    'bilibili': '📺', 'b站': '📺', '哔哩哔哩': '📺'
+};
+
+const getRecommendedEmojis = (title) => {
+    const results = new Set();
+    const lowerTitle = (title || "").toLowerCase();
+    for (const [keyword, emoji] of Object.entries(EMOJI_KEYWORDS)) {
+        if (lowerTitle.includes(keyword)) results.add(emoji);
+    }
+    if (results.size === 0) {
+        return window.emojiPool ? window.emojiPool.getRandomEmojis(8) : ['🌐', '🔗', '📌', '⭐', '💡', '✨', '🎯', '🚀'];
+    }
+    const extras = window.emojiPool ? window.emojiPool.getRandomEmojis(4) : ['🌟', '💫', '✨', '🔮'];
+    return [...results, ...extras].slice(0, 8);
+};
+
+const selectIcon = (url) => {
+    if (!url) return;
+    const input = document.getElementById('edit-icon');
+    if (input) {
+        input.value = url;
+        input.dispatchEvent(new Event('input')); // 触发预览更新
+    }
+};
+
+const handleUrlInput = (url, autoSelect = false) => {
+    if (!url || !url.startsWith('http')) {
+        ['0', '1', '2', '3'].forEach(n => {
+            const txt = document.getElementById('txt-fav' + n);
+            const img = document.getElementById('img-fav' + n);
+            const opt = document.getElementById('opt-fav' + n);
+            if (txt) txt.value = "";
+            if (img) { img.src = ""; img.style.display = 'none'; }
+            if (opt) { opt.checked = false; opt.disabled = true; }
+        });
+        return;
+    }
+
+    try {
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname;
+        const origin = urlObj.origin;
+        
+        const favs = [
+            `${origin}/favicon.ico`,
+            `https://api.iowen.cn/favicon/${domain}.png`,
+            `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+            `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+        ];
+
+        let firstSuccessIdx = -1;
+
+        favs.forEach((favUrl, i) => {
+            const txt = document.getElementById('txt-fav' + i);
+            const img = document.getElementById('img-fav' + i);
+            const opt = document.getElementById('opt-fav' + i);
+            if (i === 3 && !txt) return; // 容错
+
+            if (txt && img) {
+                txt.value = favUrl;
+                img.src = favUrl;
+                img.style.display = 'block';
+                
+                img.onerror = () => {
+                    img.style.display = 'none';
+                    if (opt) opt.disabled = true;
+                };
+
+                img.onload = () => {
+                    img.style.display = 'block';
+                    if (opt) opt.disabled = false;
+                    
+                    // 智能选优逻辑：如果开启了自动选择，且当前还没选过，选第一个加载成功的
+                    if (autoSelect) {
+                        const currentIconVal = document.getElementById('edit-icon').value.trim();
+                        if (!currentIconVal || currentIconVal === '') {
+                             if (firstSuccessIdx === -1) {
+                                 firstSuccessIdx = i;
+                                 selectIcon(favUrl);
+                                 if (opt) opt.checked = true;
+                                 const labels = ['原站', 'Iowen', 'DDG', 'Google'];
+                                 showToast(`已自动匹配最优图标 (${labels[i] || '未知'})`);
+                             }
+                        }
+                    }
+                };
+            }
+        });
+
+        // 默认预览 (给第一个 Iowen 接口)
+        const currentIconInput = document.getElementById('edit-icon');
+        if (currentIconInput && !currentIconInput.value) {
+            const preview = document.getElementById('edit-icon-preview');
+            if (preview) {
+                preview.innerHTML = `<img src="${favs[1]}">`;
+            }
+        }
+    } catch (e) { }
+};
+
+const debouncedHandleUrlInput = utils.debounce((val) => handleUrlInput(val), 500);
+
 const openEditModal = (id) => {
     lastFocusedElement = document.activeElement; // Task 37.2
     // Task 9.6 & O++.1: 切换弹窗启用静默模式
@@ -6673,24 +6809,27 @@ const openEditModal = (id) => {
     modal.setAttribute('data-editing-id', id);
     document.getElementById('edit-title').innerText = id ? '编辑书签' : '添加新书签';
 
+    const safeTitle = utils.escapeHTML(item.title);
+    const safeIcon = utils.escapeHTML(item.icon);
+
     body.innerHTML = `
         <div class="form-row">
             <label><i class="ri-link"></i> 网址</label>
             <div style="display:flex; gap:8px; width:100%">
                 <input type="text" id="edit-url" value="${item.url}" placeholder="https://...">
-                <button id="btn-magic-wand" class="icon-btn-action" title="魔法棒自动抓取" onclick="triggerMagicWand()">
+                <button id="btn-magic-wand" class="icon-btn-action" title="一键抓取并修复图标" onclick="triggerMagicWand()">
                     <i class="ri-magic-line"></i>
                 </button>
             </div>
         </div>
         <div class="form-row">
             <label><i class="ri-font-size"></i> 标题</label>
-            <input type="text" id="edit-title-input" value="${item.title}" placeholder="网站名称">
+            <input type="text" id="edit-title-input" value="${safeTitle}" placeholder="网站名称">
         </div>
         <div class="form-row">
             <label><i class="ri-image-line"></i> 图标</label>
             <div style="display:flex; gap:8px; width:100%; align-items:center;">
-                <input type="text" id="edit-icon" value="${item.icon || ''}" placeholder="Emoji 或 图片 URL">
+                <input type="text" id="edit-icon" value="${safeIcon || ''}" placeholder="Emoji 或 图片 URL">
                 <button id="btn-select-emoji" class="icon-btn-action" title="选择表情/图标" onclick="toggleEmojiPicker()">
                     <i class="ri-emotion-line"></i>
                 </button>
@@ -6700,6 +6839,69 @@ const openEditModal = (id) => {
             </div>
         </div>
         ${getEmojiPickerHTML()}
+
+        <!-- ==================== 1. 多源图标备份 (自动抓取测速) ==================== -->
+        <div style="background:rgba(255,255,255,0.03); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span style="font-size:12px; color:#aaa;"><i class="ri-refresh-line"></i> 多源图标备份 (自动抓取)</span>
+            </div>
+            <div class="form-row" style="margin-bottom:8px; display:flex; align-items:center;"><label style="font-size:11px; font-weight:normal; color:#999; width:110px; margin-bottom:0;">原生图标 (Origin)</label>
+                <div style="display:flex; align-items:center; flex:1;">
+                    <input type="radio" name="icon_sel" id="opt-fav0" style="width:18px; height:18px; flex-shrink:0; margin:0 8px 0 0; cursor:pointer;" disabled>
+                    <input id="txt-fav0" readonly placeholder="站点根目录 favicon.ico" style="flex:1; min-width:0; color:#aaa; font-size:11px; cursor:pointer; background:rgba(0,0,0,0.3); height:32px; border-radius:6px; border:1px solid rgba(255,255,255,0.05); padding:0 8px;">
+                    <div class="preview-container" style="background:rgba(0,0,0,0.3); width:32px; height:32px; margin-left:8px; border-radius:6px;"><img id="img-fav0" src="" loading="lazy" style="width:18px; height:18px; display:none;"></div>
+                </div>
+            </div>
+            <div class="form-row" style="margin-bottom:8px; display:flex; align-items:center;"><label style="font-size:11px; font-weight:normal; color:#999; width:110px; margin-bottom:0;">Iowen API (首选)</label>
+                <div style="display:flex; align-items:center; flex:1;">
+                    <input type="radio" name="icon_sel" id="opt-fav1" style="width:18px; height:18px; flex-shrink:0; margin:0 8px 0 0; cursor:pointer;" disabled>
+                    <input id="txt-fav1" readonly placeholder="..." style="flex:1; min-width:0; color:#aaa; font-size:11px; cursor:pointer; background:rgba(0,0,0,0.3); height:32px; border-radius:6px; border:1px solid rgba(255,255,255,0.05); padding:0 8px;">
+                    <div class="preview-container" style="background:rgba(0,0,0,0.3); width:32px; height:32px; margin-left:8px; border-radius:6px;"><img id="img-fav1" src="" loading="lazy" style="width:18px; height:18px; display:none;"></div>
+                </div>
+            </div>
+            <div class="form-row" style="margin-bottom:8px; display:flex; align-items:center;"><label style="font-size:11px; font-weight:normal; color:#999; width:110px; margin-bottom:0;">DuckDuckGo API</label>
+                <div style="display:flex; align-items:center; flex:1;">
+                    <input type="radio" name="icon_sel" id="opt-fav2" style="width:18px; height:18px; flex-shrink:0; margin:0 8px 0 0; cursor:pointer;" disabled>
+                    <input id="txt-fav2" readonly placeholder="..." style="flex:1; min-width:0; color:#aaa; font-size:11px; cursor:pointer; background:rgba(0,0,0,0.3); height:32px; border-radius:6px; border:1px solid rgba(255,255,255,0.05); padding:0 8px;">
+                    <div class="preview-container" style="background:rgba(0,0,0,0.3); width:32px; height:32px; margin-left:8px; border-radius:6px;"><img id="img-fav2" src="" loading="lazy" style="width:18px; height:18px; display:none;"></div>
+                </div>
+            </div>
+            <div class="form-row" style="margin-bottom:0; display:flex; align-items:center;"><label style="font-size:11px; font-weight:normal; color:#999; width:110px; margin-bottom:0;">Google API</label>
+                <div style="display:flex; align-items:center; flex:1;">
+                    <input type="radio" name="icon_sel" id="opt-fav3" style="width:18px; height:18px; flex-shrink:0; margin:0 8px 0 0; cursor:pointer;" disabled>
+                    <input id="txt-fav3" readonly placeholder="..." style="flex:1; min-width:0; color:#aaa; font-size:11px; cursor:pointer; background:rgba(0,0,0,0.3); height:32px; border-radius:6px; border:1px solid rgba(255,255,255,0.05); padding:0 8px;">
+                    <div class="preview-container" style="background:rgba(0,0,0,0.3); width:32px; height:32px; margin-left:8px; border-radius:6px;"><img id="img-fav3" src="" loading="lazy" style="width:18px; height:18px; display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== 2. Iconify 矢量图标库搜索 ==================== -->
+        <div class="form-row" style="background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
+            <label style="font-size:12px; font-weight:bold; color:#ccc; margin-bottom:6px;"><i class="ri-search-eye-line"></i> Iconify 矢量搜索</label>
+            <div style="display:flex; flex-direction:column; width:100%; gap:5px;">
+                <div style="display:flex; gap:8px;">
+                    <input id="iconify-search" placeholder="输入英文关键词, 如 github" style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; height:36px; padding:0 10px; color:#fff;">
+                    <button type="button" class="icon-btn-action" id="btn-iconify-search" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">搜索</button>
+                </div>
+                <div id="iconify-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:80px; overflow-y:auto; margin-top:5px; padding:4px 0;"></div>
+            </div>
+        </div>
+
+        <!-- ==================== 3. 智能 Emoji 语义化推荐 ==================== -->
+        <div class="form-row" style="background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
+            <label style="font-size:12px; font-weight:bold; color:#ccc; margin-bottom:6px;"><i class="ri-magic-line"></i> 智能 Emoji 推荐</label>
+            <div style="display:flex; flex-direction:column; width:100%; gap:5px;">
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input id="emoji-recommend-title" value="${safeTitle}" placeholder="输入网站名称获取推荐" style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; height:36px; padding:0 10px; color:#fff;">
+                    <button type="button" class="icon-btn-action" id="btn-emoji-recommend" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">推荐</button>
+                    <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); color:#fff;"><i class="ri-refresh-line"></i></button>
+                </div>
+                <div id="emoji-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:60px; overflow-y:auto; margin-top:5px; padding:4px 0;">
+                    ${safeIcon && !safeIcon.startsWith('http') ? `<span class="emoji-suggestion selected" data-emoji="${safeIcon}">${safeIcon}</span>` : ''}
+                </div>
+            </div>
+        </div>
+
         <div class="form-row">
             <label><i class="ri-text-snippet"></i> 描述</label>
             <textarea id="edit-desc" rows="2" placeholder="可选描述" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#fff; padding:8px;">${item.desc || ''}</textarea>
@@ -6722,6 +6924,90 @@ const openEditModal = (id) => {
         const preview = document.getElementById('edit-icon-preview');
         preview.innerHTML = val.startsWith('http') ? `<img src="${val}">` : `<span>${val || '🔗'}</span>`;
     };
+
+    // 监听 URL 输入启动多源测速与备份加载
+    document.getElementById('edit-url').addEventListener('input', (e) => debouncedHandleUrlInput(e.target.value.trim()));
+    
+    // 绑定多源单选框的选择与联动
+    ['0', '1', '2', '3'].forEach(num => {
+        const opt = document.getElementById('opt-fav' + num);
+        const txt = document.getElementById('txt-fav' + num);
+        if (!opt || !txt) return;
+        opt.addEventListener('change', () => selectIcon(txt.value));
+        txt.addEventListener('click', () => {
+            if (txt.value && !opt.disabled) {
+                opt.checked = true;
+                selectIcon(txt.value);
+            }
+        });
+    });
+
+    // 绑定 Iconify 矢量搜索
+    document.getElementById('btn-iconify-search').addEventListener('click', async () => {
+        const query = document.getElementById('iconify-search').value.trim();
+        if (!query) return;
+        const resBox = document.getElementById('iconify-results');
+        resBox.innerHTML = '<span style="font-size:12px; color:#aaa;">搜索中...</span>';
+        try {
+            const req = await fetch(`https://api.iconify.design/search?query=${query}&limit=12`);
+            const data = await req.json();
+            resBox.innerHTML = '';
+            if (data.icons && data.icons.length > 0) {
+                data.icons.forEach(iconName => {
+                    const imgUrl = `https://api.iconify.design/${iconName}.svg`;
+                    const img = document.createElement('img');
+                    img.src = imgUrl;
+                    img.style.cssText = 'width:30px; height:30px; cursor:pointer; background:rgba(255,255,255,0.06); border-radius:6px; padding:4px; transition: 0.2s; border:1px solid rgba(255,255,255,0.1);';
+                    img.onmouseover = () => img.style.background = 'rgba(255,255,255,0.2)';
+                    img.onmouseout = () => img.style.background = 'rgba(255,255,255,0.06)';
+                    img.onclick = () => selectIcon(imgUrl);
+                    resBox.appendChild(img);
+                });
+            } else {
+                resBox.innerHTML = '<span style="font-size:12px; color:#aaa;">未找到结果</span>';
+            }
+        } catch (e) {
+            resBox.innerHTML = '<span style="font-size:12px; color:#e74c3c;">网络或接口错误</span>';
+        }
+    });
+
+    // 绑定智能 Emoji 推荐
+    const renderEmojiSuggestions = (emojis) => {
+        const container = document.getElementById('emoji-results');
+        if (!container) return;
+        container.innerHTML = '';
+        emojis.forEach(emoji => {
+            const span = document.createElement('span');
+            span.className = 'emoji-suggestion';
+            span.textContent = emoji;
+            span.dataset.emoji = emoji;
+            span.onclick = () => {
+                document.querySelectorAll('.emoji-suggestion').forEach(el => el.classList.remove('selected'));
+                span.classList.add('selected');
+                selectIcon(emoji);
+            };
+            container.appendChild(span);
+        });
+    };
+
+    const recommendEmojis = () => {
+        const title = document.getElementById('emoji-recommend-title').value.trim();
+        renderEmojiSuggestions(getRecommendedEmojis(title || document.getElementById('edit-title-input').value.trim()));
+    };
+
+    document.getElementById('btn-emoji-recommend').addEventListener('click', recommendEmojis);
+    document.getElementById('btn-emoji-refresh').addEventListener('click', recommendEmojis);
+    document.getElementById('emoji-recommend-title').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') recommendEmojis();
+    });
+
+    // 自动触发初始 Emoji 推荐和 URL 图标加载
+    if (item.title) {
+        renderEmojiSuggestions(getRecommendedEmojis(item.title));
+    }
+    if (item.url) {
+        handleUrlInput(item.url, false);
+    }
 
     modal.style.display = 'flex';
 
@@ -6767,24 +7053,22 @@ const triggerMagicWand = async () => {
                 return;
             }
 
-            if (!titleInput.value) titleInput.value = title;
-            if (!descInput.value) descInput.value = desc;
-            
-            // 智能转换：使用国内和世界都极其稳定通用的 Favicon 代理源，防止原图标链接裂开 (Task NT-V2.14)
-            let finalIcon = icon;
-            try {
-                const domain = new URL(url).hostname;
-                if (domain) {
-                    finalIcon = `https://api.iowen.cn/favicon/${domain}.png`;
+            if (!titleInput.value) {
+                titleInput.value = title;
+                // 同时把标题回填到智能 Emoji 输入框并触发推荐
+                const recTitleInput = document.getElementById('emoji-recommend-title');
+                if (recTitleInput) {
+                    recTitleInput.value = title;
+                    // 自动触发推荐
+                    const btnRec = document.getElementById('btn-emoji-recommend');
+                    if (btnRec) btnRec.click();
                 }
-            } catch (err) {
-                console.warn('[MagicWand] Failed to extract domain for stable favicon mapping', err);
             }
+            if (!descInput.value) descInput.value = desc;
 
-            // 竞态防御：只有在用户等待期间没有手动修改过图标时，才予以自动覆盖填充
+            // 竞态防御：只有在用户等待期间没有手动修改过图标时，才予以自动覆盖填充并进行多源并发自动匹配
             if (iconInput.value === initialIcon || !iconInput.value) {
-                iconInput.value = finalIcon;
-                iconInput.dispatchEvent(new Event('input'));
+                handleUrlInput(url, true);
             } else {
                 console.log("[MagicWand] User manually specified emoji, skipping auto icon overwrite.");
             }

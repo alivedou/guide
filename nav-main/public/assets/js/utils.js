@@ -49,71 +49,147 @@ const FALLBACK_EMOJIS = ['🌍', '🌟', '🚀', '💡', '🔥', '✨', '🎈', 
 const getRandomEmoji = () => FALLBACK_EMOJIS[Math.floor(Math.random() * FALLBACK_EMOJIS.length)];
 
 /**
- * 6 级图标自愈引擎 (Task 3.1)
+ * 6 级图标自愈引擎 (Task 3.1 & v2.5 大陆网络优化)
  * @param {HTMLImageElement} img - 触发错误的图片元素
  * @param {string} originalUrl - 原始链接 (用于提取域名)
  */
 const handleIconError = (img, originalUrl) => {
-    // 防止死循环：如果已经是 span 了就不处理（通常不会发生，因为这是 img 的 onerror）
+    // 防止死循环：如果已经是 span 了就不处理
     if (!img || img.tagName !== 'IMG') return;
+    if (img.getAttribute('data-healing') === 'done') return;
+
+    // 清理可能存在的旧定时器
+    if (img.timeout) {
+        clearTimeout(img.timeout);
+        img.timeout = null;
+    }
 
     // 获取当前尝试次数
     let retryIndex = parseInt(img.getAttribute('data-retry-index') || '0');
     retryIndex++;
     img.setAttribute('data-retry-index', retryIndex);
 
-    // 提取域名 (用于各种 Favicon API)
+    // 提取域名和 Origin
     let domain = '';
+    let origin = '';
     try {
-        const url = new URL(originalUrl.startsWith('http') ? originalUrl : `https://${originalUrl}`);
-        domain = url.hostname;
+        const urlObj = new URL(originalUrl.startsWith('http') ? originalUrl : `https://${originalUrl}`);
+        domain = urlObj.hostname;
+        origin = urlObj.origin;
     } catch (e) {
-        domain = originalUrl.split('/')[0];
+        const match = originalUrl.match(/https?:\/\/([^\/]+)/);
+        if (match) {
+            domain = match[1];
+            origin = match[0];
+        } else {
+            domain = originalUrl.split('/')[0] || '';
+            origin = domain ? `https://${domain}` : '';
+        }
     }
 
-    const apis = [
-        null, // 0: 原始 URL (已失败)
-        `https://api.iowen.cn/favicon/${domain}.png`,
-        `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
-        `https://icons.duckduckgo.com/ip3/${domain}.ico`,
-    ];
+    if (!domain) {
+        fallbackToText(img, '🔗');
+        return;
+    }
 
-    if (retryIndex < apis.length) {
-        console.warn(`[IconHeal] Level ${retryIndex} failover for ${domain}`);
-        img.src = apis[retryIndex];
-    } else {
-        // Level 6: 终极兜底 - 替换为文字/Emoji 磁贴
-        console.error(`[IconHeal] All fallbacks failed for ${domain}, using text placeholder.`);
-        const parent = img.parentElement;
-        if (parent) {
-            const title = img.getAttribute('data-title') || '';
-            let char = '';
-            if (title && title.trim() !== '') {
-                char = title.trim().charAt(0);
-                // 如果是单英文字母，强制大写以保持规整美观
-                if (/^[a-zA-Z]$/.test(char)) {
-                    char = char.toUpperCase();
-                }
-            } else {
-                char = domain.charAt(0).toUpperCase() || '🔗';
-            }
-            const span = document.createElement('span');
-            span.className = 'emoji-icon';
-            span.innerText = char;
-            
-            // Task 2.3: 增加颜色自愈 - 基于域名生成背景色
-            const hue = Array.from(domain).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
-            span.style.background = `hsla(${hue}, 70%, 45%, 0.8)`;
-            span.style.color = '#fff';
-            span.style.borderRadius = '8px';
-            span.style.width = '100%';
-            span.style.height = '100%';
-            span.style.display = 'flex';
-            span.style.alignItems = 'center';
-            span.style.justifyContent = 'center';
-            
-            parent.replaceChild(span, img);
+    const nextStep = () => {
+        let currentIdx = parseInt(img.getAttribute('data-retry-index') || '0');
+        img.setAttribute('data-retry-index', currentIdx.toString()); // 会在 handleIconError 中被自增
+        handleIconError(img, originalUrl);
+    };
+
+    // 绑定正常加载成功时的清理函数
+    img.onload = () => {
+        if (img.timeout) {
+            clearTimeout(img.timeout);
+            img.timeout = null;
         }
+    };
+
+    // Level 1: 尝试原站根目录 favicon.ico
+    if (retryIndex === 1) {
+        const rootFav = origin ? `${origin}/favicon.ico` : '';
+        if (rootFav && img.src !== rootFav) {
+            img.src = rootFav;
+        } else {
+            nextStep();
+        }
+        return;
+    }
+
+    // Level 2: Iowen API (国内较稳)
+    if (retryIndex === 2) {
+        img.src = `https://api.iowen.cn/favicon/${domain}.png`;
+        return;
+    }
+
+    // Level 3: QQSuu API (国内极稳)
+    if (retryIndex === 3) {
+        img.src = `https://favicon.qqsuu.cn/${domain}`;
+        return;
+    }
+
+    // Level 4: Google API (大陆需 2.5s 超时跳过)
+    if (retryIndex === 4) {
+        img.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+        img.timeout = setTimeout(() => {
+            if (parseInt(img.getAttribute('data-retry-index') || '0') === 4) {
+                nextStep();
+            }
+        }, 2500);
+        return;
+    }
+
+    // Level 5: DuckDuckGo API (大陆需 2.2s 超时跳过)
+    if (retryIndex === 5) {
+        img.src = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+        img.timeout = setTimeout(() => {
+            if (parseInt(img.getAttribute('data-retry-index') || '0') === 5) {
+                nextStep();
+            }
+        }, 2200);
+        return;
+    }
+
+    // Level 6: 终极兜底 - 替换为文字/Emoji 磁贴
+    fallbackToText(img, domain);
+};
+
+const fallbackToText = (img, domain) => {
+    img.onerror = null;
+    img.onload = null;
+    img.setAttribute('data-healing', 'done');
+    if (img.timeout) clearTimeout(img.timeout);
+
+    const parent = img.parentElement;
+    if (parent) {
+        const title = img.getAttribute('data-title') || '';
+        let char = '';
+        if (title && title.trim() !== '') {
+            char = title.trim().charAt(0);
+            // 如果是单英文字母，强制大写以保持规整美观
+            if (/^[a-zA-Z]$/.test(char)) {
+                char = char.toUpperCase();
+            }
+        } else {
+            char = domain.split('.').filter(s => s !== 'www')[0]?.[0] || domain.charAt(0).toUpperCase() || '🔗';
+        }
+        const span = document.createElement('span');
+        span.className = 'emoji-icon';
+        span.innerText = char;
+        
+        // 基于域名生成背景色
+        const hue = Array.from(domain).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+        span.style.background = `hsla(${hue}, 70%, 45%, 0.8)`;
+        span.style.color = '#fff';
+        span.style.borderRadius = '8px';
+        span.style.width = '100%';
+        span.style.height = '100%';
+        span.style.display = 'flex';
+        span.style.alignItems = 'center';
+        span.style.justifyContent = 'center';
+        
+        parent.replaceChild(span, img);
     }
 };
 
