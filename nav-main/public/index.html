@@ -220,6 +220,19 @@
         </div>
     </div>
 
+    <!-- 通用二次确认弹窗 (Task NT-V2.10) -->
+    <div id="sys-confirm-modal" class="modal" style="z-index: 12000;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; position: relative;">
+            <div id="confirm-modal-icon" style="font-size: 42px; color: #f39c12; margin-bottom: 15px; animation: focus-pulse 1.5s infinite;"><i class="ri-error-warning-line"></i></div>
+            <h4 id="confirm-modal-title" style="margin-bottom:10px; font-size:16px; color: var(--text);">安全确认</h4>
+            <p id="confirm-modal-message" style="font-size:12px; color: var(--text-dim); margin-bottom: 20px; line-height: 1.5;"></p>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-confirm-cancel" class="tab-btn" style="flex: 1; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: var(--text-dim); cursor: pointer; border-radius: 8px;">取消</button>
+                <button id="btn-confirm-ok" class="tab-btn active" style="flex: 1; cursor: pointer; border-radius: 8px;">确认</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 视频播放弹窗 -->
     <div id="video-modal" class="modal">
         <div class="video-modal-content">

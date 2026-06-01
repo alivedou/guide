@@ -100,6 +100,7 @@ const SyncUI = {
             };
         },
         'BACKUP_MANUAL': { loading: '正在执行手动云端备份...', success: '备份完成，你的数据已在云端安全存档' },
+        'RESTORE_MANUAL': { loading: '正在从云端拉取备份数据...', success: '云端备份拉取成功，本地已完全覆盖更新！' },
         'CLIPBOARD': { loading: '正在准备数据...', success: '内容已加密复制至剪贴板' },
         'ADMIN_ANNOUNCE': { loading: '正在批量处理公告中...', success: '批量操作完成' },
         'INVITE_BATCH': { loading: '正在批量下架邀请凭证...', success: '批量操作完成' }
@@ -107,7 +108,7 @@ const SyncUI = {
 
     // 2. 统一动作包装器
     async perform(actionKey, task) {
-        let msg = this.messages[actionKey];
+        let msg = this.messages[actionKey] || { loading: '正在处理中...', success: '操作已成功完成！' };
         // 如果是函数则执行获取对象 (用于区分角色话术)
         if (typeof msg === 'function') msg = msg();
         
@@ -1298,7 +1299,8 @@ const doLogout = async () => {
 };
 
 const doResetConfig = async () => {
-    if (!confirm("确定要恢复默认配置吗？这将覆盖您当前的自定义导航内容！")) return;
+    const ok = await window.requireSystemConfirm("恢复出厂配置", "确定要恢复默认配置吗？这将全量覆盖、清空您当前所有的自定义分类、网址和偏好设置！该操作不可逆，确定恢复吗？", true);
+    if (!ok) return;
     
     showLoader('正在恢复默认配置...');
     try {
@@ -2473,13 +2475,35 @@ window.openSyncCenter = () => {
     confirmBtn.onclick = () => closeAllModals();
 };
 
-// 从云端拉取备份数据到本地
-window.pullBackupFromCloud = async () => {
+// 从云端拉取备份数据到本地 (方案 B：原地高颜值弹窗重绘确认，消灭浏览器丑陋系统 confirm)
+window.pullBackupFromCloud = () => {
     if (!sysToken) return showToast("请先登录再拉取备份", "#e67e22");
 
-    if (!confirm("警告：从云端拉取备份将完全覆盖您当前这台设备上的本地配置！此操作不可撤销！确定要拉取覆盖吗？")) {
-        return;
-    }
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    if (!body || !confirmBtn) return;
+
+    body.innerHTML = `
+        <div style="text-align: center; padding: 20px 10px;">
+            <div style="font-size: 48px; color: #e67e22; margin-bottom: 12px; animation: focus-pulse 1.5s infinite;"><i class="ri-alert-line"></i></div>
+            <h3 style="font-size: 15px; font-weight: bold; color: #fff; margin-bottom: 8px;">云端拉取全量覆盖确认</h3>
+            <p style="font-size: 12px; color: var(--text-dim); line-height: 1.6; margin: 0 10px 15px;">
+                您即将从云端下载并还原您之前安全存档备份的数据！<br><br>
+                <span style="color:#e67e22; font-weight:bold;"><i class="ri-error-warning-line"></i> 警告：拉取操作将完全覆写并清空您当前设备上的本地分类与网址！此操作不可撤销，确定继续吗？</span>
+            </p>
+            <div style="display: flex; gap: 10px; margin-top: 15px; justify-content: center;">
+                <button class="tab-btn" onclick="window.openSyncCenter()" style="flex: 1; height: 38px; justify-content: center; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: var(--text-dim); cursor: pointer; border-radius: 8px;">取消并返回</button>
+                <button class="tab-btn active" onclick="window.executePullBackupFromCloud()" style="flex: 1; height: 38px; justify-content: center; background: #e67e22; border-color: #e67e22; color: #fff; cursor: pointer; border-radius: 8px;">确认拉取覆盖</button>
+            </div>
+        </div>
+    `;
+
+    // 临时隐藏底下的共用关闭按钮
+    confirmBtn.style.display = 'none';
+};
+
+window.executePullBackupFromCloud = async () => {
+    if (!sysToken) return showToast("请先登录再拉取备份", "#e67e22");
 
     await SyncUI.perform('RESTORE_MANUAL', async () => {
         const res = await fetch('/api/config', {
@@ -2513,7 +2537,7 @@ window.pullBackupFromCloud = async () => {
             updateStyles();
 
             showToast("云端备份拉取并覆盖本地成功！", "#27ae60");
-            closeAllModals();
+            closeAllModals(true); // 静默关闭弹窗
         } else {
             throw new Error("从服务器拉取备份失败，请重试");
         }
@@ -3882,6 +3906,107 @@ window.requireAdminAuth = (message) => {
     });
 };
 
+// 通用二次确认 Promise 隔离网关，替代浏览器原生丑陋 confirm 弹窗
+window.requireSystemConfirm = (title, message, isDanger = false) => {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('sys-confirm-modal');
+        const titleEl = document.getElementById('confirm-modal-title');
+        const msgEl = document.getElementById('confirm-modal-message');
+        const iconEl = document.getElementById('confirm-modal-icon');
+        const okBtn = document.getElementById('btn-confirm-ok');
+        const cancelBtn = document.getElementById('btn-confirm-cancel');
+        
+        if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) return resolve(false);
+        
+        titleEl.innerText = title || "安全确认";
+        msgEl.innerText = message || "确定要执行此操作吗？";
+        
+        // 危险操作高亮警示
+        if (isDanger) {
+            if (iconEl) {
+                iconEl.style.color = '#e74c3c';
+                iconEl.innerHTML = '<i class="ri-alert-line"></i>';
+            }
+            okBtn.style.background = '#e74c3c';
+            okBtn.style.borderColor = '#e74c3c';
+            okBtn.style.color = '#fff';
+            okBtn.innerText = "确认执行";
+        } else {
+            if (iconEl) {
+                iconEl.style.color = '#f39c12';
+                iconEl.innerHTML = '<i class="ri-error-warning-line"></i>';
+            }
+            okBtn.style.background = 'var(--primary)';
+            okBtn.style.borderColor = 'var(--primary)';
+            okBtn.style.color = '#fff';
+            okBtn.innerText = "确认";
+        }
+        
+        modal.style.display = 'flex';
+        
+        const cleanup = (val) => {
+            modal.style.display = 'none';
+            okBtn.onclick = null;
+            cancelBtn.onclick = null;
+            resolve(val);
+        };
+        
+        okBtn.onclick = () => cleanup(true);
+        cancelBtn.onclick = () => cleanup(false);
+    });
+};
+
+// 强制改写密码 Promise 隔离弹窗，替代浏览器原生丑陋 prompt 弹窗
+window.requireNewPasswordAdmin = (message) => {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('admin-auth-modal');
+        const titleEl = document.getElementById('auth-modal-title');
+        const msgEl = document.getElementById('auth-modal-message');
+        const passInput = document.getElementById('auth-modal-password');
+        const confirmBtn = document.getElementById('btn-auth-confirm');
+        const cancelBtn = document.getElementById('btn-auth-cancel');
+        
+        if (!modal || !msgEl || !passInput) return resolve(null);
+        
+        titleEl.innerText = "管理员强制重置密码";
+        msgEl.innerText = message || "请输入为该用户设置的新密码：";
+        passInput.value = '';
+        passInput.type = 'text'; // 管理员重置密码时应显示明文，方便管理员记录与核对
+        passInput.placeholder = "请输入新密码...";
+        modal.style.display = 'flex';
+        
+        setTimeout(() => passInput.focus(), 150);
+
+        const cleanup = (val) => {
+            modal.style.display = 'none';
+            confirmBtn.onclick = null;
+            cancelBtn.onclick = null;
+            passInput.onkeydown = null;
+            // 还原为默认密码核验设置
+            titleEl.innerText = "管理员二次核验";
+            passInput.type = 'password';
+            passInput.placeholder = "请输入管理员密码...";
+            resolve(val);
+        };
+
+        confirmBtn.onclick = () => {
+            const val = passInput.value.trim();
+            if (!val) {
+                showToast("密码不能为空", "#e67e22");
+                return;
+            }
+            cleanup(val);
+        };
+
+        cancelBtn.onclick = () => cleanup(null);
+
+        passInput.onkeydown = (e) => {
+            if (e.key === 'Enter') confirmBtn.click();
+            else if (e.key === 'Escape') cancelBtn.click();
+        };
+    });
+};
+
 const toggleCategoryVisibility = (catId) => {
     const cat = appData.categories.find(c => c.id === catId);
     if (!cat) return;
@@ -3912,7 +4037,8 @@ const deleteCategory = async (catId) => {
         ? `该分类下有 ${itemCount} 个书签，删除分类将同时删除这些书签！确定继续吗？` 
         : `确定要删除分类 "${cat.name}" 吗？`;
 
-    if (!confirm(msg)) return;
+    const ok = await window.requireSystemConfirm("删除分类确认", msg, true);
+    if (!ok) return;
 
     appData.categories = appData.categories.filter(c => c.id !== catId);
     appData.items = appData.items.filter(i => (i.catId !== catId && i.cat_id !== catId));
@@ -4085,7 +4211,8 @@ const syncConfigToCloud = async () => {
 
 const doBatchDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`确定要删除选中的 ${selectedIds.size} 个书签吗？`)) return;
+    const ok = await window.requireSystemConfirm("批量删除书签", `确定要删除选中的这 ${selectedIds.size} 个书签吗？该操作不可逆！`, true);
+    if (!ok) return;
 
     appData.items = appData.items.filter(i => !selectedIds.has(i.id));
     selectedIds.clear();
@@ -4096,10 +4223,11 @@ const doBatchDelete = async () => {
     updateBatchBar();
 };
 
-const deleteItem = (itemId) => {
+const deleteItem = async (itemId) => {
     const item = appData.items.find(i => i.id === itemId);
     if (!item) return;
-    if (!confirm(`确定要删除书签 "${item.title}" 吗？`)) return;
+    const ok = await window.requireSystemConfirm("删除书签", `确定要删除书签 "${item.title}" 吗？该操作不可逆！`, true);
+    if (!ok) return;
 
     appData.items = appData.items.filter(i => i.id !== itemId);
     selectedIds.delete(itemId); // 从选中集中清除，防止残留影响
@@ -5309,7 +5437,8 @@ window.generateInvites = async (count) => {
 };
 
 window.deleteInvite = async (code) => {
-    if (!confirm("确定要删除此邀请码吗？")) return;
+    const ok = await window.requireSystemConfirm("作废邀请码", "确定要作废并彻底删除此未使用的邀请码吗？", true);
+    if (!ok) return;
     await SyncUI.perform('INVITE_DEL', async () => {
         const res = await fetch('/api/admin/invitations', {
             method: 'DELETE',
@@ -5339,7 +5468,7 @@ window.updateUserAdmin = async (userId, payload) => {
 };
 
 window.resetUserPasswordAdmin = async (userId) => {
-    const newPassword = prompt("请输入为该用户设置的新密码:");
+    const newPassword = await window.requireNewPasswordAdmin("请指定该用户的新密码：");
     if (!newPassword) return;
     
     const adminPassword = await window.requireAdminAuth("强行改写其它用户登录密码");
@@ -5358,7 +5487,8 @@ window.resetUserPasswordAdmin = async (userId) => {
 };
 
 window.deleteUserAdmin = async (userId) => {
-    if (!confirm("⚠️ 警告：删除用户将永久清除其所有数据（分类、书签、设置），且不可恢复！确认删除吗？")) return;
+    const ok = await window.requireSystemConfirm("物理删除用户", "警告：删除用户将永久清除其所有数据（分类、书签、设置），且不可恢复！此操作不可撤销，确认删除吗？", true);
+    if (!ok) return;
 
     const adminPassword = await window.requireAdminAuth("【终极大警告】彻底删除并抹去该用户及其全站数据");
     if (!adminPassword) return;
@@ -5408,7 +5538,8 @@ window.saveAnnouncement = async () => {
 };
 
 window.deleteAnnouncement = async (id) => {
-    if (!confirm("确定要删除这条公告吗？")) return;
+    const ok = await window.requireSystemConfirm("删除全站公告", "确定要下架并彻底删除这条公告吗？下发后将全员隐退！", true);
+    if (!ok) return;
     await SyncUI.perform('ANNOUNCE_DEL', async () => {
         const res = await fetch('/api/admin/announcements', {
             method: 'DELETE',
@@ -5509,7 +5640,8 @@ window.copySingleInvite = async (code) => {
 
 window.toggleUserStatus = async (userId, currentStatus) => {
     const newStatus = currentStatus === 'active' ? 'frozen' : 'active';
-    if (!confirm(`确定要将该用户设为 ${newStatus} 吗？`)) return;
+    const ok = await window.requireSystemConfirm(newStatus === 'frozen' ? "安全冻结账号" : "激活账号", `确定要将该用户设为 [${newStatus.toUpperCase()}] 状态吗？${newStatus === 'frozen' ? '冻结后该用户将立即在全终端强制下线并封禁！' : ''}`, newStatus === 'frozen');
+    if (!ok) return;
 
     await SyncUI.perform('USER_MANAGE', async () => {
         const res = await fetch('/api/admin/users', {
