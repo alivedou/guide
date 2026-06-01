@@ -155,9 +155,18 @@ body.light-theme .category-section-title {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
-body.light-theme .sidebar-toggle {
+body.light-theme .sidebar-toggle,
+body.light-theme .summon-search-btn {
     background: rgba(255, 255, 255, 0.8);
     color: #3d4f5f;
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme .sidebar-toggle:hover,
+body.light-theme .summon-search-btn:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
 }
 
 body.light-theme .video-card {
@@ -1124,6 +1133,7 @@ body {
     background-attachment: fixed;
     background-size: cover;
     min-height: 100vh;
+    min-height: 100dvh;
     color: var(--text);
     overflow-x: hidden;
     transition: background-image 0.8s ease-in-out, background-color 0.5s ease;
@@ -1204,6 +1214,7 @@ body.is-searching .grid-container {
 .app-layout {
     display: flex;
     min-height: 100vh;
+    min-height: 100dvh;
 }
 
 /* ==================== 左侧导航栏 ==================== */
@@ -1473,52 +1484,6 @@ body.light-theme.admin-mode .sidebar {
     overflow: visible !important;
 }
 
-/* 视觉实验室快捷悬浮按钮 (Task 28.2) */
-.mobile-fab-visual {
-    position: fixed;
-    right: 20px;
-    bottom: 30px;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: var(--primary);
-    color: white;
-    display: none; /* 默认隐藏，JS 控制显示 */
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 15px rgba(57, 157, 255, 0.4);
-    z-index: 4000;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.mobile-fab-visual:active {
-    transform: scale(0.9);
-}
-
-.mobile-fab-visual i {
-    font-size: 24px;
-}
-
-@media (max-width: 768px) {
-    .mobile-fab-visual {
-        display: flex;
-    }
-}
-
-/* 禅意静默态下的视觉实验室恢复 (Task 28.2) */
-body.zen-active.zen-silent .mobile-fab-visual {
-    opacity: 0.3;
-    transform: scale(0.8);
-    right: 15px;
-    bottom: 15px;
-}
-
-body.zen-active.zen-silent .mobile-fab-visual:hover {
-    opacity: 1;
-    transform: scale(1);
-}
-
 .sidebar-nav-label {
     padding: 12px 14px 8px;
     font-size: 11px;
@@ -1704,6 +1669,7 @@ body.light-theme .user-name {
     z-index: 1500; /* 高于大部分元素但低于 Modal */
     background: var(--glass);
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     width: 45px;
     height: 45px;
     border-radius: 12px;
@@ -1713,14 +1679,14 @@ body.light-theme .user-name {
     cursor: pointer;
     border: 1px solid var(--glass-border);
     color: var(--text);
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
 /* 移动端/禅意模式搜索召唤按钮 (Task S.3) */
 .summon-search-btn {
     position: fixed;
     top: 20px;
-    right: 20px;
+    right: 25px;
     z-index: 2500;
     background: var(--glass);
     backdrop-filter: blur(10px);
@@ -1737,6 +1703,7 @@ body.light-theme .user-name {
     transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
+.sidebar-toggle:hover,
 .summon-search-btn:hover {
     background: var(--glass-hover);
     transform: scale(1.05);
@@ -1764,17 +1731,19 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
 
 /* 移动端常驻显示 (除搜索激活态) */
 @media (max-width: 768px) {
+    .sidebar-toggle,
     .summon-search-btn {
         width: 40px;
         height: 40px;
+        border-radius: 10px;
         top: 15px;
+    }
+    .sidebar-toggle {
+        left: 15px;
+    }
+    .summon-search-btn {
         right: 15px;
     }
-}
-
-.sidebar-toggle:hover {
-    background: var(--glass-hover);
-    transform: scale(1.05);
 }
 
 /* 极简模式下的游客引导 (UX Bridge) */
@@ -1805,6 +1774,7 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
     margin-left: var(--sidebar-width);
     flex: 1;
     min-height: 100vh;
+    min-height: 100dvh;
     padding: 20px 20px 40px;
     display: flex;
     flex-direction: column;
@@ -2199,10 +2169,10 @@ body.page-manage-active .card[data-tooltip]::before {
 /* ==================== 管理操作区域 ==================== */
 /* ==================== 管理操作区域 (Task 4.12 极简工具栏) ==================== */
 .sidebar-admin-toolbar {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
     gap: 6px;
-    padding: 4px;
+    padding: 6px;
     background: rgba(0, 0, 0, 0.15);
     border-radius: 12px;
     border: 1px solid var(--glass-border);
@@ -2267,6 +2237,10 @@ body.light-theme .sidebar-admin-toolbar {
 
 body.admin-mode .toolbar-item.active .nav-label {
     display: block;
+}
+
+body.admin-mode .toolbar-item.active {
+    grid-column: span 4;
 }
 
 /* 侧边栏内管理工具子菜单微调 */
@@ -3434,9 +3408,24 @@ body.view-style-2 .card[data-tooltip]::before {
         --sidebar-width: 250px;
     }
 
-    /* 移动端：侧边栏变为滑出式 */
+    /* 移动端：侧边栏变为滑出式，并给予绝对层级压制防止穿透 */
     .sidebar {
         transform: translateX(-100%);
+        z-index: 16000 !important;
+    }
+
+    .sidebar-overlay {
+        z-index: 15000 !important;
+    }
+
+    /* 双保险防穿透：当移动端侧边栏滑出打开时，强制让三大悬浮按钮在手机端完美淡出，消除任何穿透与遮挡 */
+    body.sidebar-open .sidebar-toggle,
+    body.sidebar-open .summon-search-btn,
+    body.sidebar-open .quick-nav-group {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transform: scale(0.9) translateY(-10px) !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }
 
     .sidebar.open {
@@ -3447,9 +3436,14 @@ body.view-style-2 .card[data-tooltip]::before {
         display: flex;
     }
 
+    /* 强行消除手机端下图钉固定、折叠侧边栏对主内容的任何横向偏移，坚决根治登录态下页面被往右挤偏 250px 导致按钮偏出屏幕的 Bug */
+    body.sidebar-pinned .main-content,
+    body:not(.sidebar-pinned) .main-content,
     .main-content {
-        margin-left: 0;
-        padding: 60px 12px 80px;
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 60px 12px 80px !important;
     }
 
     body.view-style-2 .nav-grid {
@@ -3710,7 +3704,7 @@ body.light-theme .engine-item.active {
 .quick-nav-group {
     position: fixed;
     bottom: 30px;
-    right: 30px;
+    right: 25px;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -3722,59 +3716,71 @@ body.light-theme .engine-item.active {
 }
 
 .quick-nav-group.visible {
-    opacity: 1;
     pointer-events: auto;
-    transform: translateX(0);
 }
 
 .quick-nav-btn {
-    width: 46px;
-    height: 46px;
-    border-radius: 14px;
-    background: rgba(30, 30, 30, 0.7);
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    width: 45px;
+    height: 45px;
+    border-radius: 12px;
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    color: var(--text);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .quick-nav-btn:hover {
-    background: var(--primary);
-    color: #fff;
-    border-color: var(--primary);
-    transform: translateY(-3px);
+    background: var(--glass-hover);
+    color: var(--primary);
+    border-color: var(--glass-border);
+    transform: translateY(-3px) scale(1.05);
     box-shadow: 0 12px 30px rgba(57, 157, 255, 0.4);
 }
 
 body.light-theme .quick-nav-btn {
     background: rgba(255, 255, 255, 0.8);
-    color: #444;
+    color: #3d4f5f;
     border-color: rgba(0, 0, 0, 0.08);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 body.light-theme .quick-nav-btn:hover {
     background: var(--primary);
-    color: #fff;
+    color: white;
     border-color: var(--primary);
     box-shadow: 0 12px 30px rgba(57, 157, 255, 0.3);
 }
 
 @media (max-width: 768px) {
     .quick-nav-group {
-        bottom: 20px;
-        right: 20px;
+        bottom: calc(30px + env(safe-area-inset-bottom));
+        right: 15px;
     }
     .quick-nav-btn {
-        width: 44px;
-        height: 44px;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
         font-size: 22px;
+    }
+
+    /* 移动端常驻防护：防止登录用户在禅意/静默状态下导致这三个按钮在手机端丢失/隐藏 */
+    body.zen-active .quick-nav-group,
+    body.zen-active.zen-silent .quick-nav-group,
+    body.zen-active .sidebar-toggle,
+    body.zen-active.zen-silent .sidebar-toggle,
+    body.zen-active .summon-search-btn,
+    body.zen-active.zen-silent .summon-search-btn {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        transform: none !important;
     }
 }
 
@@ -3858,6 +3864,7 @@ body.zen-active .sidebar.open {
 body.zen-active .main-content {
     margin-left: 0 !important;
     min-height: 100vh;
+    min-height: 100dvh;
 }
 
 .zen-expand-btn {
@@ -4187,13 +4194,25 @@ body.light-theme .icon-btn-action {
 
 /* ==================== Task 4.1 & 4.2: Admin & Notices ==================== */
 .important-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
     background: #e67e22;
     color: white;
-    padding: 8px 16px;
-    z-index: 1000;
+    z-index: 10000;
     font-size: 13px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.3s ease;
+}
+
+/* 优雅的公告常规文档流自适应偏移 */
+.important-banner ~ .app-layout {
+    padding-top: 36px;
 }
 
 .banner-content {
@@ -4834,17 +4853,6 @@ body.light-theme .notice-item-content {
     animation: slideDown 0.4s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-body.admin-mode {
-    padding-top: 36px;
-}
-    font-size: 13px;
-    font-weight: 600;
-    z-index: 10000;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-    pointer-events: none;
-    animation: slideDown 0.4s cubic-bezier(0.23, 1, 0.32, 1);
-}
-
 @keyframes slideDown {
     from { transform: translateY(-100%); }
     to { transform: translateY(0); }
@@ -4852,27 +4860,82 @@ body.admin-mode {
 
 /* 适配顶栏开启后的布局偏移 */
 body.admin-mode {
-    padding-top: 32px;
+    padding-top: 36px;
 }
 
 body.admin-mode .sidebar {
-    top: 32px;
+    top: 36px;
 }
 
 body.admin-mode .sidebar-toggle {
-    top: 42px;
+    top: 56px; /* 电脑端 20px + 36px */
+}
+
+body.admin-mode .summon-search-btn {
+    top: 56px; /* 电脑端 20px + 36px */
+}
+
+@media (max-width: 768px) {
+    body.admin-mode .sidebar-toggle,
+    body.admin-mode .summon-search-btn {
+        top: 51px; /* 移动端 15px + 36px */
+    }
+}
+
+/* 适配重要公告顶栏（.important-banner）开启后的布局偏移 */
+.important-banner ~ .sidebar-toggle,
+.important-banner ~ .summon-search-btn {
+    top: 56px; /* 电脑端 20px + 公告栏约 36px */
+}
+
+@media (max-width: 768px) {
+    .important-banner ~ .sidebar-toggle,
+    .important-banner ~ .summon-search-btn {
+        top: 51px; /* 移动端 15px + 公告栏约 36px */
+    }
+}
+
+/* 当管理员状态栏与重要公告顶栏同时存在时的极佳防护层 */
+body.admin-mode .important-banner ~ .sidebar-toggle,
+body.admin-mode .important-banner ~ .summon-search-btn {
+    top: 92px; /* 电脑端 20px + 状态栏 36px + 公告栏 36px */
+}
+
+@media (max-width: 768px) {
+    body.admin-mode .important-banner ~ .sidebar-toggle,
+    body.admin-mode .important-banner ~ .summon-search-btn {
+        top: 87px; /* 移动端 15px + 状态栏 36px + 公告栏 36px */
+    }
 }
 
 /* ==================== 快捷导航增强 ==================== */
-.quick-nav-group {
-    opacity: 0.4;
-    transition: opacity 0.3s, transform 0.3s;
+/* 平常普通显示，但未触发时：向右收缩，保持一半遮挡在屏幕右侧边缘 */
+.quick-nav-group.visible {
+    opacity: 0.45; /* 默认未触发时半透 */
     pointer-events: auto;
+    transform: translateX(25px); /* 电脑端平时退缩 25px */
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
-.quick-nav-group:hover,
-.quick-nav-group.active {
+/* 激发态（悬浮在按钮组上，或者正在滚动激活时）：恢复全显，并丝滑向左弹回原位 */
+.quick-nav-group.visible:hover,
+.quick-nav-group.visible.active {
     opacity: 1;
+    transform: translateX(0) !important;
+}
+
+@media (max-width: 768px) {
+    /* 移动端平时往右收进屏幕边缘 20px */
+    .quick-nav-group.visible {
+        transform: translateX(20px);
+    }
+    
+    /* 移动端触碰或滚动滑出 */
+    .quick-nav-group.visible:hover,
+    .quick-nav-group.visible.active {
+        opacity: 1;
+        transform: translateX(0) !important;
+    }
 }
 
 /* ==================== Task UM.2: 用户管理 Dashboard 增强样式 ==================== */

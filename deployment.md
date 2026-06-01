@@ -50,4 +50,8 @@ wrangler pages deploy ./public --project-name=cloudnav --commit-message="Fresh C
 在 Environment variables 中点击 Add variables，新增环境变量：
 JWT_SECRET → cc9f09dc-e2a1-425f-91c8-45452204f432 （可以使用任意复杂密钥）
 6.激活重新发布：
-配置完毕后，进入 Deployments 页面点击最新一次部署后面的三点重试重新部署，或者在 wsl 终端中再次运行一次 wrangler pages deploy ./public --project-name=cloudnav --commit-message="Activate Config"，即可完美通关，全站极速上线运行！
+配置完毕后，进入 Deployments 页面点击最新一次部署后面的三点重试重新部署，或者在 wsl 终端中再次运行一次
+ ```bash
+ wrangler pages deploy ./public --project-name=cloudnav --commit-message="Activate Config"
+ ```
+ ，即可完美通关，全站极速上线运行！

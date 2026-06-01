@@ -2091,21 +2091,6 @@ const renderTools = () => {
     const themeIconMap = { 'auto': 'ri-computer-line', 'light': 'ri-sun-line', 'dark': 'ri-moon-line' };
     const themeNameMap = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
     
-    // Task 28.2: 渲染移动端快捷入口 (如果尚未存在)
-    let mobileFab = document.getElementById('mobile-fab-visual');
-    if (!mobileFab) {
-        mobileFab = document.createElement('div');
-        mobileFab.id = 'mobile-fab-visual';
-        mobileFab.className = 'mobile-fab-visual';
-        mobileFab.innerHTML = '<i class="ri-settings-4-line"></i>';
-        mobileFab.title = '视觉实验室';
-        mobileFab.onclick = (e) => {
-            e.stopPropagation();
-            openVisualLab();
-        };
-        document.body.appendChild(mobileFab);
-    }
-    
     // 1. 渲染用户信息区域
     const info = sysToken 
         ? (currentUser || JSON.parse(localStorage.getItem('nav_current_user') || '{}'))
@@ -2920,6 +2905,7 @@ const toggleSidebar = (force) => {
     const isOpen = typeof force === 'boolean' ? force : !s.classList.contains('open');
     s.classList.toggle('open', isOpen);
     o.classList.toggle('visible', isOpen);
+    document.body.classList.toggle('sidebar-open', isOpen);
 
     // --- Task 15.4: 侧边栏打开时，同步锁定禅意模式为唤醒态 ---
     if (isOpen && appData.settings?.zenMode) {
