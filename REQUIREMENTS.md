@@ -155,8 +155,10 @@ CloudNav 是一个基于 Cloudflare 生态系统（Pages + Workers KV + D1）构
 #### 4.2.2 零服务器流量开销的“本地自定义高清壁纸上传”与缓存渲染
 
 - 为了规避多用户上传壁纸对 Cloudflare D1 存储库造成的容量膨胀，以及对 Serverless API 造成的外发高昂带宽流量，系统研发了非对称式“**Base64 离线缓存 + 云端极简指针占位**”架构。
-- **本地 Base64 存储**：当用户在视觉选项中点击上传本地壁纸时，前端限制图片文件 $\le 3\text{MB}$。由 `FileReader` 在浏览器沙盒中将其读取并转换为压缩的 Base64 DataURL，然后**直接且仅**写入本地设备浏览器的 `localStorage` 中。
-- **云端指针同步**：在用户保存配置进行云端 D1 同步时，用户的偏好设置中 `bgUrl` 仅会被写入微小的标记指针字符串（`local_upload`，仅占用 12 字节），服务器产生 $0$ 服务器空间和流量消耗，且因 `localStorage` 持久化，本地强制刷新不丢失。
+- **本地 Base64 存储 (升级为 IndexedDB)**：当用户在视觉选项中点击上传本地壁纸时，前端限制图片文件由原先的 $3\text{MB}$ 放宽至 $\le 10\text{MB}$。在浏览器沙盒中将其读取并转换为压缩的 Base64 DataURL 之后，**不使用极易产生容量溢出的 `localStorage`，而是写入超大空间的 `IndexedDB` 存储库中**（解决传统 5MB `localStorage` 的 `QuotaExceededError` 额度崩溃 Bug）。
+- **向后兼容与迁移**：系统启动时自动检测老用户本地 `localStorage`，平滑、无缝、自动地将其迁移至新一代 `IndexedDB` 存储中，并自动释放 `localStorage` 的空间占用。
+- **非阻塞预加载**：采用异步预加载 `initLocalBgImage()` 并缓存在全局变量 `window.navLocalBgImage`，完美解决 `updateStyles` 同步刷新背景样式时因数据库查询导致的闪烁、白屏和延迟问题。
+- **云端指针同步**：在用户保存配置进行云端 D1 同步时，用户的偏好设置中 `bgUrl` 仅会被写入微小的标记指针字符串（`local_upload`，仅占用 12 字节），服务器产生 $0$ 服务器空间和流量消耗，且本地持久化极度稳健，强制刷新不丢失。
 
 #### 4.2.3 页面内容可视化重排与批量管理
 
@@ -284,6 +286,7 @@ CloudNav 是一个基于 Cloudflare 生态系统（Pages + Workers KV + D1）构
   - **超级用户 (Super User)**：15 分类 / 30 书签配额上限。
   - **管理员 (Admin)**：100 分类 / 500 书签配额上限。
 - **后端 API 强校验物理拦截**：当用户试图通过修改前端代码或者直接利用 API Post 发送超限的 JSON 时，后端 [nav-main/functions/api/config.js](nav-main/functions/api/config.js#L138) 在接收到请求后立即执行物理配额审查。若 categories 数量或单分类下 item 数量超标，直接下发 `403 Forbidden` 并附带标准规范代码 `ERR_QUOTA_EXCEEDED`。同时在配置获取的 Get 头中加入强抗缓存标记 `no-store, no-cache` 消除一切边缘代理缓存绕过的可能。
+- **本地 Node 开发服务器 (server.js) 对齐**：本地开发环境测试服务器 [server.js](server.js) 完全移植了与生产环境一模一样的 `QUOTA_CONFIG` 机制，摆脱了以前硬编码固定限制的束缚。通过 SQLite 数据库关联动态计算 `getQuota`，让本地开发和调试（如管理员上限为 100/500）能与需求文档及线上生产环境 100% 精准对齐。
 - **前端提前预阻断**：前端在每次检测到渲染后，动态统计分类及网址用量。如果当前数量接近或等于配额上限，自动禁用新增入口，并在添加栏实时渲染极简用量比进度指示条（如 `8/8` 满了），防患于未然。
 
 #### 4.6.3 新用户初始化与克隆流转
@@ -303,5 +306,21 @@ CloudNav 是一个基于 Cloudflare 生态系统（Pages + Workers KV + D1）构
 
 - **标准 PWA 级纯物理融合**：前端构建完全兼容标准的 PWA 离线运行机制，配置完备 of [nav-main/public/manifest.json](nav-main/public/manifest.json) 与 [nav-main/public/ServiceWorker.js](nav-main/public/ServiceWorker.js)，支持移动、桌面全操作系统端“添加到主屏幕”，赋予其完美独立、高对比度、无边框沉浸的客户端独立运行体验。
 - **亮暗主题一致性**：所有视觉颜色（包括卡片背景、高斯模糊、模态遮罩、侧边抽屉及文字前景）均采用无死角的 WCAG A+ 级色彩对比度配比，自适应浅色与深色，在极端壁纸或极限低亮度下依旧保障字迹具有 $100\%$ 的清晰可读性，消灭视觉噪点。
+
+---
+
+### 4.8 代码规范与著作权声明 (Code Specifications)
+
+- **全局注释注入规范**：全站所有核心后端 Express 服务脚本、Serverless 路由函数以及公共前端工具、逻辑控制脚本在头部必须有统一的作者及免责声明注释：
+  ```javascript
+  /**
+   * @fileoverview 
+   * @author adou
+   * @copyright Copyright (c) 2026 adou. All rights reserved.
+   * @license MIT
+   * @disclaimer 免责声明：本软件及相关代码仅用于学术研究与个人学习，作者不对因使用本软件产生的任何直接或间接损失承担责任。
+   */
+  ```
+- **学术与学习研究界定**：声明该系统主要用于学术及个人技术方案的研究论证，作者（adou）对使用者因自行运行、托管或分发该项目及代码而引起的任何直接或间接事件不承担法律连带责任。
 
 ---
