@@ -234,7 +234,7 @@ async function dispatchInstantAdminAlert(action, details, admin, ip, env) {
                `🎬 操作行为: ${action}\n` +
                `📝 详情细节: ${details}\n` +
                `🌐 来源 IP: ${ip}\n` +
-               `🕒 发生时间: ${new Date().toLocaleString('zh-CN')} (本地时区)\n\n` +
+               `🕒 发生时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })} (北京时间)\n\n` +
                `此消息为实时安全警报，仅派发至授权紧急告警的账户。`;
 
   if (env.TELEGRAM_BOT_TOKEN) {

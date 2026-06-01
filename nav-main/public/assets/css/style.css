@@ -780,6 +780,11 @@ body:not(.sidebar-pinned) .main-content {
     body:not(.sidebar-pinned):not(.sidebar-folded) .main-content {
         margin-left: var(--sidebar-mini-width) !important;
     }
+
+    /* 大屏下彻底隐退侧边栏遮罩，防止阻挡大屏常驻排版 */
+    .sidebar-overlay {
+        display: none !important;
+    }
 }
 
 /* 2. Tablet 端 (768px - 1024px): 极简图标模式 (T6.2 预留) */
@@ -3414,12 +3419,28 @@ body.view-style-2 .card[data-tooltip]::before {
 }
 
 .sidebar-overlay {
-    display: none !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    z-index: 2900; /* 高于常规，低于侧边栏 sidebar 的 3000 */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
 .sidebar-overlay.visible {
     opacity: 1;
     visibility: visible;
+}
+
+/* 页面管理模式下强制隐退侧边栏遮罩，方便拖放重排 */
+body.page-manage-active .sidebar-overlay {
+    display: none !important;
 }
 
 @media (max-width: 768px) {
@@ -3553,6 +3574,11 @@ body.view-style-2 .card[data-tooltip]::before {
 }
 
 /* ==================== 高颜值立体搜索框 (Summoned Overlay) ==================== */
+body.search-active {
+    overflow: hidden !important;
+    height: 100% !important;
+}
+
 .search-section {
     position: fixed;
     top: 0;
@@ -3570,6 +3596,7 @@ body.view-style-2 .card[data-tooltip]::before {
     pointer-events: none;
     transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
     visibility: hidden;
+    overscroll-behavior: contain; /* 阻止滚动溢出与弹性滚动穿透到底部 */
 }
 
 body.search-active .search-section {
