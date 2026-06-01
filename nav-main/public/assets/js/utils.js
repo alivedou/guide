@@ -49,7 +49,7 @@ const FALLBACK_EMOJIS = ['🌍', '🌟', '🚀', '💡', '🔥', '✨', '🎈', 
 const getRandomEmoji = () => FALLBACK_EMOJIS[Math.floor(Math.random() * FALLBACK_EMOJIS.length)];
 
 /**
- * 6 级图标自愈引擎 (Task 3.1 & v2.5 大陆网络优化)
+ * 3 级极速图标自愈引擎 (大陆网络高敏优化)
  * @param {HTMLImageElement} img - 触发错误的图片元素
  * @param {string} originalUrl - 原始链接 (用于提取域名)
  */
@@ -123,35 +123,7 @@ const handleIconError = (img, originalUrl) => {
         return;
     }
 
-    // Level 3: QQSuu API (国内极稳)
-    if (retryIndex === 3) {
-        img.src = `https://favicon.qqsuu.cn/${domain}`;
-        return;
-    }
-
-    // Level 4: Google API (大陆需 2.5s 超时跳过)
-    if (retryIndex === 4) {
-        img.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-        img.timeout = setTimeout(() => {
-            if (parseInt(img.getAttribute('data-retry-index') || '0') === 4) {
-                nextStep();
-            }
-        }, 2500);
-        return;
-    }
-
-    // Level 5: DuckDuckGo API (大陆需 2.2s 超时跳过)
-    if (retryIndex === 5) {
-        img.src = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
-        img.timeout = setTimeout(() => {
-            if (parseInt(img.getAttribute('data-retry-index') || '0') === 5) {
-                nextStep();
-            }
-        }, 2200);
-        return;
-    }
-
-    // Level 6: 终极兜底 - 替换为文字/Emoji 磁贴
+    // Level 3: 终极兜底 - 替换为文字/Emoji 磁贴
     fallbackToText(img, domain);
 };
 

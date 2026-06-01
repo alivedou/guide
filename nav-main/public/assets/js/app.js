@@ -1,16 +1,18 @@
 // Task SYNC.GUARD.2: 获取核心数据指纹（仅包含分类和网址内容）
 const getCoreDataFingerprint = (data) => {
     if (!data) return '';
+    const cleanSettings = { ...data.settings };
+    delete cleanSettings.themeMode; // 取消云端指纹计算，保留本地纯偏好
     return JSON.stringify({
         c: data.categories || [],
         i: data.items || [],
-        s: data.settings || {} // 包含设置，但不包含像 isAdmin 这种运行时状态
+        s: cleanSettings
     });
 };
 
 // ==================== 全局状态 ====================
 const MINIMAL_SAFE_DATA = {
-    settings: { zenMode: false, openInNewTab: true, themeMode: "auto" },
+    settings: { zenMode: false, openInNewTab: true },
     categories: [
         { id: "f-cat-1", name: "常用搜索", icon: "🔍", hidden: false }
     ],
@@ -875,7 +877,40 @@ const openProfileCenter = async () => {
 
         title.innerHTML = `<i class="ri-user-settings-line"></i> 个人资料中心`;
         
+        const DEFAULT_AVATARS = [
+            'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix',
+            'https://api.dicebear.com/7.x/bottts/svg?seed=Aneka',
+            'https://api.dicebear.com/7.x/pixel-art/svg?seed=John',
+            'https://api.dicebear.com/7.x/miniavs/svg?seed=Lily',
+            'https://api.dicebear.com/7.x/identicon/svg?seed=Jack',
+            'https://api.dicebear.com/7.x/avataaars/svg?seed=Garfield'
+        ];
+        
+        const storedUser = JSON.parse(localStorage.getItem('nav_current_user') || '{}');
+        const userId = storedUser.id || '';
+        const currentAvatar = localStorage.getItem('nav_user_avatar_' + userId) || DEFAULT_AVATARS[0];
+
+        let avatarSelectorHtml = '';
+        DEFAULT_AVATARS.forEach(url => {
+            const isSel = currentAvatar === url;
+            avatarSelectorHtml += `
+                <div class="avatar-option-item ${isSel ? 'selected' : ''}" 
+                     data-url="${url}"
+                     onclick="window.selectProfileAvatar(this, '${url}')"
+                     style="width: 42px; height: 42px; border-radius: 50%; overflow: hidden; cursor: pointer; border: 2px solid ${isSel ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}; background: rgba(255,255,255,0.05); padding: 2px; transition: 0.2s;">
+                    <img src="${url}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                </div>
+            `;
+        });
+
         body.innerHTML = `
+            <div class="form-row" style="margin-bottom: 20px;">
+                <label><i class="ri-emotion-happy-line"></i> 个人默认头像 (点击切换)</label>
+                <div id="avatar-selector-box" style="display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap;">
+                    ${avatarSelectorHtml}
+                </div>
+                <input type="hidden" id="prof-avatar-val" value="${currentAvatar}">
+            </div>
             <div class="form-row">
                 <label><i class="ri-user-line"></i> 用户名</label>
                 <input type="text" id="prof-username" value="${info.username || ''}" placeholder="用户名" required>
@@ -902,6 +937,17 @@ const openProfileCenter = async () => {
         modal.style.display = 'flex';
         confirmBtn.style.display = 'block';
         confirmBtn.innerText = "保存个人资料";
+
+        // 注册全局头像选择辅助函数
+        window.selectProfileAvatar = (el, url) => {
+            document.querySelectorAll('.avatar-option-item').forEach(item => {
+                item.style.borderColor = 'rgba(255,255,255,0.1)';
+                item.classList.remove('selected');
+            });
+            el.style.borderColor = 'var(--primary)';
+            el.classList.add('selected');
+            document.getElementById('prof-avatar-val').value = url;
+        };
 
         confirmBtn.onclick = async () => {
             const username = document.getElementById('prof-username').value.trim();
@@ -940,8 +986,13 @@ const openProfileCenter = async () => {
 
                 if (saveResult.success) {
                     showToast("个人资料修改成功！", "#27ae60");
-                    // 局部更新本地用户信息
+                    
+                    // 保存头像
+                    const selectedAvatar = document.getElementById('prof-avatar-val').value;
                     const storedUser = JSON.parse(localStorage.getItem('nav_current_user') || '{}');
+                    localStorage.setItem('nav_user_avatar_' + storedUser.id, selectedAvatar);
+                    
+                    // 局部更新本地用户信息
                     storedUser.username = username;
                     localStorage.setItem('nav_current_user', JSON.stringify(storedUser));
                     currentUser = storedUser;
@@ -1171,6 +1222,8 @@ const doLogin = async () => {
         document.getElementById('auth-overlay').style.display = 'none';
         // 此处不需要 showToast，SyncUI 会自动显示成功提示
         await init(true);
+        // 登录成功时高亮消息提示，引导用户前往云端备份进行手动同步
+        showToast("登录成功！检测到您在云端可能有配置备份，如果需要，请前往「云端备份」手动拉取以覆盖本地数据。", "#3498db");
     });
 };
 
@@ -1487,34 +1540,44 @@ const init = async (forceRender = false) => {
             const cloudData = await res.json();
             console.log('[Init] Cloud config received:', cloudData);
             
-            // 3. 【差异指纹比对】仅当云端指纹与本地指纹不一致时，执行后台静默渲染
-            const localFingerprint = getCoreDataFingerprint(appData || {});
-            const cloudFingerprint = getCoreDataFingerprint(cloudData || {});
-            
-            if (localFingerprint !== cloudFingerprint || !hasLoadedCache) {
-                console.log('[Init] Cloud fingerprint changed, updating locally...');
+                // 3. 【冷启动判定】仅在本地没有任何缓存时，才执行云端数据自动覆盖
+                const localFingerprint = getCoreDataFingerprint(appData || {});
+                const cloudFingerprint = getCoreDataFingerprint(cloudData || {});
                 
-                // Task 19.3: 渲染兜底
-                if (!cloudData.categories || !cloudData.items) {
-                    appData = { ...MINIMAL_SAFE_DATA, ...cloudData };
-                    if (!appData.categories || appData.categories.length === 0) appData.categories = MINIMAL_SAFE_DATA.categories;
-                    if (!appData.items) appData.items = [];
+                if (!hasLoadedCache) {
+                    console.log('[Init] No local cache found, cold starting with cloud data...');
+                    
+                    // Task 19.3: 渲染兜底
+                    if (!cloudData.categories || !cloudData.items) {
+                        appData = { ...MINIMAL_SAFE_DATA, ...cloudData };
+                        if (!appData.categories || appData.categories.length === 0) appData.categories = MINIMAL_SAFE_DATA.categories;
+                        if (!appData.items) appData.items = [];
+                    } else {
+                        appData = cloudData;
+                    }
+                    
+                    isAdmin = appData.isAdmin;
+                    localStorage.setItem('nav_app_data', JSON.stringify(appData));
+                    
+                    // 执行后台无感重渲染
+                    renderNav();
+                    renderTools();
+                    updateStyles();
+                    lastSyncFingerprint = cloudFingerprint;
                 } else {
-                    appData = cloudData;
+                    console.log('[Init] Local cache exists. Prevented cloud data from auto-overwriting local changes.');
+                    lastSyncFingerprint = localFingerprint;
+                    
+                    // 即使不覆盖书签内容，但必须即时将云端最新权威的用户配额与系统身份无感合入本地
+                    if (cloudData.quota) {
+                        appData.quota = cloudData.quota;
+                    }
+                    if (typeof cloudData.isAdmin !== 'undefined') {
+                        appData.isAdmin = cloudData.isAdmin;
+                        isAdmin = cloudData.isAdmin;
+                    }
+                    localStorage.setItem('nav_app_data', JSON.stringify(appData));
                 }
-                
-                isAdmin = appData.isAdmin;
-                localStorage.setItem('nav_app_data', JSON.stringify(appData));
-                
-                // 执行后台无感重渲染
-                renderNav();
-                renderTools();
-                updateStyles();
-                lastSyncFingerprint = cloudFingerprint;
-            } else {
-                console.log('[Init] Local and Cloud data match. Skipped background re-render.');
-                lastSyncFingerprint = localFingerprint;
-            }
             
             // 同步最新的用户信息 (包含 UID)
             if (cloudData.username && cloudData.role) {
@@ -1775,7 +1838,10 @@ const renderNav = () => {
                 menuItem.className = `zen-menu-item ${activeCatId === cat.id ? 'active' : ''}`;
                 menuItem.tabIndex = 0; // Task 30.2: 启用键盘焦点
                 menuItem.style.animationDelay = `${(idx * 0.05) + 0.2}s`; // T8: Stagger
-                menuItem.innerHTML = `<span class="menu-icon">${cat.icon}</span><span class="menu-label">${cat.name}</span>`;
+                const catIconHtml = cat.icon?.startsWith('http') 
+                    ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">` 
+                    : `<span style="font-size: 16px; line-height: 1; display: block;">${cat.icon || '📂'}</span>`;
+                menuItem.innerHTML = `<span class="menu-icon" style="width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle; margin-right: 6px;">${catIconHtml}</span><span class="menu-label">${cat.name}</span>`;
                 
                 // 处理键盘激活
                 menuItem.onkeydown = (e) => {
@@ -1819,7 +1885,10 @@ const renderNav = () => {
                 ? `<span class="drag-handle" style="margin-right: 6px; cursor: move; opacity: 0.5;"><i class="ri-drag-move-2-line"></i></span>`
                 : '';
 
-            let navHtml = `${dragHandleHtml}<span class="nav-icon" title="">${cat.icon}</span><span class="nav-label">${cat.name}${countHtml}</span>`;
+            const catIconHtml = cat.icon?.startsWith('http') 
+                ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">` 
+                : `<span style="font-size: 15px; line-height: 1; display: block;">${cat.icon || '📂'}</span>`;
+            let navHtml = `${dragHandleHtml}<span class="nav-icon" title="" style="width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle; margin-right: 8px;">${catIconHtml}</span><span class="nav-label">${cat.name}${countHtml}</span>`;
             
             // Task 4.3: 增加管理快捷按钮
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
@@ -1897,7 +1966,10 @@ const renderNav = () => {
             const section = document.createElement('div');
             section.className = 'category-section';
             section.id = 'section-' + cat.id;
-            section.innerHTML = `<div class="category-section-title">${cat.icon} ${cat.name}</div>`;
+            const sectionIconHtml = cat.icon?.startsWith('http') 
+                ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">` 
+                : `<span style="font-size: 20px; line-height: 1; display: block;">${cat.icon || '📂'}</span>`;
+            section.innerHTML = `<div class="category-section-title" style="display: flex; align-items: center; gap: 8px;"><span style="width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle;">${sectionIconHtml}</span> ${cat.name}</div>`;
 
             const grid = document.createElement('div');
             grid.className = cat._isVideo ? 'video-grid' : 'nav-grid';
@@ -2032,14 +2104,7 @@ const renderNav = () => {
                 `;
                 addCatBtn.onclick = () => {
                     if (isCatLimit) return showToast(`最多只能创建 ${quota.maxCategories} 个分类`, "#e74c3c");
-                    const name = prompt("请输入新分类名称:");
-                    if (name) {
-                        const newCat = { id: 'cat_' + Date.now(), name, icon: '📂', hidden: false };
-                        appData.categories.push(newCat);
-                        isDataDirty = true;
-                        showToast(`分类 ${name} 已本地创建`, "#3498db");
-                        renderNav();
-                    }
+                    openCategoryEditModal("");
                 };
                 sidebarNav.appendChild(addCatBtn);
             }
@@ -2098,27 +2163,34 @@ const renderTools = () => {
         ? (currentUser || JSON.parse(localStorage.getItem('nav_current_user') || '{}'))
         : { username: '访客模式', role: 'guest', uid: null };
 
+    const DEFAULT_AVATARS = [
+        'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix',
+        'https://api.dicebear.com/7.x/bottts/svg?seed=Aneka',
+        'https://api.dicebear.com/7.x/pixel-art/svg?seed=John',
+        'https://api.dicebear.com/7.x/miniavs/svg?seed=Lily',
+        'https://api.dicebear.com/7.x/identicon/svg?seed=Jack',
+        'https://api.dicebear.com/7.x/avataaars/svg?seed=Garfield'
+    ];
+
     if (!sysToken) {
+        const guestAvatar = DEFAULT_AVATARS[0];
         // 游客态显示登录引导
         userArea.innerHTML = `
             <div class="sidebar-user-card guest" onclick="showAuthModal()" title="点击登录同步云端">
-                <div class="user-avatar-wrapper">
-                    <i class="ri-user-received-2-line"></i>
+                <div class="user-avatar-wrapper" style="display: flex; align-items: center; justify-content: center;">
+                    <img src="${guestAvatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
                 </div>
                 <div class="user-meta-box">
-                    <span class="user-name">访客模式 <span class="user-role-badge" style="background: rgba(255, 255, 255, 0.08); color: var(--text-dim);">GUEST</span></span>
-                    <span class="user-uid">点击登录同步</span>
+                    <span class="user-name" style="margin-bottom: 4px;">访客模式</span>
+                    <span class="user-uid" style="background: rgba(255, 255, 255, 0.08); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; opacity: 1; display: inline-block; width: max-content; font-family: monospace;">GUEST (点击登录)</span>
                 </div>
             </div>
         `;
     } else {
         const userDisplayName = info.username || appData.username || '已登录用户';
-        const displayUid = info.uid 
-            ? `<span class="user-uid" title="完整内部 ID: ${info.id}">ID: ${info.uid}</span>` 
-            : `<span class="user-uid">ID: ${info.id?.substring(0, 8) || '---'}</span>`;
         
         let badgeText = 'USER';
-        let badgeColor = 'rgba(255, 255, 255, 0.1)';
+        let badgeColor = 'rgba(255, 255, 255, 0.08)';
         let badgeTextCol = 'var(--text-dim)';
 
         if (info.role === 'admin') {
@@ -2135,16 +2207,21 @@ const renderTools = () => {
             badgeTextCol = '#fff';
         }
 
-        const roleBadge = `<span class="user-role-badge" style="background: ${badgeColor}; color: ${badgeTextCol};">${badgeText}</span>`;
+        const userAvatar = localStorage.getItem('nav_user_avatar_' + info.id) || DEFAULT_AVATARS[0];
+        const avatarHtml = `<img src="${userAvatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+
+        const displayUid = info.uid 
+            ? `<span class="user-uid" style="background: ${badgeColor}; color: ${badgeTextCol}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; opacity: 1; display: inline-block; width: max-content; font-family: monospace;" title="身份: ${badgeText} | 完整内部 ID: ${info.id}">ID: ${info.uid}</span>` 
+            : `<span class="user-uid" style="background: ${badgeColor}; color: ${badgeTextCol}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; opacity: 1; display: inline-block; width: max-content; font-family: monospace;">ID: ${info.id?.substring(0, 8) || '---'}</span>`;
         
         userArea.innerHTML = `
             <div class="sidebar-user-card">
                 <div class="sidebar-user-info" onclick="openProfileCenter()" title="修改个人资料">
-                    <div class="user-avatar-wrapper">
-                        <i class="ri-user-smile-line"></i>
+                    <div class="user-avatar-wrapper" style="display: flex; align-items: center; justify-content: center;">
+                        ${avatarHtml}
                     </div>
                     <div class="user-meta-box">
-                        <span class="user-name">${userDisplayName} ${roleBadge}</span>
+                        <span class="user-name" style="margin-bottom: 4px;">${userDisplayName}</span>
                         ${displayUid}
                     </div>
                 </div>
@@ -2354,6 +2431,19 @@ window.openSyncCenter = () => {
         </div>
 
         <div class="visual-option-group">
+            <span class="visual-option-label"><i class="ri-cloud-download-line"></i> 从云端下载到本地</span>
+            <div class="visual-btn-group">
+                <button class="tab-btn active" 
+                        id="btn-pull-cloud"
+                        style="flex:1; justify-content: center; height:42px; border: 1px solid #e67e22; color: #e67e22; background: transparent;" 
+                        onclick="pullBackupFromCloud()">
+                    <i class="ri-download-cloud-line"></i> 拉取云端数据到本地
+                </button>
+            </div>
+            <p style="font-size: 11px; opacity: 0.8; color: #e67e22; margin-top: 8px;"><i class="ri-alert-line"></i> 警告：此操作将使用云端已有的备份数据【完全覆盖】您当前的本地数据，此操作不可撤销，请谨慎点击！</p>
+        </div>
+
+        <div class="visual-option-group">
             <span class="visual-option-label"><i class="ri-timer-flash-line"></i> 云端备份模式</span>
             <div class="segmented-control" style="width: 100%; box-sizing: border-box; display: flex;">
                 <button class="seg-btn ${!appData.settings?.syncInterval ? 'active' : ''}" onclick="setSyncMode(0)" style="padding: 6px 4px; font-size: 12px;">
@@ -2383,6 +2473,53 @@ window.openSyncCenter = () => {
     confirmBtn.onclick = () => closeAllModals();
 };
 
+// 从云端拉取备份数据到本地
+window.pullBackupFromCloud = async () => {
+    if (!sysToken) return showToast("请先登录再拉取备份", "#e67e22");
+
+    if (!confirm("警告：从云端拉取备份将完全覆盖您当前这台设备上的本地配置！此操作不可撤销！确定要拉取覆盖吗？")) {
+        return;
+    }
+
+    await SyncUI.perform('RESTORE_MANUAL', async () => {
+        const res = await fetch('/api/config', {
+            headers: { 'Authorization': sysToken }
+        });
+
+        if (res.status === 401) {
+            hideLoader();
+            return handleAuthError();
+        }
+
+        const data = await res.json();
+        
+        if (res.ok && data) {
+            // 解析隔离 - 容错处理
+            if (!data.categories || !data.items) {
+                appData = { ...MINIMAL_SAFE_DATA, ...data };
+                if (!appData.categories || appData.categories.length === 0) appData.categories = MINIMAL_SAFE_DATA.categories;
+                if (!appData.items) appData.items = [];
+            } else {
+                appData = data;
+            }
+
+            isDataDirty = false;
+            localStorage.setItem('nav_app_data', JSON.stringify(appData));
+            lastSyncFingerprint = getCoreDataFingerprint(appData);
+
+            // 重新刷新与渲染
+            renderNav();
+            renderTools();
+            updateStyles();
+
+            showToast("云端备份拉取并覆盖本地成功！", "#27ae60");
+            closeAllModals();
+        } else {
+            throw new Error("从服务器拉取备份失败，请重试");
+        }
+    });
+};
+
 // Task 9.3: 手动同步云端逻辑
 window.manualSyncCloud = async (refreshUI = false) => {
     if (!sysToken) return showToast("请先登录再进行备份", "#e67e22");
@@ -2408,13 +2545,19 @@ window.manualSyncCloud = async (refreshUI = false) => {
     }
 
     await SyncUI.perform('BACKUP_MANUAL', async () => {
+        // 深度复制一份发包数据，并在发送至云端前安全擦除 themeMode 设置以保持本地独享
+        const uploadData = JSON.parse(JSON.stringify(appData));
+        if (uploadData.settings) {
+            delete uploadData.settings.themeMode;
+        }
+
         const res = await fetch('/api/config', {
             method: 'POST',
             headers: { 
                 'Authorization': sysToken,
                 'Content-Type': 'application/json' 
             },
-            body: JSON.stringify(appData)
+            body: JSON.stringify(uploadData)
         });
 
         if (res.status === 401) {
@@ -3359,11 +3502,11 @@ const handleDataSaveOnExit = async () => {
         
         if (!sysToken) {
             isDataDirty = false;
-            throw { message: "已保存至本地。登录后可启用云端同步，实现多设备同步。", isWarning: true };
+            throw { message: "访客模式：修改已在本地生效（更换浏览器或清空缓存会导致数据丢失）", isWarning: true };
         } else {
             const autoSync = appData.settings?.autoSyncOnLogout !== false;
             if (!autoSync) {
-                throw { message: "已暂存本地。请记得手动同步或开启退出自动同步", isWarning: true };
+                throw { message: "已暂存本地。请记得前往「云端备份」手动同步", isWarning: true };
             }
         }
     });
@@ -3415,8 +3558,12 @@ const openCategoryEditModal = (catId) => {
     // Task 9.6 & O++.1: 切换弹窗启用静默模式
     closeAllModals(true);
 
-    const cat = appData.categories.find(c => c.id === catId);
-    if (!cat) return;
+    const isEdit = !!catId;
+    const cat = isEdit 
+        ? appData.categories.find(c => c.id === catId)
+        : { name: '', icon: '📂' };
+
+    if (isEdit && !cat) return;
 
     const modal = document.getElementById('edit-modal');
     const title = document.getElementById('edit-title');
@@ -3425,26 +3572,80 @@ const openCategoryEditModal = (catId) => {
     
     if (!modal || !body) return;
 
-    title.innerText = "编辑分类";
+    title.innerText = isEdit ? "编辑分类" : "添加新分类";
+
+    const safeTitle = utils.escapeHTML(cat.name || '');
+    const safeIcon = utils.escapeHTML(cat.icon || '📂');
+
     body.innerHTML = `
         <div class="form-row">
             <label><i class="ri-font-size"></i> 分类名称</label>
+            <input type="text" id="edit-cat-name" value="${safeTitle}" placeholder="如：社交媒体" style="width:100%;">
+        </div>
+        <div class="form-row">
+            <label><i class="ri-image-line"></i> 分类图标</label>
             <div style="display:flex; gap:8px; width:100%; align-items:center;">
-                <input type="text" id="edit-cat-name" value="${cat.name}" placeholder="如：社交媒体" style="flex:1;">
-                <button id="btn-select-emoji" class="icon-btn-action" title="选择分类图标" onclick="toggleEmojiPicker()">
-                    <i class="ri-emotion-line"></i>
-                </button>
-                <div id="cat-icon-preview" class="preview-container">
-                    ${cat.icon || '📂'}
+                <input type="text" id="edit-icon" value="${safeIcon}" placeholder="Emoji 或 图片 URL">
+                <div id="edit-icon-preview" class="preview-container">
+                    ${cat.icon?.startsWith('http') ? `<img src="${cat.icon}">` : `<span>${cat.icon || '📂'}</span>`}
                 </div>
             </div>
-            <input type="hidden" id="edit-cat-icon" value="${cat.icon || '📂'}">
         </div>
-        ${getEmojiPickerHTML()}
+
+        <!-- ==================== 2. 智能图标联合搜索 (Iconify + Emoji) ==================== -->
+        <div class="form-row" style="background:rgba(255,255,255,0.02); border-radius:12px; padding:10px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
+            <label style="font-size:12px; font-weight:bold; color:#ccc; margin-bottom:6px;"><i class="ri-search-eye-line"></i> 智能图标搜索与推荐</label>
+            <div style="display:flex; flex-direction:column; width:100%; gap:6px;">
+                <div style="display:flex; gap:8px;">
+                    <input id="emoji-recommend-title" value="${safeTitle}" placeholder="输入英文/拼音/中文关键词, 如 github" style="flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:8px; height:36px; padding:0 10px; color:#fff;">
+                    <button type="button" class="icon-btn-action" id="btn-emoji-recommend" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">搜索</button>
+                    <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组 Emoji" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1); color:#fff;"><i class="ri-refresh-line"></i></button>
+                </div>
+                
+                <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+                    <div style="font-size:11px; color:#aaa; display:flex; align-items:center; gap:4px;"><i class="ri-magic-line"></i> 智能 Emoji 推荐:</div>
+                    <div id="emoji-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:60px; overflow-y:auto; padding:2px 0;">
+                        ${cat.icon && !cat.icon.startsWith('http') ? `<span class="emoji-suggestion selected" data-emoji="${cat.icon}">${cat.icon}</span>` : ''}
+                    </div>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+                    <div style="font-size:11px; color:#aaa; display:flex; align-items:center; gap:4px;"><i class="ri-search-eye-line"></i> Iconify 矢量图标:</div>
+                    <div id="iconify-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:80px; overflow-y:auto; padding:2px 0;"></div>
+                </div>
+            </div>
+        </div>
     `;
     
     modal.style.display = 'flex';
     confirmBtn.style.display = 'block';
+
+    // 实时图标预览
+    document.getElementById('edit-icon').oninput = (e) => {
+        const val = e.target.value.trim();
+        const preview = document.getElementById('edit-icon-preview');
+        preview.innerHTML = val.startsWith('http') ? `<img src="${val}">` : `<span>${val || '📂'}</span>`;
+    };
+
+    // 绑定智能 Emoji 推荐与 Iconify 联合搜索
+    document.getElementById('btn-emoji-recommend').addEventListener('click', () => recommendEmojisAndSearchIconify(false));
+    document.getElementById('btn-emoji-refresh').addEventListener('click', () => recommendEmojisAndSearchIconify(true));
+    document.getElementById('emoji-recommend-title').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') recommendEmojisAndSearchIconify(false);
+    });
+
+    // 自动触发初始联合搜索
+    if (cat.name) {
+        recommendEmojisAndSearchIconify(false);
+    }
+
+    // 监听分类名称输入，同步到联合搜索标题
+    document.getElementById('edit-cat-name').addEventListener('input', (e) => {
+        const recTitleInput = document.getElementById('emoji-recommend-title');
+        if (recTitleInput) {
+            recTitleInput.value = e.target.value.trim();
+        }
+    });
 
     // Task 37.2: 自动聚焦
     setTimeout(() => {
@@ -3453,16 +3654,35 @@ const openCategoryEditModal = (catId) => {
 
     confirmBtn.onclick = async () => {
         const newName = document.getElementById('edit-cat-name').value.trim();
-        const newIcon = document.getElementById('edit-cat-icon').value.trim();
+        const newIcon = document.getElementById('edit-icon').value.trim();
         
         if (!newName) return showToast("名称不能为空", "#e67e22");
         
-        cat.name = newName;
-        cat.icon = newIcon || '📂';
+        if (isEdit) {
+            cat.name = newName;
+            cat.icon = newIcon || '📂';
+            if (sysToken) {
+                showToast("分类修改已本地暂存，已设为待同步", "#3498db");
+            } else {
+                showToast("访客模式：分类修改已本地生效（更换浏览器会丢失）", "#e67e22");
+            }
+        } else {
+            const newCat = {
+                id: 'cat_' + Date.now(),
+                name: newName,
+                icon: newIcon || '📂',
+                hidden: false
+            };
+            appData.categories.push(newCat);
+            if (sysToken) {
+                showToast("新分类已本地添加，已设为待同步", "#27ae60");
+            } else {
+                showToast("访客模式：新分类已本地添加（更换浏览器会丢失）", "#e67e22");
+            }
+        }
         isDataDirty = true;
         
         modal.style.display = 'none';
-        showToast("分类修改已本地暂存", "#3498db");
         renderNav();
     };
 };
@@ -6248,29 +6468,62 @@ const initGlobalEvents = () => {
                         throw new Error("导入内容经校验为空或无效");
                     }
 
-                    if (!confirm("导入将覆盖当前所有配置，确定继续吗？")) return;
-                    
                     // 智能清洗脏配置 (Task NT-V2.12)
                     if (parsed.settings) {
                         delete parsed.settings.cardWidth;
                     }
+
+                    // 方案 B：原位高颜值弹窗重绘（Inline Re-render）替代粗糙的原生 confirm
+                    const body = document.getElementById('edit-form-body');
+                    const confirmBtn = document.getElementById('btn-confirm-edit');
                     
-                    appData = parsed;
-                    showLoader('正在导入并同步...');
-                    await syncConfigToCloud();
-                    renderNav();
-                    
-                    if (hasTruncated) {
-                        showToast("导入成功！部分条目超出容量配额已做安全裁切。", "#e67e22");
-                    } else if (hasAutoSplit) {
-                        showToast("导入成功！超出上限的书签已自动分箱拆分。", "#27ae60");
-                    } else {
-                        showToast("导入成功");
+                    if (body && confirmBtn) {
+                        body.innerHTML = `
+                            <div style="text-align: center; padding: 20px 10px;">
+                                <div style="font-size: 48px; color: #e67e22; margin-bottom: 12px; animation: focus-pulse 1.5s infinite;"><i class="ri-alert-line"></i></div>
+                                <h3 style="font-size: 15px; font-weight: bold; color: #fff; margin-bottom: 8px;">全量覆盖导入确认</h3>
+                                <p style="font-size: 12px; color: var(--text-dim); line-height: 1.6; margin: 0 10px 15px;">
+                                    系统成功解析到有效的备份文件！<br>
+                                    包含 <strong style="color:var(--primary);">${parsed.categories.length}</strong> 个分类和 <strong style="color:var(--primary);">${parsed.items.length}</strong> 个书签。<br><br>
+                                    <span style="color:#e67e22; font-weight:bold;"><i class="ri-error-warning-line"></i> 导入将完全覆写并清空您当前设备上的本地配置！此操作不可恢复，确定继续吗？</span>
+                                </p>
+                            </div>
+                        `;
+
+                        confirmBtn.innerHTML = `<i class="ri-checkbox-circle-line"></i> 确认覆盖导入`;
+                        confirmBtn.style.display = 'block';
+                        confirmBtn.style.border = '1px solid #e67e22';
+                        confirmBtn.style.color = '#fff';
+                        confirmBtn.style.background = '#e67e22';
+
+                        confirmBtn.onclick = async () => {
+                            try {
+                                appData = parsed;
+                                showLoader('正在导入并同步...');
+                                await syncConfigToCloud();
+                                renderNav();
+                                renderTools();
+                                updateStyles();
+                                
+                                if (hasTruncated) {
+                                    showToast("导入成功！部分条目超出容量配额已做安全裁切。", "#e67e22");
+                                } else if (hasAutoSplit) {
+                                    showToast("导入成功！超出上限的书签已自动分箱拆分。", "#27ae60");
+                                } else {
+                                    showToast("导入成功", "#27ae60");
+                                }
+                            } catch (err) {
+                                showToast(`导入失败: ${err.message}`, "#e74c3c");
+                            } finally {
+                                hideLoader();
+                                closeAllModals(true);
+                            }
+                        };
                     }
                 } catch (err) {
                     showToast(`导入失败: ${err.message}`, "#e74c3c");
-                } finally {
                     hideLoader();
+                } finally {
                     importInput.value = ''; // 清空以支持重复导入
                 }
             };
@@ -6796,6 +7049,64 @@ const handleUrlInput = (url, autoSelect = false) => {
 
 const debouncedHandleUrlInput = utils.debounce((val) => handleUrlInput(val), 500);
 
+// ==================== 智能 Emoji 推荐与 Iconify 联合搜索全局共享服务 ====================
+function renderEmojiSuggestions(emojis) {
+    const container = document.getElementById('emoji-results');
+    if (!container) return;
+    container.innerHTML = '';
+    emojis.forEach(emoji => {
+        const span = document.createElement('span');
+        span.className = 'emoji-suggestion';
+        span.textContent = emoji;
+        span.dataset.emoji = emoji;
+        span.onclick = () => {
+            document.querySelectorAll('.emoji-suggestion').forEach(el => el.classList.remove('selected'));
+            span.classList.add('selected');
+            selectIcon(emoji);
+        };
+        container.appendChild(span);
+    });
+}
+
+async function recommendEmojisAndSearchIconify(isRefreshEmojiOnly = false) {
+    const query = document.getElementById('emoji-recommend-title').value.trim();
+    const fallbackTitleInput = document.getElementById('edit-title-input') || document.getElementById('edit-cat-name');
+    const fallbackTitle = fallbackTitleInput ? fallbackTitleInput.value.trim() : '';
+    const searchWord = query || fallbackTitle;
+
+    // 1. 智能 Emoji 推荐
+    renderEmojiSuggestions(getRecommendedEmojis(searchWord));
+
+    if (isRefreshEmojiOnly) return; // 换一组 Emoji 时不重复拉取 Iconify
+
+    // 2. Iconify 矢量搜索
+    if (!searchWord) return;
+    const resBox = document.getElementById('iconify-results');
+    if (!resBox) return;
+    resBox.innerHTML = '<span style="font-size:12px; color:#aaa;">搜索中...</span>';
+    try {
+        const req = await fetch(`https://api.iconify.design/search?query=${encodeURIComponent(searchWord)}&limit=12`);
+        const data = await req.json();
+        resBox.innerHTML = '';
+        if (data.icons && data.icons.length > 0) {
+            data.icons.forEach(iconName => {
+                const imgUrl = `https://api.iconify.design/${iconName}.svg`;
+                const img = document.createElement('img');
+                img.src = imgUrl;
+                img.style.cssText = 'width:30px; height:30px; cursor:pointer; background:rgba(255,255,255,0.06); border-radius:6px; padding:4px; transition: 0.2s; border:1px solid rgba(255,255,255,0.1);';
+                img.onmouseover = () => img.style.background = 'rgba(255,255,255,0.2)';
+                img.onmouseout = () => img.style.background = 'rgba(255,255,255,0.06)';
+                img.onclick = () => selectIcon(imgUrl);
+                resBox.appendChild(img);
+            });
+        } else {
+            resBox.innerHTML = '<span style="font-size:12px; color:#aaa;">未找到结果</span>';
+        }
+    } catch (e) {
+        resBox.innerHTML = '<span style="font-size:12px; color:#e74c3c;">网络或接口错误</span>';
+    }
+}
+
 const openEditModal = (id) => {
     lastFocusedElement = document.activeElement; // Task 37.2
     // Task 9.6 & O++.1: 切换弹窗启用静默模式
@@ -6830,15 +7141,11 @@ const openEditModal = (id) => {
             <label><i class="ri-image-line"></i> 图标</label>
             <div style="display:flex; gap:8px; width:100%; align-items:center;">
                 <input type="text" id="edit-icon" value="${safeIcon || ''}" placeholder="Emoji 或 图片 URL">
-                <button id="btn-select-emoji" class="icon-btn-action" title="选择表情/图标" onclick="toggleEmojiPicker()">
-                    <i class="ri-emotion-line"></i>
-                </button>
                 <div id="edit-icon-preview" class="preview-container">
                     ${item.icon?.startsWith('http') ? `<img src="${item.icon}">` : `<span>${item.icon || '🔗'}</span>`}
                 </div>
             </div>
         </div>
-        ${getEmojiPickerHTML()}
 
         <!-- ==================== 1. 多源图标备份 (自动抓取测速) ==================== -->
         <div style="display: none;">
@@ -6940,62 +7247,6 @@ const openEditModal = (id) => {
     });
 
     // 绑定智能 Emoji 推荐与 Iconify 联合搜索
-    const renderEmojiSuggestions = (emojis) => {
-        const container = document.getElementById('emoji-results');
-        if (!container) return;
-        container.innerHTML = '';
-        emojis.forEach(emoji => {
-            const span = document.createElement('span');
-            span.className = 'emoji-suggestion';
-            span.textContent = emoji;
-            span.dataset.emoji = emoji;
-            span.onclick = () => {
-                document.querySelectorAll('.emoji-suggestion').forEach(el => el.classList.remove('selected'));
-                span.classList.add('selected');
-                selectIcon(emoji);
-            };
-            container.appendChild(span);
-        });
-    };
-
-    const recommendEmojisAndSearchIconify = async (isRefreshEmojiOnly = false) => {
-        const query = document.getElementById('emoji-recommend-title').value.trim();
-        const fallbackTitle = document.getElementById('edit-title-input').value.trim();
-        const searchWord = query || fallbackTitle;
-
-        // 1. 智能 Emoji 推荐
-        renderEmojiSuggestions(getRecommendedEmojis(searchWord));
-
-        if (isRefreshEmojiOnly) return; // 换一组 Emoji 时不重复拉取 Iconify
-
-        // 2. Iconify 矢量搜索
-        if (!searchWord) return;
-        const resBox = document.getElementById('iconify-results');
-        if (!resBox) return;
-        resBox.innerHTML = '<span style="font-size:12px; color:#aaa;">搜索中...</span>';
-        try {
-            const req = await fetch(`https://api.iconify.design/search?query=${encodeURIComponent(searchWord)}&limit=12`);
-            const data = await req.json();
-            resBox.innerHTML = '';
-            if (data.icons && data.icons.length > 0) {
-                data.icons.forEach(iconName => {
-                    const imgUrl = `https://api.iconify.design/${iconName}.svg`;
-                    const img = document.createElement('img');
-                    img.src = imgUrl;
-                    img.style.cssText = 'width:30px; height:30px; cursor:pointer; background:rgba(255,255,255,0.06); border-radius:6px; padding:4px; transition: 0.2s; border:1px solid rgba(255,255,255,0.1);';
-                    img.onmouseover = () => img.style.background = 'rgba(255,255,255,0.2)';
-                    img.onmouseout = () => img.style.background = 'rgba(255,255,255,0.06)';
-                    img.onclick = () => selectIcon(imgUrl);
-                    resBox.appendChild(img);
-                });
-            } else {
-                resBox.innerHTML = '<span style="font-size:12px; color:#aaa;">未找到结果</span>';
-            }
-        } catch (e) {
-            resBox.innerHTML = '<span style="font-size:12px; color:#e74c3c;">网络或接口错误</span>';
-        }
-    };
-
     document.getElementById('btn-emoji-recommend').addEventListener('click', () => recommendEmojisAndSearchIconify(false));
     document.getElementById('btn-emoji-refresh').addEventListener('click', () => recommendEmojisAndSearchIconify(true));
     document.getElementById('emoji-recommend-title').addEventListener('keypress', (e) => {
@@ -7123,7 +7374,17 @@ const saveItem = async () => {
 
     isDataDirty = true;
     modal.style.display = 'none';
-    showToast(id ? "修改已本地暂存" : "书签已本地添加", "#3498db");
+    
+    if (sysToken) {
+        const autoSync = appData.settings?.autoSyncOnLogout !== false;
+        if (autoSync) {
+            showToast(id ? "修改已保存并自动同步到云端" : "书签已添加并自动同步到云端", "#27ae60");
+        } else {
+            showToast(id ? "修改已本地暂存，请记得手动同步上云" : "书签已添加，请记得手动同步上云", "#3498db");
+        }
+    } else {
+        showToast(id ? "访客模式：修改已在本地生效" : "访客模式：书签已添加（清空缓存会丢失）", "#e67e22");
+    }
     renderNav();
 
     // 登录态即时静默后台同步 (Task BF.3)

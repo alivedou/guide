@@ -758,23 +758,27 @@ body:not(.sidebar-pinned) .main-content {
 
 /* ==================== 响应式侧边栏布局 (Phase 6) ==================== */
 
-/* 1. Desktop 端 (> 1024px): 侧边栏固定 */
+/* 1. Desktop 端 (> 1024px): 侧边栏只有 展开态(Pinned) 和 极简迷你态(Folded/Mini)，彻底消除完全隐藏抽屉态 */
 @media (min-width: 1025px) {
-    :root {
-        --sidebar-actual-width: var(--sidebar-width);
-    }
-    
-    body.sidebar-pinned .sidebar {
+    /* 大屏常规模式下，强行解除 translateX(-100%)，侧边栏保持原位 */
+    body:not(.sidebar-pinned) .sidebar {
         transform: translateX(0) !important;
-    }
-    
-    body.sidebar-pinned .main-content {
-        margin-left: var(--sidebar-actual-width);
+        box-shadow: none; /* 迷你态非悬浮，不需要巨大的卡片悬浮阴影 */
     }
 
-    /* 如果取消固定，则侧边栏悬浮，不占用空间 */
-    body:not(.sidebar-pinned) .main-content {
-        margin-left: 0;
+    /* 当展开/固定时，主内容区让出 250px */
+    body.sidebar-pinned .main-content {
+        margin-left: var(--sidebar-width) !important;
+    }
+
+    /* 当极简迷你折叠时，主内容区让出 迷你宽度 (72px) */
+    body.sidebar-folded .main-content {
+        margin-left: var(--sidebar-mini-width) !important;
+    }
+
+    /* 兼容性与边界情况处理：既非 pinned 也非 folded 时，也设为 mini 宽度 */
+    body:not(.sidebar-pinned):not(.sidebar-folded) .main-content {
+        margin-left: var(--sidebar-mini-width) !important;
     }
 }
 
@@ -1162,8 +1166,9 @@ body.light-theme[data-bg-type="custom"]::before {
 
 /* 搜索态视觉深度隔离 (Task 2.5.2) */
 body.is-searching::before {
-    backdrop-filter: blur(35px) saturate(50%);
-    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: transparent;
 }
 
 /* 移除背景遮罩 (Task 12.3) */
@@ -1174,10 +1179,10 @@ body.no-bg-mask::before {
 }
 
 body.is-searching .grid-container {
-    filter: blur(8px);
+    filter: none;
     opacity: 0.3;
     pointer-events: none;
-    transform: scale(0.98);
+    transform: none;
     transition: all 0.4s ease;
 }
 
@@ -3409,18 +3414,7 @@ body.view-style-2 .card[data-tooltip]::before {
 }
 
 .sidebar-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    z-index: 2900; /* 高于常规，低于侧边栏 sidebar 的 3000 */
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
+    display: none !important;
 }
 
 .sidebar-overlay.visible {
@@ -3569,7 +3563,7 @@ body.view-style-2 .card[data-tooltip]::before {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.68);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     opacity: 0;
@@ -3582,6 +3576,12 @@ body.search-active .search-section {
     opacity: 1;
     pointer-events: auto;
     visibility: visible;
+}
+
+/* 提升主内容上下文，穿透侧边栏遮罩的压制 (z-index 2900) */
+body.search-active .main-content {
+    position: relative;
+    z-index: 6000 !important;
 }
 
 .search-wrapper {
@@ -3822,15 +3822,21 @@ body.light-theme .quick-nav-btn:hover {
 
 /* ==================== 搜索态隔离 (Task 2.5.2) ==================== */
 body.is-searching .grid-container {
-    opacity: 0.05;
-    filter: blur(8px) grayscale(1);
-    transform: translateY(20px) scale(0.98);
+    opacity: 0.15;
+    filter: none;
+    transform: none;
     pointer-events: none;
 }
 
 body.is-searching .category-section-title {
     opacity: 0;
-    transform: translateX(-20px);
+    transform: none;
+}
+
+/* 当大搜索激活时，底层的侧边栏遮罩自动静音退场，消灭遮罩重叠和折射杂色 */
+body.search-active .sidebar-overlay {
+    opacity: 0 !important;
+    visibility: hidden !important;
 }
 
 .grid-container, .category-section-title {
@@ -3954,7 +3960,7 @@ body:not(.zen-active) .zen-expand-btn {
 }
 
 body.light-theme .search-section {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.75);
 }
 
 body.light-theme .search-wrapper {
