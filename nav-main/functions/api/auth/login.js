@@ -20,8 +20,9 @@ async function sha256(text) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const ip = request.headers.get("cf-connecting-ip") || "unknown";
-  const lockKey = `login_fail:${ip}`;
+  const rawIp = request.headers.get("cf-connecting-ip") || "unknown";
+  const hashedIp = await sha256(rawIp);
+  const lockKey = `login_fail:${hashedIp}`;
 
   try {
     // 0. 检查熔断状态 (Task 6.4)

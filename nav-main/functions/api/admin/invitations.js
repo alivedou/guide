@@ -122,7 +122,7 @@ export async function onRequestPost(context) {
     
     // 记录审计日志 (Task 6.4)
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .bind(admin.id, 'BATCH_GENERATE_INVITATIONS', `Generated ${count || 1} codes`, request.headers.get("cf-connecting-ip") || "unknown")
+      .bind(admin.id, 'BATCH_GENERATE_INVITATIONS', `Generated ${count || 1} codes`, '[Protected]')
       .run();
 
     return new Response(JSON.stringify({ success: true }));
@@ -141,7 +141,7 @@ export async function onRequestDelete(context) {
     
     // 记录审计日志 (Task 6.4)
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .bind(admin.id, 'DELETE_INVITATION', `Deleted code: ${code}`, request.headers.get("cf-connecting-ip") || "unknown")
+      .bind(admin.id, 'DELETE_INVITATION', `Deleted code: ${code}`, '[Protected]')
       .run();
 
     return new Response(JSON.stringify({ success: true }));

@@ -35,13 +35,26 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ error: "User not found" }), { status: 404 });
     }
 
+    let settings;
+    try {
+      settings = await env.DB.prepare('SELECT is_shared, share_slug FROM user_settings WHERE user_id = ?').bind(authUser.id).first();
+    } catch (dbErr) {
+      console.warn('[Profile GET] is_shared or share_slug missing. Please apply database migrations.', dbErr.message);
+      settings = { is_shared: 0, share_slug: "" };
+    }
+    if (!settings) {
+      settings = { is_shared: 0, share_slug: "" };
+    }
+
     return new Response(JSON.stringify({
       success: true,
       uid: user.uid,
       username: user.username,
       email: user.email || '',
       telegramChatId: user.telegram_chat_id || '',
-      role: user.role
+      role: user.role,
+      isShared: settings.is_shared === 1,
+      shareSlug: settings.share_slug || ''
     }), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500 });
@@ -57,7 +70,7 @@ export async function onRequestPost(context) {
   }
 
   try {
-    const { username, email, telegramChatId, password, newPassword } = await request.json();
+    const { username, email, telegramChatId, password, newPassword, isShared, shareSlug } = await request.json();
     
     // 1. 基础验证
     if (!username || !username.trim()) {
@@ -106,7 +119,32 @@ export async function onRequestPost(context) {
         .bind(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, authUser.id));
     }
 
-    await env.DB.batch(queries);
+    // 6.1 校验公开分享别名
+    const cleanSlug = shareSlug ? shareSlug.trim().toLowerCase() : null;
+    if (cleanSlug) {
+      if (!/^[a-zA-Z0-9\-]+$/.test(cleanSlug)) {
+        return new Response(JSON.stringify({ error: "个性分享别名只允许包含英文字母、数字和横线(-)" }), { status: 400 });
+      }
+      const duplicate = await env.DB.prepare('SELECT user_id FROM user_settings WHERE share_slug = ? AND user_id != ?').bind(cleanSlug, authUser.id).first();
+      if (duplicate) {
+        return new Response(JSON.stringify({ error: "该公开分享别名已被抢占，请换一个吧！" }), { status: 400 });
+      }
+    }
+
+    queries.push(env.DB.prepare('UPDATE user_settings SET is_shared = ?, share_slug = ? WHERE user_id = ?')
+      .bind(isShared ? 1 : 0, cleanSlug || null, authUser.id));
+
+    try {
+      await env.DB.batch(queries);
+    } catch (dbBatchErr) {
+      console.error('[Profile batch update failed]:', dbBatchErr.message);
+      if (dbBatchErr.message.includes("no such column") || dbBatchErr.message.includes("has no column")) {
+        return new Response(JSON.stringify({ 
+          error: "保存失败：检测到云端 D1 数据库尚未执行最新的数据表迁移（0008_user_shares），请在控制台执行 npx wrangler d1 migrations apply cloudnav-db --remote 予以升级。" 
+        }), { status: 500 });
+      }
+      return new Response(JSON.stringify({ error: `数据库更新失败: ${dbBatchErr.message}` }), { status: 500 });
+    }
 
     // 7. 同步驱逐/更新 KV 缓存中的用户名 (如果有缓存的话)
     const kvKey = `user_config:${authUser.id}`;

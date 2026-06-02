@@ -127,6 +127,19 @@ try {
             console.log('[DB] Patching: Adding link_target column to user_settings table');
             db.exec("ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'");
         }
+        if (!settingsCols.includes('is_shared')) {
+            console.log('[DB] Patching: Adding is_shared column to user_settings table');
+            db.exec("ALTER TABLE user_settings ADD COLUMN is_shared BOOLEAN DEFAULT 0");
+        }
+        if (!settingsCols.includes('share_slug')) {
+            console.log('[DB] Patching: Adding share_slug column to user_settings table');
+            db.exec("ALTER TABLE user_settings ADD COLUMN share_slug TEXT");
+            try {
+                db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_settings_share_slug ON user_settings(share_slug)");
+            } catch (indexErr) {
+                console.warn('[DB] Share index warning:', indexErr.message);
+            }
+        }
     }
 } catch (e) {
     console.warn('[DB] Auto-patch skipped:', e.message);
@@ -632,7 +645,7 @@ app.post('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
         })();
 
         db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-          .run(req.user.id, 'BATCH_GENERATE_INVITATIONS', `Generated ${count || 1} codes`, req.ip);
+          .run(req.user.id, 'BATCH_GENERATE_INVITATIONS', `Generated ${count || 1} codes`, '[Protected]');
 
         res.json({ success: true });
     } catch (e) {
@@ -646,7 +659,7 @@ app.delete('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
         db.prepare('DELETE FROM invitation_codes WHERE code = ?').run(code);
 
         db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-          .run(req.user.id, 'DELETE_INVITATION', `Deleted code: ${code}`, req.ip);
+          .run(req.user.id, 'DELETE_INVITATION', `Deleted code: ${code}`, '[Protected]');
 
         res.json({ success: true });
     } catch (e) {
@@ -656,8 +669,9 @@ app.delete('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
-    const ip = req.ip;
-    console.log(`[Auth] Login attempt for user: ${username} from IP: ${ip}`);
+    const rawIp = req.ip || "unknown";
+    const ip = crypto.createHash('sha256').update(rawIp).digest('hex');
+    console.log(`[Auth] Login attempt for user: ${username}`);
 
     // 获取动态安全配置 (Task 12.3)
     const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
@@ -738,8 +752,8 @@ function recordLoginFailure(ip, res, config) {
 
 // ====== Task 4.1: 管理员管控枢纽 (Admin Hub) ======
 
-// Task 12.4: 获取/更新全站安全配置
-app.get('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
+// Task 12.4: 获取/更新全站安全配置 (GET 接口公开，方便游客和 SEO 加载)
+app.get('/api/admin/site-config', (req, res) => {
     const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
     let config = { 
         siteTitle: 'CloudNav 导航',
@@ -852,7 +866,7 @@ app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
         if (status) {
             db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, userId);
             db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-              .run(req.user.id, 'CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, req.ip);
+              .run(req.user.id, 'CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, '[Protected]');
         }
 
         if (role) {
@@ -872,7 +886,7 @@ app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
 
             db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, userId);
             db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-              .run(req.user.id, 'CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, req.ip);
+              .run(req.user.id, 'CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, '[Protected]');
         }
 
         res.json({ success: true });
@@ -955,7 +969,7 @@ app.get('/api/admin/cron-digest', authenticate, adminOnly, (req, res) => {
     }
 });
 
-app.get('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
+app.get('/api/admin/site-config', (req, res) => {
     const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
     try {
         if (fs.existsSync(configPath)) {
@@ -983,7 +997,7 @@ app.post('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
         fs.writeFileSync(path.join(kvDir, 'site_config.json'), JSON.stringify(config, null, 2));
         
         db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-          .run(req.user.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config), req.ip);
+          .run(req.user.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config), '[Protected]');
           
         res.json({ success: true });
     } catch (e) {
@@ -1079,7 +1093,7 @@ app.post('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
         db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-          .run(req.user.id, 'CREATE_ANNOUNCEMENT', `Created announcement: ${title}`, req.ip);
+          .run(req.user.id, 'CREATE_ANNOUNCEMENT', `Created announcement: ${title}`, '[Protected]');
 
         res.json({ success: true });
     } catch (e) {
@@ -1116,7 +1130,7 @@ app.patch('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
         }
 
         db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-          .run(req.user.id, 'UPDATE_ANNOUNCEMENT', `Updated announcement ID: ${id}, Title: ${title}`, req.ip);
+          .run(req.user.id, 'UPDATE_ANNOUNCEMENT', `Updated announcement ID: ${id}, Title: ${title}`, '[Protected]');
 
         res.json({ success: true });
     } catch (e) {
@@ -1138,7 +1152,7 @@ app.delete('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
         }
 
         db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-          .run(req.user.id, 'DELETE_ANNOUNCEMENT', `Deleted announcement ID: ${id}`, req.ip);
+          .run(req.user.id, 'DELETE_ANNOUNCEMENT', `Deleted announcement ID: ${id}`, '[Protected]');
 
         res.json({ success: true });
     } catch (e) {
@@ -1156,13 +1170,20 @@ app.get('/api/user/profile', authenticate, (req, res) => {
         const user = db.prepare('SELECT id, uid, username, email, telegram_chat_id, role FROM users WHERE id = ?').get(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
         
+        let settings = db.prepare('SELECT is_shared, share_slug FROM user_settings WHERE user_id = ?').get(req.user.id);
+        if (!settings) {
+            settings = { is_shared: 0, share_slug: '' };
+        }
+
         res.json({
             success: true,
             uid: user.uid,
             username: user.username,
             email: user.email || '',
             telegramChatId: user.telegram_chat_id || '',
-            role: user.role
+            role: user.role,
+            isShared: settings.is_shared === 1,
+            shareSlug: settings.share_slug || ''
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1174,7 +1195,7 @@ app.post('/api/user/profile', authenticate, async (req, res) => {
         return res.status(401).json({ error: 'Unauthorized', code: 'ERR_UNAUTHORIZED' });
     }
     try {
-        const { username, email, telegramChatId, password, newPassword } = req.body;
+        const { username, email, telegramChatId, password, newPassword, isShared, shareSlug } = req.body;
         if (!username || !username.trim()) {
             return res.status(400).json({ error: '用户名不能为空' });
         }
@@ -1205,16 +1226,35 @@ app.post('/api/user/profile', authenticate, async (req, res) => {
             }
         }
 
-        db.transaction(() => {
-            if (newPassword && newPassword.trim()) {
-                const newHash = crypto.createHash('sha256').update(newPassword).digest('hex');
-                db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ? WHERE id = ?')
-                  .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, req.user.id);
-            } else {
-                db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ? WHERE id = ?')
-                  .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, req.user.id);
-            }
-        })();
+        try {
+            db.transaction(() => {
+                if (newPassword && newPassword.trim()) {
+                    const newHash = crypto.createHash('sha256').update(newPassword).digest('hex');
+                    db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ? WHERE id = ?')
+                      .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, req.user.id);
+                } else {
+                    db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ? WHERE id = ?')
+                      .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, req.user.id);
+                }
+
+                // 校验公开分享别名
+                const cleanSlug = shareSlug ? shareSlug.trim().toLowerCase() : null;
+                if (cleanSlug) {
+                    if (!/^[a-zA-Z0-9\-]+$/.test(cleanSlug)) {
+                        throw new Error('个性分享别名只允许包含英文字母、数字和横线(-)');
+                    }
+                    const duplicate = db.prepare('SELECT user_id FROM user_settings WHERE share_slug = ? AND user_id != ?').get(cleanSlug, req.user.id);
+                    if (duplicate) {
+                        throw new Error('该公开分享别名已被抢占，请换一个吧！');
+                    }
+                }
+
+                db.prepare('UPDATE user_settings SET is_shared = ?, share_slug = ? WHERE user_id = ?')
+                  .run(isShared ? 1 : 0, cleanSlug || null, req.user.id);
+            })();
+        } catch (transError) {
+            return res.status(400).json({ error: transError.message });
+        }
 
         // 同步更新本地 JSON 缓存中的用户名
         const kvPath = path.join(__dirname, 'local_kv', `user_${req.user.id}.json`);
@@ -1225,6 +1265,42 @@ app.post('/api/user/profile', authenticate, async (req, res) => {
         }
 
         res.json({ success: true, message: '个人资料修改成功' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ====== 4.4 主页分享 API ======
+app.get('/api/share', (req, res) => {
+    const slug = req.query.slug;
+    if (!slug) return res.status(400).json({ error: 'Missing slug' });
+    try {
+        const settings = db.prepare('SELECT user_id, is_shared, share_slug FROM user_settings WHERE share_slug = ? AND is_shared = 1').get(slug);
+        if (!settings) return res.status(404).json({ error: 'NOT_FOUND', message: '该分享主页未开启或不存在' });
+        
+        const userId = settings.user_id;
+        const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
+        if (!fs.existsSync(kvPath)) {
+            return res.status(404).json({ error: 'EMPTY_DATA', message: '该用户尚未同步任何导航数据' });
+        }
+        
+        const dataObj = JSON.parse(fs.readFileSync(kvPath, 'utf-8'));
+        
+        // 严格的安全过滤脱敏，防止隐藏内容与个人隐私泄漏
+        dataObj.categories = (dataObj.categories || []).filter(c => !c.hidden);
+        dataObj.items = (dataObj.items || []).filter(i => !i.hidden);
+
+        const owner = db.prepare('SELECT username, uid FROM users WHERE id = ?').get(userId);
+
+        res.json({
+            categories: dataObj.categories,
+            items: dataObj.items,
+            settings: dataObj.settings || {},
+            isReadOnlyShare: true,
+            shareOwner: owner ? owner.username : "Nav User",
+            shareUid: owner ? owner.uid : null,
+            shareSlug: slug
+        });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

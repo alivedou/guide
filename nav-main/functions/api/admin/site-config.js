@@ -39,13 +39,13 @@ export async function onRequestPost(context) {
     await env.nav.put("system:site_config", JSON.stringify(config));
     
     // 审计日志
-    await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details) VALUES (?, ?, ?)')
-      .bind(admin.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config))
+    await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+      .bind(admin.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config), '[Protected]')
       .run();
 
     // 即时高危告警 (Task N.5)
     if (config.enableAdminInstantAlert) {
-      context.waitUntil(dispatchInstantAdminAlert('UPDATE_SITE_CONFIG', JSON.stringify(config), admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+      context.waitUntil(dispatchInstantAdminAlert('UPDATE_SITE_CONFIG', JSON.stringify(config), admin, '[Protected]', env));
     }
 
     return new Response(JSON.stringify({ success: true }));

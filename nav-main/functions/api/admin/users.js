@@ -104,7 +104,7 @@ export async function onRequestPatch(context) {
     if (status) {
       await env.DB.prepare('UPDATE users SET status = ? WHERE id = ?').bind(status, userId).run();
       await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-        .bind(admin.id, 'CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, request.headers.get("cf-connecting-ip") || "unknown")
+        .bind(admin.id, 'CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, '[Protected]')
         .run();
     }
 
@@ -113,7 +113,7 @@ export async function onRequestPatch(context) {
       const newHash = await sha256(newPassword);
       await env.DB.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(newHash, userId).run();
       await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-        .bind(admin.id, 'RESET_PASSWORD', `Force reset password for user ${userId}`, request.headers.get("cf-connecting-ip") || "unknown")
+        .bind(admin.id, 'RESET_PASSWORD', `Force reset password for user ${userId}`, '[Protected]')
         .run();
     }
 
@@ -153,7 +153,7 @@ export async function onRequestPatch(context) {
 
       await env.DB.prepare('UPDATE users SET role = ? WHERE id = ?').bind(role, userId).run();
       await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-        .bind(admin.id, 'CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, request.headers.get("cf-connecting-ip") || "unknown")
+        .bind(admin.id, 'CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, '[Protected]')
         .run();
     }
 
@@ -162,13 +162,13 @@ export async function onRequestPatch(context) {
     const config = configStr ? JSON.parse(configStr) : {};
     if (config.enableAdminInstantAlert) {
       if (status) {
-        context.waitUntil(dispatchInstantAdminAlert('CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+        context.waitUntil(dispatchInstantAdminAlert('CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, admin, '[Protected]', env));
       }
       if (newPassword) {
-        context.waitUntil(dispatchInstantAdminAlert('RESET_PASSWORD', `Force reset password for user ${userId}`, admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+        context.waitUntil(dispatchInstantAdminAlert('RESET_PASSWORD', `Force reset password for user ${userId}`, admin, '[Protected]', env));
       }
       if (role) {
-        context.waitUntil(dispatchInstantAdminAlert('CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+        context.waitUntil(dispatchInstantAdminAlert('CHANGE_USER_ROLE', `Changed user ${userId} role to ${role}`, admin, '[Protected]', env));
       }
     }
 
@@ -219,14 +219,14 @@ export async function onRequestDelete(context) {
     
     // 记录审计日志
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .bind(admin.id, 'DELETE_USER', `Deleted user account ${userId}`, request.headers.get("cf-connecting-ip") || "unknown")
+      .bind(admin.id, 'DELETE_USER', `Deleted user account ${userId}`, '[Protected]')
       .run();
 
     // 高危操作即时告警判定 (Task N.5)
     const configStr = await env.nav.get("system:site_config");
     const config = configStr ? JSON.parse(configStr) : {};
     if (config.enableAdminInstantAlert) {
-      context.waitUntil(dispatchInstantAdminAlert('DELETE_USER', `Deleted user account ${userId}`, admin, request.headers.get("cf-connecting-ip") || "unknown", env));
+      context.waitUntil(dispatchInstantAdminAlert('DELETE_USER', `Deleted user account ${userId}`, admin, '[Protected]', env));
     }
 
     return new Response(JSON.stringify({ success: true }));

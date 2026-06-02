@@ -79,7 +79,7 @@ export async function onRequestPost(context) {
     // 记录审计日志
     const typeLabel = type === 'important' ? '横幅通知' : '静默通知';
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .bind(admin.id, 'CREATE_ANNOUNCEMENT', `Created announcement: [${typeLabel}] ${title}`, request.headers.get("cf-connecting-ip") || "unknown")
+      .bind(admin.id, 'CREATE_ANNOUNCEMENT', `Created announcement: [${typeLabel}] ${title}`, '[Protected]')
       .run();
 
     return new Response(JSON.stringify({ success: true }));
@@ -149,7 +149,7 @@ export async function onRequestPatch(context) {
     const detailsExtra = typeLabel ? `, Type: ${typeLabel}` : '';
     const statusExtra = payload.status !== undefined ? `, Status: ${payload.status}` : '';
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .bind(admin.id, 'UPDATE_ANNOUNCEMENT', `Updated announcement ID: ${id}${detailsExtra}${statusExtra}`, request.headers.get("cf-connecting-ip") || "unknown")
+      .bind(admin.id, 'UPDATE_ANNOUNCEMENT', `Updated announcement ID: ${id}${detailsExtra}${statusExtra}`, '[Protected]')
       .run();
 
     return new Response(JSON.stringify({ success: true }));
@@ -184,7 +184,7 @@ export async function onRequestDelete(context) {
 
     // 记录审计日志
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
-      .bind(admin.id, 'DELETE_ANNOUNCEMENT', `Deleted announcement ID: ${id}`, request.headers.get("cf-connecting-ip") || "unknown")
+      .bind(admin.id, 'DELETE_ANNOUNCEMENT', `Deleted announcement ID: ${id}`, '[Protected]')
       .run();
 
     return new Response(JSON.stringify({ success: true }));

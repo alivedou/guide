@@ -756,7 +756,15 @@ const updateStyles = () => {
     } catch (e) { console.warn('[Notice] UI sync failed'); }
 
     // Task 12.1 & 12.3 & 16.2 & 18.3 & 19.2: 背景阶梯式对齐与类型标记
-    const bg = appData.settings?.bgUrl;
+    let bg = appData.settings?.bgUrl;
+    
+    // 💡 针对公开分享页的特殊处理：若原作者使用了“本地上传图片”作为壁纸，
+    // 由于该图片只保存在原作者本地浏览器的 IndexedDB 中，访客访问时绝对拿不到。
+    // 为了防止页面背景空白或显示破碎，我们强行将其重置为空，以便访客自动加载必应每日壁纸！
+    if (window.isSharedPageMode && bg === 'local_upload') {
+        bg = '';
+    }
+
     if (bg && bg.trim() !== '') {
         console.log('[Style] Applying user custom background:', bg);
         document.body.dataset.bgType = 'custom';
@@ -1065,6 +1073,34 @@ const openProfileCenter = async () => {
                 <label><i class="ri-telegram-line"></i> TG ID</label>
                 <input type="text" id="prof-tg" value="${info.telegramChatId || ''}" placeholder="可选，您的个人 Telegram Chat ID">
             </div>
+            
+            <hr style="border-color: var(--glass-border); margin: 15px 0;">
+            
+            <!-- 💡 分享主页设置（与个人中心其它元素样式完美一致） -->
+            <div class="form-row">
+                <label><i class="ri-share-line"></i> 分享主页</label>
+                <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--glass-border);">
+                    <span style="font-size: 13px; color: var(--text-dim);">启用公开分享主页 (访客免登录只读)</span>
+                    <input type="checkbox" id="prof-is-shared" ${info.isShared ? 'checked' : ''} onchange="window.toggleShareSlugInput(this.checked)" style="width: 16px; height: 16px; cursor: pointer;">
+                </div>
+            </div>
+            
+            <div id="share-slug-container" style="display: ${info.isShared ? 'block' : 'none'}; margin-top: 15px;">
+                <!-- 第一行：别名输入与提示说明 -->
+                <div class="form-row" style="margin-bottom: 12px;">
+                    <label><i class="ri-link"></i> 个性主页别名</label>
+                    <input type="text" id="prof-share-slug" value="${info.shareSlug || ''}" placeholder="例如: adou" style="width: 100%; height: 36px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 6px; padding: 0 10px; color: var(--text); font-size: 13px;" oninput="window.updateProfileShareLinkPreview(this.value)">
+                    <small style="display: block; margin-top: 6px; font-size: 11px; color: #f1c40f; line-height: 1.4;"><i class="ri-error-warning-line"></i> 💡 提示：点击保存个人资料后生效</small>
+                </div>
+                <!-- 第二行：链接预览与精简图标复制按钮 -->
+                <div class="form-row" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--glass-border);">
+                    <span id="share-link-preview-text" style="font-size: 12px; color: var(--text-dim); word-break: break-all; margin-right: 10px;">链接: ${window.location.origin}/?p=${info.shareSlug || 'your-slug'}</span>
+                    <button type="button" class="action-link" id="btn-copy-share-link" style="width: 28px; height: 28px; padding: 0; min-width: auto; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,0.08); border: 1px solid var(--glass-border); color: var(--text);" onclick="window.copyProfileShareLink()" title="复制分享链接">
+                        <i class="ri-file-copy-line" style="font-size: 14px;"></i>
+                    </button>
+                </div>
+            </div>
+
             <hr style="border-color: var(--glass-border); margin: 15px 0;">
             <div class="form-row">
                 <label><i class="ri-lock-password-line"></i> 原密码 (仅修改密码时必填)</label>
@@ -1080,7 +1116,26 @@ const openProfileCenter = async () => {
         confirmBtn.style.display = 'block';
         confirmBtn.innerText = "保存个人资料";
 
-        // 注册全局头像选择辅助函数
+        // 注册全局头像和分享辅助函数
+        window.toggleShareSlugInput = (checked) => {
+            document.getElementById('share-slug-container').style.display = checked ? 'block' : 'none';
+        };
+        window.updateProfileShareLinkPreview = (val) => {
+            const slug = val.trim().toLowerCase().replace(/[^a-z0-9\-]/g, '');
+            document.getElementById('share-link-preview-text').innerText = `链接: ${window.location.origin}/?p=${slug || 'your-slug'}`;
+        };
+        window.copyProfileShareLink = () => {
+            const val = document.getElementById('prof-share-slug').value.trim();
+            const slug = val.toLowerCase().replace(/[^a-z0-9\-]/g, '');
+            if (!slug) return showToast("请先设置有效的个性别名", "#e74c3c");
+            const link = `${window.location.origin}/?p=${slug}`;
+            navigator.clipboard.writeText(link).then(() => {
+                showToast("分享链接已复制至剪贴板！", "#2ecc71");
+            }).catch(() => {
+                showToast("复制失败，请手动复制预览链接", "#e74c3c");
+            });
+        };
+
         window.selectProfileAvatar = (el, url) => {
             document.querySelectorAll('.avatar-option-item').forEach(item => {
                 item.style.borderColor = 'rgba(255,255,255,0.1)';
@@ -1097,6 +1152,8 @@ const openProfileCenter = async () => {
             const telegramChatId = document.getElementById('prof-tg').value.trim();
             const password = document.getElementById('prof-old-pass').value;
             const newPassword = document.getElementById('prof-new-pass').value;
+            const isShared = document.getElementById('prof-is-shared').checked;
+            const shareSlug = document.getElementById('prof-share-slug').value.trim();
 
             if (!username) {
                 return showToast("用户名不能为空", "#e74c3c");
@@ -1121,7 +1178,7 @@ const openProfileCenter = async () => {
                         'Content-Type': 'application/json',
                         'Authorization': sysToken
                     },
-                    body: JSON.stringify({ username, email, telegramChatId, password, newPassword })
+                    body: JSON.stringify({ username, email, telegramChatId, password, newPassword, isShared, shareSlug })
                 });
                 const saveResult = await saveRes.json();
                 hideLoader();
@@ -1617,7 +1674,15 @@ const initAuthUI = () => {
 
 // ==================== 4. 数据加载 (缓存优先秒开 + 后台静默异步校验架构) ====================
 const init = async (forceRender = false) => {
-    // 1. 【秒开阶段】尝试从本地 LocalStorage 立即读取缓存并渲染，实现 0 延时渲染
+    // 💡 1. 优先检测是否为“公开主页分享”访问 (如 ?p=xxxx)
+    const urlParams = new URLSearchParams(window.location.search);
+    const shareSlug = urlParams.get('p');
+    if (shareSlug) {
+        await initSharedPage(shareSlug);
+        return;
+    }
+
+    // 2. 【秒开阶段】尝试从本地 LocalStorage 立即读取缓存并渲染，实现 0 延时渲染
     let hasLoadedCache = false;
     const cached = localStorage.getItem('nav_app_data');
     if (cached) {
@@ -2320,6 +2385,30 @@ const renderTools = () => {
     const userArea = document.getElementById('sidebar-user-section');
     const adminBanner = document.getElementById('admin-active-banner');
     if (!area || !userArea) return;
+
+    if (window.isSharedPageMode) {
+        // 💡 1. 在分享主页只读模式下，彻底隐藏所有管理配置按钮
+        area.innerHTML = '';
+        userArea.innerHTML = `
+            <div class="sidebar-user-card guest">
+                <div class="user-avatar-wrapper" style="display: flex; align-items: center; justify-content: center; background: var(--primary); color: #fff; font-weight: bold; border-radius: 50%;">
+                    <span>${(appData.shareOwner || 'S')[0].toUpperCase()}</span>
+                </div>
+                <div class="user-meta-box">
+                    <span class="user-name" style="margin-bottom: 4px; display: inline-flex; align-items: center; gap: 6px;">
+                        @${escapeHTML(appData.shareOwner || '未知用户')}
+                    </span>
+                    <span class="user-uid" style="background: rgba(255, 255, 255, 0.08); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; display: inline-block;">只读分享主页</span>
+                </div>
+            </div>
+            <div style="margin-top: 15px; padding: 12px; background: rgba(255, 255, 255, 0.03); border-radius: 8px; border: 1px solid var(--glass-border); font-size: 11px; line-height: 1.5; color: var(--text-dim);">
+                <i class="ri-information-line" style="color: var(--primary);"></i> 您当前正在浏览 <strong>@${escapeHTML(appData.shareOwner)}</strong> 的公开网址库。已启用隐私脱敏安全沙箱。
+            </div>
+        `;
+        if (adminBanner) adminBanner.style.display = 'none';
+        document.body.classList.remove('admin-mode');
+        return;
+    }
 
     const themeIconMap = { 'auto': 'ri-computer-line', 'light': 'ri-sun-line', 'dark': 'ri-moon-line' };
     const themeNameMap = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
@@ -7776,4 +7865,92 @@ const saveItem = async () => {
             });
         }
     }
+};
+
+// ====== 💡 公开主页分享服务积木 ======
+const initSharedPage = async (slug) => {
+    toggleSkeleton(true);
+    showLoader('正在加载公开分享主页...');
+    try {
+        const res = await fetch(`/api/share?slug=${encodeURIComponent(slug)}`);
+        if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.message || "加载公开主页失败");
+        }
+        const data = await res.json();
+        
+        // 渲染分享主页的数据
+        appData = data;
+        isAdmin = false; // 分享主页对访客绝对禁止管理员权限
+        currentUser = null; // 访客无当前用户
+        sysToken = null; // 无 token
+        
+        // 标记为只读分享状态
+        window.isSharedPageMode = true; 
+        
+        toggleSkeleton(false);
+        renderNav();
+        renderTools();
+        updateStyles();
+        
+        // 渲染病毒式裂变徽章 (Viral Badge)
+        renderViralBadge(data.shareOwner);
+        
+        showToast(`已成功载入 @${data.shareOwner} 的公开主页`, "#2ecc71");
+    } catch (e) {
+        hideLoader();
+        toggleSkeleton(false);
+        showToast(e.message || "分享主页不存在或已关闭", "#e74c3c");
+        // 3秒后跳转回主站
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 3000);
+    } finally {
+        hideLoader();
+    }
+};
+
+const renderViralBadge = (ownerName) => {
+    // 检查是否已存在
+    if (document.getElementById('viral-badge')) return;
+    
+    const badge = document.createElement('div');
+    badge.id = 'viral-badge';
+    badge.style.position = 'fixed';
+    badge.style.bottom = '15px';
+    badge.style.right = '15px';
+    badge.style.zIndex = '9999';
+    badge.style.padding = '8px 12px';
+    badge.style.borderRadius = '30px';
+    badge.style.background = 'rgba(0, 0, 0, 0.4)';
+    badge.style.backdropFilter = 'blur(10px)';
+    badge.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+    badge.style.color = '#fff';
+    badge.style.fontSize = '12px';
+    badge.style.display = 'flex';
+    badge.style.alignItems = 'center';
+    badge.style.gap = '6px';
+    badge.style.cursor = 'pointer';
+    badge.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+    badge.style.transition = '0.3s ease';
+    
+    badge.innerHTML = `
+        <span style="color: #f1c40f;"><i class="ri-flashlight-line"></i></span>
+        <span>我也要搭建 @${escapeHTML(ownerName)} 这样的高颜值导航</span>
+    `;
+    
+    badge.onmouseenter = () => {
+        badge.style.transform = 'translateY(-2px)';
+        badge.style.background = 'rgba(0, 0, 0, 0.6)';
+    };
+    badge.onmouseleave = () => {
+        badge.style.transform = 'translateY(0)';
+        badge.style.background = 'rgba(0, 0, 0, 0.4)';
+    };
+    
+    badge.onclick = () => {
+        window.location.href = '/';
+    };
+    
+    document.body.appendChild(badge);
 };

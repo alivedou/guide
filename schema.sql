@@ -75,8 +75,12 @@ CREATE TABLE IF NOT EXISTS user_settings (
     link_target TEXT DEFAULT '_blank',        -- 网址跳转模式
     is_alert_receiver BOOLEAN DEFAULT 0,      -- 是否接收警报
     is_digest_receiver BOOLEAN DEFAULT 0,     -- 是否接收日报
+    is_shared BOOLEAN DEFAULT 0,              -- 是否开启主页公开分享
+    share_slug TEXT,                          -- 主页公开分享个性尾缀 (Slug)
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_settings_share_slug ON user_settings(share_slug);
 
 -- 6. 公告系统
 CREATE TABLE IF NOT EXISTS announcements (

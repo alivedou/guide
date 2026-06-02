@@ -36,7 +36,7 @@ async function triggerExceptionAlert(err, request, env) {
                `异常消息: ${err.message || 'Unknown Error'}\n` +
                `堆栈轨迹: ${err.stack || 'No Stack'}\n` +
                `请求路径: ${request.url}\n` +
-               `触发客户端 IP: ${request.headers.get("cf-connecting-ip") || "unknown"}\n` +
+               `触发客户端 IP: [已保护]\n` +
                `发生时间: ${new Date().toLocaleString('zh-CN')} (本地时区)\n\n` +
                `本邮件由安全网关中间件自动触发，已将事件记录审计并告警分发。`;
 
@@ -113,7 +113,8 @@ async function handleRequest(context) {
     '/api/auth/register',
     '/api/bing',
     '/api/config',
-    '/api/announcements'
+    '/api/announcements',
+    '/api/share'
   ];
   
   const isPublic = publicPaths.some(p => path === p);
@@ -155,6 +156,17 @@ async function handleRequest(context) {
   
   // 管理员接口校验
   if (path.startsWith('/api/admin/')) {
+    // 💡 特殊豁免 1：获取全站基本配置（如 SEO 标题/Favicon）需要对所有人公开，以便游客和搜索引擎加载
+    if (path === '/api/admin/site-config' && request.method === 'GET') {
+      return await next();
+    }
+
+    // 💡 特殊豁免 2：定时任务日报，若请求头携带有正确的 x-cron-secret，则直接放行至业务接口
+    const cronSecretHeader = request.headers.get("x-cron-secret");
+    if (path === '/api/admin/cron-digest' && env.CRON_SECRET && cronSecretHeader === env.CRON_SECRET) {
+      return await next();
+    }
+
     const role = context.data.user.role;
     if (role !== 'admin' && role !== 'super_user') {
       return new Response(JSON.stringify({ error: "Forbidden", message: "您没有权限执行此操作" }), { status: 403 });
