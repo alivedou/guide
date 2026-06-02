@@ -233,6 +233,27 @@ body.no-blur body.view-style-2 .card.has-bg {
     -webkit-backdrop-filter: none !important;
 }
 
+/* 避免嵌套毛玻璃导致文字虚化与严重的渲染损耗 (Double Blur Fix) */
+body:not(.no-blur) .card,
+body:not(.no-blur) .category-section-title,
+body:not(.no-blur) .tab-btn {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* 字体边缘锐化与文字阴影补偿，强行提升模糊/高光背景下的文本对比度与可读性 */
+.card h3, 
+body.view-style-2 .card h3 {
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
+    -webkit-font-smoothing: subpixel-antialiased !important;
+    -moz-osx-font-smoothing: auto !important;
+}
+
+body.light-theme .card h3,
+body.light-theme.view-style-2 .card h3 {
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.25);
+}
+
 /* 移动端减少阴影 */
 @media (max-width: 768px) {
     .card:hover {
