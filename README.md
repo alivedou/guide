@@ -8,7 +8,7 @@
 
 这是一个具有超强自适应性、高辨识度视觉设计、支持实时自定义编辑的极致导航网站。本项目支持 **Cloudflare Pages +  KV + D1** 无服务器极速部署，同时也自带本地 Node.js 离线开发模拟服务，为您实现“线上线下、一键全通”的无缝体验。
 
-- **本项目地址**：[guide](https://github.com/alivedou/guide/tree/multiple)
+- **本项目地址**：[guide](https://github.com/alivedou/guide)
 
 - **本项目测试地址**：[项目测试地址](https://945.ccwu.cc/)
 
@@ -91,7 +91,7 @@ graph TD
 
 *   **安全审计日志**：自动记录敏感操作，并在每日通过邮件/Telegram 发送安全汇总日报。
 
-**本项目地址**：[guide](https://github.com/alivedou/guide/tree/multiple)
+**本项目地址**：[guide](https://github.com/alivedou/guide)
 
 ---
 
@@ -115,7 +115,7 @@ graph TD
 
 ### 第二步：部署 Cloudflare Pages 项目
 1. 将本项目 **fork** 到您的 GitHub 仓库。
-   - **项目源码**：[项目地址](https://github.com/alivedou/guide/tree/multiple)
+   - **项目源码**：[项目地址](https://github.com/alivedou/guide)
 2. 在 Cloudflare 点击 **Workers 和 Pages** -> **创建项目** -> **Pages** 标签页。
 3. 点击 **“连接到 Git”** 并授权选择您的导航项目仓库。
 4. **构建设置** (非常重要)：
