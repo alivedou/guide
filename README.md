@@ -5,6 +5,9 @@
 [![Framework](https://img.shields.io/badge/Stack-VanillaJS%20%7C%20Serverless-success.svg)]()
 
 这是一个具有超强自适应性、高辨识度视觉设计、支持实时自定义编辑的极致导航网站。本项目支持 **Cloudflare Pages +  KV + D1** 无服务器极速部署，同时也自带本地 Node.js 离线开发模拟服务，为您实现“线上线下、一键全通”的无缝体验。 
+**本项目地址**：[guide](https://github.com/alivedou/guide/tree/multiple)
+**本项目测试地址**：[项目测试地址](https://945.ccwu.cc/)
+如果想要试用项目的注册邀请码体验一下，请联系邮箱： ` me@136898.xyz `
 
 > [!TIP]
 > 本项目是在 `880824` 同志的 `cloudflare-nav` [项目地址](https://github.com/880824/cloudflare-nav) 基础上开发的，针对日常使用痛点进行了深度优化。
@@ -243,7 +246,7 @@ npm install
   2. 在其控制台点击 **"Create Cronjob"**（创建定时任务）。
   3. **URL** 填写：`https://你的域名/api/admin/cron-digest`
   4. **Schedule**（执行计划）：选择每天北京时间早上 08:00 执行（或者自定义您喜欢的任何时间，时区选择 `Asia/Shanghai`）。
-  5. **Request headers**（请求头设置）：点击添加一行：
+  5. **Request headers**（请求头设置,在advanced设置里面）：点击添加一行：
      * **Key**：`x-cron-secret`
      * **Value**：填写您在 Cloudflare Pages 后台设置的 **`CRON_SECRET`** 的真实值。
   6. 点击创建。每天到点，它就会自动带上您的专属钥匙叫醒系统，您的邮箱/TG 就能准时收到自检与审计日报了！

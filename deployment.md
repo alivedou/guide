@@ -1,3 +1,8 @@
+@fileoverview 
+@author adou
+@copyright Copyright (c) 2026 adou. All rights reserved.
+@license MIT
+@disclaimer 免责声明：本软件及相关代码仅用于学术研究与个人学习，作者不对因使用本软件产生的任何直接或间接损失承担责任。
 # 🚀 从零开始：Cloudflare 全新部署上云 6 步法
 
 ## 第一步：登录 Wrangler CLI 工具

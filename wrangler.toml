@@ -1,9 +1,14 @@
+# @fileoverview 
+# @author adou
+# @copyright Copyright (c) 2026 adou. All rights reserved.
+# @license MIT
+# @disclaimer 免责声明：本软件及相关代码仅用于学术研究与个人学习，作者不对因使用本软件产生的任何直接或间接损失承担责任。
 name = "cloudnav"
 pages_build_output_dir = "./nav-main/public"
 
 [vars]
 # ⚠️ 注意：不要在公开仓库中写入您的真实密钥！
-# 生产环境请直接在 Cloudflare Pages 网页端后台配置以下4个环境变量
+# 生产环境请直接在 Cloudflare Pages 网页端后台配置以下环境变量
 JWT_SECRET = "your_jwt_secret_here"
 CRON_SECRET = "your_cron_secret_here"
 TELEGRAM_BOT_TOKEN = "your_tgbot_token"

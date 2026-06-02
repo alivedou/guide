@@ -2222,9 +2222,9 @@ const renderNav = () => {
             const grid = document.createElement('div');
             grid.className = cat._isVideo ? 'video-grid' : 'nav-grid';
             
-            // 健壮的过滤逻辑：同时支持 catId 和 cat_id (容错设计)
+            // 健壮的过滤逻辑：同时支持 catId 和 cat_id (容错设计)，且“常去网站”分类对隐藏属性进行强校验
             const items = (cat.id === 'VIRTUAL_FREQ') 
-                ? appData.items.filter(i => freqIds.includes(i.id)) 
+                ? appData.items.filter(i => freqIds.includes(i.id) && (isPageManagementMode || isAdmin || !i.hidden)) 
                 : appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id) && (isPageManagementMode || isAdmin || !i.hidden));
                 
             items.forEach((item, idx) => {
@@ -2246,9 +2246,15 @@ const renderNav = () => {
                 // 编辑入口 (Task 3.2: 页面管理模式下对所有人开放，常规模式下仅限管理员)
                 if (isPageManagementMode || isAdmin) {
                     html += `<div class="card-admin-btns">
+                        ${isPageManagementMode ? `<button class="card-hide-toggle-btn" onclick="event.stopPropagation(); toggleItemHidden('${item.id}')" title="${item.hidden ? '设为公开显示' : '设为对外隐藏'}"><i class="${item.hidden ? 'ri-eye-off-line' : 'ri-eye-line'}"></i></button>` : ''}
                         <button class="card-edit-btn" onclick="event.stopPropagation(); openEditModal('${item.id}')" title="编辑"><i class="ri-edit-line"></i></button>
                         ${isPageManagementMode ? `<button class="card-delete-btn" onclick="event.stopPropagation(); deleteItem('${item.id}')" title="删除"><i class="ri-delete-bin-line"></i></button>` : ''}
                     </div>`;
+                }
+
+                // 🚀 新增对外隐藏状态标识（在普通浏览态下且非管理模式，管理员/登录用户能清晰知道哪些书签是对外隐藏的）
+                if (item.hidden && isAdmin && !isPageManagementMode) {
+                    html += `<div class="card-hidden-badge" title="该网址已对外隐藏"><i class="ri-eye-off-line"></i></div>`;
                 }
                 
                 card.innerHTML = html;
@@ -3836,7 +3842,7 @@ const closeAllModals = (silent = false) => {
     if (adminBar) adminBar.classList.remove('visible');
 };
 
-// Task EXIT.4: 统一退出暂存逻辑 (针对个人偏好设置)
+// Task EXIT.4: 统一退出暂存逻辑 (针对个人偏好设置与页面管理退出)
 const handleDataSaveOnExit = async () => {
     if (!isDataDirty) return;
     
@@ -3852,6 +3858,15 @@ const handleDataSaveOnExit = async () => {
             const autoSync = appData.settings?.autoSyncOnLogout !== false;
             if (!autoSync) {
                 throw { message: "已暂存本地。请记得前往「云端备份」手动同步", isWarning: true };
+            } else {
+                // 🚀 核心修复：退出页面管理或完成个性化调整时，静默拉起后台接口，将最新的隐藏/修改实时同步云端 D1 & KV
+                try {
+                    await manualSyncCloud(false);
+                    isDataDirty = false;
+                } catch (e) {
+                    console.error("[Auto-Sync] Exit page manage sync failed:", e);
+                    throw { message: "本地修改保存成功，但自动上云同步失败，请手动同步", isWarning: true };
+                }
             }
         }
     });
@@ -4560,6 +4575,22 @@ const deleteItem = async (itemId) => {
     updateBatchBar();
 };
 window.deleteItem = deleteItem;
+
+const toggleItemHidden = async (itemId) => {
+    const item = appData.items.find(i => i.id === itemId);
+    if (!item) return;
+
+    item.hidden = !item.hidden;
+    isDataDirty = true;
+    
+    // 写入本地 localStorage，并在退出页面管理模式时通过 handleDataSaveOnExit 统一同步到云端
+    localStorage.setItem('nav_app_data', JSON.stringify(appData));
+    
+    showToast(`书签 "${item.title}" 已设为${item.hidden ? '隐藏' : '公开显示'}`, "#3498db");
+    renderNav();
+    updateBatchBar();
+};
+window.toggleItemHidden = toggleItemHidden;
 
 const doBatchToggleHidden = async () => {
     if (selectedIds.size === 0) return;
@@ -7859,12 +7890,17 @@ const saveItem = async () => {
     if (sysToken) {
         const autoSync = appData.settings?.autoSyncOnLogout !== false;
         if (autoSync) {
-            showToast(id ? "修改已保存并自动同步到云端" : "书签已添加并自动同步到云端", "#27ae60");
+            // 🚀 修改：如果在页面管理模式下，修改只本地暂存并在退出时统一上云同步，不进行单次阻塞请求
+            if (isPageManagementMode) {
+                showToast(id ? "修改已暂存本地，退出管理时将自动同步" : "书签已添加，退出管理时将自动同步", "#27ae60");
+            } else {
+                showToast(id ? "修改已保存并自动同步到云端" : "书签已添加并自动同步到云端", "#27ae60");
+            }
         } else {
             showToast(id ? "修改已本地暂存，请记得手动同步上云" : "书签已添加，请记得手动同步上云", "#3498db");
         }
     } else {
-        showToast(id ? "访客模式：修改已在本地生效" : "访客模式：书签已添加（清空缓存会丢失）", "#e67e22");
+        showToast(id ? "访客模式：对外修改已在本地生效" : "访客模式：书签已添加（清空缓存会丢失）", "#e67e22");
     }
     renderNav();
 
@@ -7873,15 +7909,18 @@ const saveItem = async () => {
         // 先写入本地 localStorage 以防断电或离线刷新
         localStorage.setItem('nav_app_data', JSON.stringify(appData));
         
-        const autoSync = appData.settings?.autoSyncOnLogout !== false;
-        if (autoSync) {
-            console.log("[Sync] Triggering background auto-sync to cloud...");
-            manualSyncCloud(false).then(() => {
-                isDataDirty = false;
-                console.log("[Sync] Background auto-sync succeeded.");
-            }).catch(err => {
-                console.warn("[Sync] Background auto-sync failed:", err);
-            });
+        // 🚀 修改：在页面管理模式下，单次保存不要立刻进行云端同步，退出的时再统一一并同步，避免网络不佳时频繁阻塞。
+        if (!isPageManagementMode) {
+            const autoSync = appData.settings?.autoSyncOnLogout !== false;
+            if (autoSync) {
+                console.log("[Sync] Triggering background auto-sync to cloud...");
+                manualSyncCloud(false).then(() => {
+                    isDataDirty = false;
+                    console.log("[Sync] Background auto-sync succeeded.");
+                }).catch(err => {
+                    console.warn("[Sync] Background auto-sync failed:", err);
+                });
+            }
         }
     }
 };
