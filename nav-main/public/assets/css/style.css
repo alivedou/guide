@@ -4063,8 +4063,9 @@ body.light-theme .search-section:focus-within .search-wrapper {
     color: #ffffff !important;
     font-size: 17px;
     font-weight: 500;
-    padding: 0;
+    padding: 4px 0 !important; /* 增加上下安全内边距，解决 j, g, y 等字母截断问题 */
     margin: 0;
+    line-height: 1.4; /* 设定舒适行高确保文本垂直居中与展示 */
 }
 
 body.light-theme #sea-input {
