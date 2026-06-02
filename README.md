@@ -219,21 +219,27 @@ npm install
 - **非阻塞告警**：崩溃发生时，网关会通过非阻塞线程将堆栈、出错文件、请求路径和客户端 IP 异步分发，网页端显示温和报错，管理员授权邮箱或 Telegram 频道瞬间收到告警。
 - **本地测试**：可以在本地故意通过 `throw new Error("D1 物理连接异常丢失")` 抛出错误，或直接临时重命名 `local_d1.db`，请求报错接口即可在 WSL 终端看到紧急告警邮件的抛出打印。
 
-### 3. 每日审计日报 Cron 调度规则
+### 3. 每日审计日报 Cron 调度与安全规则
 
-- **触发原理**：在 Cloudflare Pages 生产部署下，日报投递采用标准的 **Cloudflare Workers Scheduled Events (Cron Triggers)**，由边缘定时调起。
-- **具体时间配置**：
-  - 默认为 **每日 UTC 00:00**（即 **北京时间每日上午 08:00**）由 Cron 触发，将过去 24 小时增量的审计日志打包投递。
-  - 在 [wrangler.toml](wrangler.toml) 中可以通过配置 crons 声明定时策略：
-    ```toml
-    [triggers]
-    crons = ["0 0 * * *"] # 对应北京时间 08:00 AM 投递昨日日报
+- **安全校验机制（`CRON_SECRET` 的作用）**：
+  为了防止陌生人恶意访问接口消耗发送配额，`/api/admin/cron-digest` 受到严格的安全密钥拦截。
+  * **通关暗号**：外部定时程序（网上闹钟）调用该接口时，必须在 HTTP 请求头（Headers）中加入：
+    ```text
+    x-cron-secret: <您的 CRON_SECRET 变量值>
     ```
-    或者改为北京时间每日凌晨零点投递：
-    ```toml
-    [triggers]
-    crons = ["0 16 * * *"] # 对应北京时间 24:00 (凌晨 00:00) 投递
-    ```
+  * 如果没有这个请求头或值不匹配，接口会直接返回 `403 Forbidden`。
+
+- **生产环境定时触发配置方式（免费 Web Cron 定时触发）**：
+  由于 Cloudflare Pages 默认只接收 HTTP 请求（不自带自动定时唤醒路由的本地定时器），在生产部署下，请按照以下极简步骤，配置一个免费的“外部网上闹钟”来实现每日自动发送日报（1分钟搞定）：
+
+  1. 注册并登录 [cron-job.org](https://cron-job.org/)（一个专门提供免费、稳定 Web Cron 的良心网站）。
+  2. 在其控制台点击 **"Create Cronjob"**（创建定时任务）。
+  3. **URL** 填写：`https://你的域名/api/admin/cron-digest`
+  4. **Schedule**（执行计划）：选择每天北京时间早上 08:00 执行（或者自定义您喜欢的任何时间，时区选择 `Asia/Shanghai`）。
+  5. **Request headers**（请求头设置）：点击添加一行：
+     * **Key**：`x-cron-secret`
+     * **Value**：填写您在 Cloudflare Pages 后台设置的 **`CRON_SECRET`** 的真实值。
+  6. 点击创建。每天到点，它就会自动带上您的专属钥匙叫醒系统，您的邮箱/TG 就能准时收到自检与审计日报了！
 
 ---
 

@@ -3040,7 +3040,7 @@ window.handleSysRoleSearch = debounce(async (kw) => {
                             } else if (hasTg) {
                                 channelText = `<span style="font-size:11px; opacity:0.6; margin-left:6px;">(TG:${escapeHTML(u.telegram_chat_id)})</span>`;
                             } else {
-                                channelText = `<span style="font-size:11px; opacity:0.3; margin-left:6px;">(未绑定通知通道)</span>`;
+                                channelText = `<span style="font-size:11px; opacity:0.4; margin-left:6px; color: #f1c40f;" title="请让该用户在右上角个人资料中心绑定邮箱或TG Chat ID以启用通知功能">(未配置通知通道，请去个人资料绑定)</span>`;
                             }
                             return `
                                 <tr style="border-bottom: 1px solid var(--glass-border);">
@@ -3050,14 +3050,16 @@ window.handleSysRoleSearch = debounce(async (kw) => {
                                         
                                         <!-- 通知授权开关 -->
                                         <div style="display:flex; gap:12px; margin-top:6px; font-size:11px;">
-                                            <label style="display:flex; align-items:center; gap:4px; ${!hasChannel ? 'opacity:0.4; cursor:not-allowed;' : 'cursor:pointer;'}">
+                                            <label style="display:flex; align-items:center; gap:4px; ${!hasChannel ? 'opacity:0.4; cursor:not-allowed;' : 'cursor:pointer;'}"
+                                                   title="${!hasChannel ? '无法勾选：该用户尚未在个人资料中心绑定邮箱或Telegram Chat ID' : '允许或取消向该用户发送紧急系统故障告警'}">
                                                 <input type="checkbox" 
                                                        ${u.is_alert_receiver ? 'checked' : ''} 
                                                        ${!hasChannel ? 'disabled' : ''} 
                                                        onchange="toggleUserNotification('${u.id}', 'alert', this.checked)"> 
                                                 <span>紧急告警</span>
                                             </label>
-                                            <label style="display:flex; align-items:center; gap:4px; ${!hasChannel ? 'opacity:0.4; cursor:not-allowed;' : 'cursor:pointer;'}">
+                                            <label style="display:flex; align-items:center; gap:4px; ${!hasChannel ? 'opacity:0.4; cursor:not-allowed;' : 'cursor:pointer;'}"
+                                                   title="${!hasChannel ? '无法勾选：该用户尚未在个人资料中心绑定邮箱或Telegram Chat ID' : '允许或取消向该用户发送每日系统审计日报'}">
                                                 <input type="checkbox" 
                                                        ${u.is_digest_receiver ? 'checked' : ''} 
                                                        ${!hasChannel ? 'disabled' : ''} 

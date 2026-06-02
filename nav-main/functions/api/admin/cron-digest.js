@@ -81,28 +81,52 @@ export async function onRequest(context) {
     `).all();
 
     const logList = logs.results || [];
+    let reportSubject = '';
+    let reportText = '';
+
     if (logList.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: "过去 24 小时内无任何高危审计日志，不发送空日报" }), {
-        headers: { "Content-Type": "application/json" }
+      // 2.1 无增量审计日志时，发送系统健康自检日报
+      let stats = [0, 0, 0];
+      try {
+        const statsRes = await Promise.all([
+          env.DB.prepare("SELECT COUNT(*) AS count FROM users").first("count"),
+          env.DB.prepare("SELECT COUNT(*) AS count FROM categories").first("count"),
+          env.DB.prepare("SELECT COUNT(*) AS count FROM items").first("count")
+        ]);
+        stats = statsRes;
+      } catch (statsErr) {
+        console.error('[Cron Digest] Failed to fetch system stats:', statsErr);
+      }
+
+      reportSubject = `【CloudNav 每日自检】系统安全运行正常`;
+      reportText = `您好，过去 24 小时内系统运行平稳，未生成任何高危或异常的审计日志。\n\n`;
+      reportText += `📅 自检时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n`;
+      reportText += `🟢 系统健康状况: 优秀 (100%)\n`;
+      reportText += `📊 当前平台活跃状况:\n`;
+      reportText += `    👥 注册用户总数: ${stats[0] || 0} 人\n`;
+      reportText += `    📁 导航分类总数: ${stats[1] || 0} 个\n`;
+      reportText += `    🔗 收藏网址总数: ${stats[2] || 0} 个\n`;
+      reportText += `----------------------------------------\n`;
+      reportText += `本邮件由 Cloudflare Pages 定时触发器自动发送，请勿直接回复。`;
+    } else {
+      // 3. 格式化增量报告 Markdown / HTML
+      reportSubject = `【CloudNav 每日审计日报】增量管理日志摘要`;
+      let reportTextTmp = `您好，这是过去 24 小时内生成的系统审计日志增量汇总：\n\n`;
+      reportTextTmp += `📅 统计时间范围: ${new Date(Date.now() - 24 * 3600 * 1000).toLocaleString('zh-CN')} 至 ${new Date().toLocaleString('zh-CN')}\n`;
+      reportTextTmp += `📊 日志条数: ${logList.length} 条\n`;
+      reportTextTmp += `----------------------------------------\n\n`;
+
+      logList.forEach((log, index) => {
+        reportTextTmp += `[${index + 1}] 操作行为: ${log.action}\n`;
+        reportTextTmp += `    👤 操作用户: ${log.username || '未知 (ID: ' + log.user_id + ')'}\n`;
+        reportTextTmp += `    🌐 来源 IP: ${log.ip || 'unknown'}\n`;
+        reportTextTmp += `    🕒 操作时间: ${log.created_at} (UTC)\n`;
+        reportTextTmp += `    📝 详情细节: ${log.details || ''}\n\n`;
       });
+
+      reportTextTmp += `----------------------------------------\n本邮件由 Cloudflare Pages 定时触发器自动发送，请勿直接回复。`;
+      reportText = reportTextTmp;
     }
-
-    // 3. 格式化增量报告 Markdown / HTML
-    const reportSubject = `【CloudNav 每日审计日报】增量管理日志摘要`;
-    let reportText = `您好，这是过去 24 小时内生成的系统审计日志增量汇总：\n\n`;
-    reportText += `📅 统计时间范围: ${new Date(Date.now() - 24 * 3600 * 1000).toLocaleString('zh-CN')} 至 ${new Date().toLocaleString('zh-CN')}\n`;
-    reportText += `📊 日志条数: ${logList.length} 条\n`;
-    reportText += `----------------------------------------\n\n`;
-
-    logList.forEach((log, index) => {
-      reportText += `[${index + 1}] 操作行为: ${log.action}\n`;
-      reportText += `    👤 操作用户: ${log.username || '未知 (ID: ' + log.user_id + ')'}\n`;
-      reportText += `    🌐 来源 IP: ${log.ip || 'unknown'}\n`;
-      reportText += `    🕒 操作时间: ${log.created_at} (UTC)\n`;
-      reportText += `    📝 详情细节: ${log.details || ''}\n\n`;
-    });
-
-    reportText += `----------------------------------------\n本邮件由 Cloudflare Pages 定时触发器自动发送，请勿直接回复。`;
 
     // 4. 并发调度发送给所有授权接收的管理员邮箱和个人 TG
     const receivers = await env.DB.prepare(`

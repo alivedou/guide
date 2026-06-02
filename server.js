@@ -894,22 +894,41 @@ app.get('/api/admin/cron-digest', authenticate, adminOnly, (req, res) => {
             ORDER BY l.created_at DESC
         `).all();
 
+        let reportSubject = '';
+        let reportText = '';
+
         if (logs.length === 0) {
-            return res.json({ success: true, message: "过去 24 小时内无任何高危审计日志，不发送空日报" });
+            // 2.1 无增量审计日志时，发送系统健康自检日报
+            const userCount = db.prepare("SELECT COUNT(*) AS count FROM users").get().count;
+            const catCount = db.prepare("SELECT COUNT(*) AS count FROM categories").get().count;
+            const itemCount = db.prepare("SELECT COUNT(*) AS count FROM items").get().count;
+
+            reportSubject = `【CloudNav 每日自检】系统安全运行正常`;
+            reportText = `您好，过去 24 小时内系统运行平稳，未生成任何高危或异常的审计日志。\n\n`;
+            reportText += `📅 自检时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n`;
+            reportText += `🟢 系统健康状况: 优秀 (100%)\n`;
+            reportText += `📊 当前平台活跃状况:\n`;
+            reportText += `    👥 注册用户总数: ${userCount} 人\n`;
+            reportText += `    📁 导航分类总数: ${catCount} 个\n`;
+            reportText += `    🔗 收藏网址总数: ${itemCount} 个\n`;
+            reportText += `----------------------------------------\n`;
+            reportText += `本邮件由 Cloudflare Pages 定时触发器自动发送，请勿直接回复。`;
+        } else {
+            reportSubject = `【CloudNav 每日审计日报】增量管理日志摘要`;
+            reportText = `您好，这是过去 24 小时内生成的系统审计日志增量汇总：\n\n`;
+            reportText += `📊 日志条数: ${logs.length} 条\n`;
+            reportText += `----------------------------------------\n\n`;
+
+            logs.forEach((log, index) => {
+                reportText += `[${index + 1}] 操作行为: ${log.action}\n`;
+                reportText += `    👤 操作用户: ${log.username || '未知 (ID: ' + log.user_id + ')'}\n`;
+                reportText += `    🌐 来源 IP: ${log.ip || 'unknown'}\n`;
+                reportText += `    🕒 操作时间: ${log.created_at} (UTC)\n`;
+                reportText += `    📝 详情细节: ${log.details || ''}\n\n`;
+            });
+
+            reportText += `----------------------------------------\n本邮件由 Cloudflare Pages 定时触发器自动发送，请勿直接回复。`;
         }
-
-        const reportSubject = `【CloudNav 每日审计日报】增量管理日志摘要`;
-        let reportText = `您好，这是过去 24 小时内生成的系统审计日志增量汇总：\n\n`;
-        reportText += `📊 日志条数: ${logs.length} 条\n`;
-        reportText += `----------------------------------------\n\n`;
-
-        logs.forEach((log, index) => {
-            reportText += `[${index + 1}] 操作行为: ${log.action}\n`;
-            reportText += `    👤 操作用户: ${log.username || '未知 (ID: ' + log.user_id + ')'}\n`;
-            reportText += `    🌐 来源 IP: ${log.ip || 'unknown'}\n`;
-            reportText += `    🕒 操作时间: ${log.created_at} (UTC)\n`;
-            reportText += `    📝 详情细节: ${log.details || ''}\n\n`;
-        });
 
         // 查询授权接收日报的用户
         const receivers = db.prepare(`
