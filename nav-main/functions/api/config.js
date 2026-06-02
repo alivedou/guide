@@ -21,11 +21,11 @@ const CONFIG = {
 };
 
 const QUOTA_CONFIG = {
-  guest: { maxCategories: 5, maxItemsPerCategory: 10 },
-  user: { maxCategories: 8, maxItemsPerCategory: 15 },
-  invited_user: { maxCategories: 10, maxItemsPerCategory: 20 },
-  super_user: { maxCategories: 15, maxItemsPerCategory: 30 },
-  admin: { maxCategories: 100, maxItemsPerCategory: 500 }
+  guest: { maxCategories: 6, maxItemsPerCategory: 12 },
+  user: { maxCategories: 12, maxItemsPerCategory: 25 },
+  invited_user: { maxCategories: 15, maxItemsPerCategory: 30 },
+  super_user: { maxCategories: 20, maxItemsPerCategory: 40 },
+  admin: { maxCategories: 150, maxItemsPerCategory: 500 }
 };
 
 function getQuota(user) {

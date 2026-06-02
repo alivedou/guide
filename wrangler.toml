@@ -6,7 +6,7 @@ pages_build_output_dir = "./nav-main/public"
 # 生产环境请直接在 Cloudflare Pages 网页端后台配置以下环境变量
 JWT_SECRET = "your_jwt_secret_here"
 CRON_SECRET = "your_cron_secret_here"
-TELEGRAM_BOT_TOKEN =  = "your_telegram_bot_token"
+TELEGRAM_BOT_TOKEN =  = "your_tgbot_token"
 
 [[kv_namespaces]]
 binding = "nav"

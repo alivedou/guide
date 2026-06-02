@@ -1038,7 +1038,7 @@ const openProfileCenter = async () => {
         
         const storedUser = JSON.parse(localStorage.getItem('nav_current_user') || '{}');
         const userId = storedUser.id || '';
-        const currentAvatar = localStorage.getItem('nav_user_avatar_' + userId) || DEFAULT_AVATARS[0];
+        const currentAvatar = appData.settings?.avatarUrl || localStorage.getItem('nav_user_avatar_' + userId) || DEFAULT_AVATARS[0];
 
         let avatarSelectorHtml = '';
         DEFAULT_AVATARS.forEach(url => {
@@ -1190,6 +1190,11 @@ const openProfileCenter = async () => {
                     const selectedAvatar = document.getElementById('prof-avatar-val').value;
                     const storedUser = JSON.parse(localStorage.getItem('nav_current_user') || '{}');
                     localStorage.setItem('nav_user_avatar_' + storedUser.id, selectedAvatar);
+                    
+                    // 💡 把头像同步保存进 appData.settings，使其能够进行云端备份，实现手机端/跨设备同步！
+                    if (!appData.settings) appData.settings = {};
+                    appData.settings.avatarUrl = selectedAvatar;
+                    isDataDirty = true;
                     
                     // 局部更新本地用户信息
                     storedUser.username = username;
@@ -2290,7 +2295,7 @@ const renderNav = () => {
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
                 const addCard = document.createElement('div');
                 const catItemCount = items.length;
-                const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
+                const quota = appData.quota || { maxCategories: 12, maxItemsPerCategory: 25 };
                 const isCatFull = catItemCount >= quota.maxItemsPerCategory;
 
                 addCard.className = `card add-new-card ${isCatFull ? 'disabled' : ''}`;
@@ -2323,7 +2328,7 @@ const renderNav = () => {
         if (isPageManagementMode) {
             const addCatBtn = document.createElement('div');
             const catCount = appData.categories.length;
-            const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
+            const quota = appData.quota || { maxCategories: 12, maxItemsPerCategory: 25 };
             const isCatLimit = catCount >= quota.maxCategories;
             const sidebarNav = document.getElementById('sidebar-nav');
             if (sidebarNav) {
@@ -2465,7 +2470,7 @@ const renderTools = () => {
             badgeTextCol = '#fff';
         }
 
-        const userAvatar = localStorage.getItem('nav_user_avatar_' + info.id) || DEFAULT_AVATARS[0];
+        const userAvatar = appData.settings?.avatarUrl || localStorage.getItem('nav_user_avatar_' + info.id) || DEFAULT_AVATARS[0];
         const avatarHtml = `<img src="${userAvatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
 
         const displayUid = info.uid 
@@ -2496,7 +2501,7 @@ const renderTools = () => {
     // 2. 渲染底部管理工具
     
     // 配额状态感知 (Task 20.4)
-    const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
+    const quota = appData.quota || { maxCategories: 12, maxItemsPerCategory: 25 };
     const isAllFull = appData.categories.length >= quota.maxCategories;
 
     // 管理员模式视觉高亮切换 (Task 9.2 增强)
@@ -6254,7 +6259,7 @@ const openJsonEditor = () => {
             }
             
             // Task 4.3: 专家模式配额校验
-            const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
+            const quota = appData.quota || { maxCategories: 12, maxItemsPerCategory: 25 };
             if (parsed.categories.length > quota.maxCategories) throw new Error(`分类数量超出上限 (${quota.maxCategories})`);
             for (const cat of parsed.categories) {
                 const count = parsed.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
@@ -6871,7 +6876,7 @@ const initGlobalEvents = () => {
                     const parsed = parseImportedData(event.target.result);
                     
                     // Task 4.3: 导入配额校验 & 自动分装裁剪
-                    const quota = appData.quota || { maxCategories: 8, maxItemsPerCategory: 15 };
+                    const quota = appData.quota || { maxCategories: 12, maxItemsPerCategory: 25 };
                     
                     let finalCategories = [];
                     let finalItems = [];

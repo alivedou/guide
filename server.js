@@ -140,6 +140,13 @@ try {
                 console.warn('[DB] Share index warning:', indexErr.message);
             }
         }
+        
+        // 💡 自动数据自愈修复：将本地已经被邀请码绑定的用户的 has_invite 状态强制修正回填为 1，确保本地开发测试时其享有 20 个书签的配额
+        try {
+            db.exec("UPDATE users SET has_invite = 1 WHERE id IN (SELECT used_by FROM invitation_codes WHERE used_by IS NOT NULL)");
+        } catch (patchErr) {
+            console.warn('[DB] Retroactive invite patch skipped:', patchErr.message);
+        }
     }
 } catch (e) {
     console.warn('[DB] Auto-patch skipped:', e.message);
@@ -156,11 +163,11 @@ const registerAttempts = new Map(); // Task 11.4: 注册防爆破 IP -> { count,
 
 // ====== Task 4.3.1: 资源配额管理 ======
 const QUOTA_CONFIG = {
-    guest: { maxCategories: 5, maxItemsPerCategory: 10 },
-    user: { maxCategories: 8, maxItemsPerCategory: 15 },
-    invited_user: { maxCategories: 10, maxItemsPerCategory: 20 },
-    super_user: { maxCategories: 15, maxItemsPerCategory: 30 },
-    admin: { maxCategories: 100, maxItemsPerCategory: 500 }
+    guest: { maxCategories: 6, maxItemsPerCategory: 12 },
+    user: { maxCategories: 12, maxItemsPerCategory: 25 },
+    invited_user: { maxCategories: 15, maxItemsPerCategory: 30 },
+    super_user: { maxCategories: 20, maxItemsPerCategory: 40 },
+    admin: { maxCategories: 150, maxItemsPerCategory: 500 }
 };
 
 function getQuota(user) {
@@ -437,8 +444,8 @@ app.post('/api/auth/register', (req, res) => {
                 if (!config.requireInvitation && !config.allowOpenRegistration) throw new Error('REGISTRATION_PAUSED');
             }
 
-            // Task 16.6: 先插入用户，确保满足 invitation_codes 的 used_by 外键约束
-            db.prepare('INSERT INTO users (id, uid, username, password_hash, role) VALUES (?, ?, ?, ?, ?)').run(uuid, nextUid, username, passwordHash, finalRole);
+            // Task 16.6: 先插入用户，确保满足 invitation_codes 的 used_by 外键约束，并记录是否使用了邀请码 (has_invite)
+            db.prepare('INSERT INTO users (id, uid, username, password_hash, role, has_invite) VALUES (?, ?, ?, ?, ?, ?)').run(uuid, nextUid, username, passwordHash, finalRole, inviteCode ? 1 : 0);
 
             // Task 16.2 & 16.6: 事务内原子化校验与消耗邀请码
             if (!isFirstUser && config.requireInvitation) {
