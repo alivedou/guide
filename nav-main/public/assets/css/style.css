@@ -2028,6 +2028,10 @@ body.light-theme .seg-btn {
     position: relative;
     overflow: visible; /* 允许气泡溢出显示 */
     animation: fadeInUp 0.5s cubic-bezier(0.165, 0.84, 0.44, 1) both;
+    width: 100%;
+    height: var(--card-h, 105px); /* 🚀 统一高度，解决因内容或新建卡片高度参差不齐的问题 */
+    box-sizing: border-box;
+}
 }
 
 /* 淡入上浮动画 */
@@ -2045,8 +2049,8 @@ body.light-theme .seg-btn {
 /* Task 4.4: 新增网址虚线卡片 */
 .add-new-card {
     cursor: pointer;
-    min-height: var(--card-h, 85px);
-    height: var(--card-h, 85px);
+    min-height: var(--card-h, 105px); /* 🚀 对齐默认 105px 卡片高度 */
+    height: var(--card-h, 105px); /* 🚀 对齐默认 105px 卡片高度 */
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2617,7 +2621,7 @@ body.light-theme .preview-container {
 }
 
 .skel-card {
-    height: var(--card-h, 85px);
+    height: var(--card-h, 105px); /* 🚀 对齐默认 105px 骨架屏高度 */
     border-radius: var(--radius);
     background: rgba(255, 255, 255, 0.05);
     position: relative;
