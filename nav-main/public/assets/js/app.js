@@ -1542,6 +1542,9 @@ const doResetConfig = async () => {
 
         const data = await res.json();
         if (data.success) {
+            // 💡 彻底清洗本地缓存，阻断 Stale-First 拦截，迫使 init() 强制拉取并装载云端重置后的初始配置
+            localStorage.removeItem('nav_app_data');
+            
             showToast("已成功恢复默认配置");
             
             // 彻底清洗内存状态
@@ -2204,7 +2207,17 @@ const renderNav = () => {
             
             // 🔒 限制当前分类名展示：最多 1 个图标加 5 个字，溢出自动截断
             const truncatedCatName = cat.name.length > 5 ? cat.name.substring(0, 5) + '...' : cat.name;
-            section.innerHTML = `<div class="category-section-title" style="display: flex; align-items: center; gap: 8px;"><span style="width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle;">${sectionIconHtml}</span><span class="cat-title-text">${escapeHTML(truncatedCatName)}</span></div>`;
+            const canEditCat = isPageManagementMode && cat.id !== 'VIRTUAL_FREQ';
+            
+            section.innerHTML = `
+                <div class="category-section-title ${canEditCat ? 'manage-clickable-cat' : ''}" 
+                     style="display: flex; align-items: center; gap: 8px; ${canEditCat ? 'cursor: pointer; user-select: none;' : ''}"
+                     ${canEditCat ? `onclick="window.openCategoryEditModal('${cat.id}')" title="点击编辑分类名称及图标"` : ''}>
+                    <span style="width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle;">${sectionIconHtml}</span>
+                    <span class="cat-title-text">${escapeHTML(truncatedCatName)}</span>
+                    ${canEditCat ? `<i class="ri-edit-line edit-pencil-icon" style="font-size: 14px; opacity: 0.5; margin-left: 4px; transition: 0.2s;"></i>` : ''}
+                </div>
+            `;
 
             const grid = document.createElement('div');
             grid.className = cat._isVideo ? 'video-grid' : 'nav-grid';
@@ -4018,6 +4031,7 @@ const openCategoryEditModal = (catId) => {
         renderNav();
     };
 };
+window.openCategoryEditModal = openCategoryEditModal;
 
 /**
  * ==========================================

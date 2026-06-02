@@ -1880,6 +1880,25 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
     font-size: 20px;
 }
 
+/* 💡 页面管理模式下的分类标题高亮与悬浮效果 */
+.manage-clickable-cat {
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.manage-clickable-cat:hover {
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+    color: #fff !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(57, 157, 255, 0.4);
+}
+
+.manage-clickable-cat:hover .edit-pencil-icon {
+    opacity: 1 !important;
+    color: #fff !important;
+    transform: scale(1.2);
+}
+
 /* ==================== 分类按钮样式（保留用于管理弹窗内） ==================== */
 .tab-btn {
     white-space: nowrap;
