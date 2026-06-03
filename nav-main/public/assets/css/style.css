@@ -1190,11 +1190,12 @@ body.light-theme[data-bg-type="custom"]::before {
     backdrop-filter: blur(10px); /* 略微降低模糊度以展现壁纸细节 */
 }
 
-/* 搜索态视觉深度隔离 (Task 2.5.2) */
+/* 搜索态与激活态视觉深度隔离 (Task 2.5.2) */
+body.search-active::before,
 body.is-searching::before {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    background: transparent;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: transparent !important;
 }
 
 /* 移除背景遮罩 (Task 12.3) */
@@ -1204,6 +1205,7 @@ body.no-bg-mask::before {
     -webkit-backdrop-filter: none !important;
 }
 
+body.search-active .grid-container,
 body.is-searching .grid-container {
     filter: none;
     opacity: 0.3;
@@ -3637,6 +3639,15 @@ body.search-active {
     height: 100% !important;
 }
 
+/* 激活搜索框时，禁用底层一切可能误触的页面交互 (Task UI.27) */
+body.search-active .main-content,
+body.search-active .sidebar,
+body.search-active .sidebar-toggle,
+body.search-active .summon-search-btn,
+body.search-active .sidebar-overlay {
+    pointer-events: none !important;
+}
+
 .search-section {
     position: fixed;
     top: 0;
@@ -3907,7 +3918,8 @@ body.light-theme .quick-nav-btn:hover {
     }
 }
 
-/* ==================== 搜索态隔离 (Task 2.5.2) ==================== */
+/* ==================== 搜索态与激活态隔离 (Task 2.5.2) ==================== */
+body.search-active .grid-container,
 body.is-searching .grid-container {
     opacity: 0.15;
     filter: none;
@@ -3915,6 +3927,7 @@ body.is-searching .grid-container {
     pointer-events: none;
 }
 
+body.search-active .category-section-title,
 body.is-searching .category-section-title {
     opacity: 0;
     transform: none;
