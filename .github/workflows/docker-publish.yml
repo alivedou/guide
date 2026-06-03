@@ -34,7 +34,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           # 💡 在此自定义您设计的镜像名称（例如：此处将其设定为与您 Pages 项目同名的 cloudnav）
-          images: ghcr.io/${{ github.repository_owner }}/mynav
+          images: ghcr.io/${{ github.repository_owner }}/cloudnav
           tags: |
             type=raw,value=latest
             type=sha,format=short
@@ -45,7 +45,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ id.meta.outputs.tags || steps.meta.outputs.tags }}
-          labels: ${{ id.meta.outputs.labels || steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
