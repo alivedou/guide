@@ -894,16 +894,16 @@ const openVisualLab = () => {
     title.innerHTML = `视觉实验室 ${isDataDirty ? '<span style="font-size:10px; background:#e67e22; color:#fff; padding:2px 6px; border-radius:10px; margin-left:10px; vertical-align:middle; font-weight:normal;">本地预览中</span>' : ''}`;
     const isZen = appData.settings?.zenMode === true;
     body.innerHTML = `
-        <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-keyboard-line"></i> 布局密度</span>
-            <div class="visual-btn-group">
-                <button class="tab-btn ${appData.settings?.density === 'compact' ? 'active' : ''}" onclick="setVisualSetting('density', 'compact')">紧凑模式</button>
-                <button class="tab-btn ${(!appData.settings?.density || appData.settings?.density === 'standard') ? 'active' : ''}" onclick="setVisualSetting('density', 'standard')">标准平衡</button>
-                <button class="tab-btn ${appData.settings?.density === 'comfortable' ? 'active' : ''}" onclick="setVisualSetting('density', 'comfortable')">极致透气</button>
+        <div class="visual-option-group" style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px; margin-bottom: 12px;">
+            <span class="visual-option-label" style="margin: 0; font-size: 13px;"><i class="ri-keyboard-line"></i> 布局密度</span>
+            <div class="segmented-control" style="width: 220px; flex-shrink: 0;">
+                <button class="seg-btn ${appData.settings?.density === 'compact' ? 'active' : ''}" onclick="setVisualSetting('density', 'compact')">紧凑</button>
+                <button class="seg-btn ${(!appData.settings?.density || appData.settings?.density === 'standard') ? 'active' : ''}" onclick="setVisualSetting('density', 'standard')">平衡</button>
+                <button class="seg-btn ${appData.settings?.density === 'comfortable' ? 'active' : ''}" onclick="setVisualSetting('density', 'comfortable')">透气</button>
             </div>
         </div>
         <div class="visual-option-group">
-            <span class="visual-option-label"><i class="ri-image-line"></i> 自定义背景</span>
+            <span class="visual-option-label" style="margin-bottom: 6px;"><i class="ri-image-line"></i> 自定义背景</span>
             <div style="display:flex; gap:8px; width:100%; align-items:center; margin-bottom: 8px;">
                 <input type="text" id="bg-url-input" placeholder="输入网络图片 URL (留空显示 Bing 壁纸)" 
                        value="${appData.settings?.bgUrl === 'local_upload' ? '本地上传图片' : (appData.settings?.bgUrl || '')}" 
@@ -923,8 +923,8 @@ const openVisualLab = () => {
                     <button class="tab-btn" onclick="clearBgUpload()" style="flex:1; font-size:11px; padding: 6px 12px; background: rgba(231,76,60,0.15); border-color: rgba(231,76,60,0.3); color: #e74c3c;"><i class="ri-delete-bin-line"></i> 清除本地壁纸</button>
                 ` : ''}
             </div>
-            <p style="font-size: 11px; opacity: 0.6; margin-top: 6px; line-height: 1.4;">
-                提示: 支持外链网络图片，或直接上传本地壁纸（建议 10MB 内以保障性能。使用浏览器 IndexedDB 纯本地缓存，零服务器开销，强制刷新不丢失）。
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 4px; line-height: 1.4;">
+                提示: 支持外链或上传本地壁纸（建议 10MB 内，纯本地缓存，零开销）。
             </p>
         </div>
         <div class="visual-option-group">
@@ -955,8 +955,8 @@ const openVisualLab = () => {
                     </div>
                 </div>
             </div>
-            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">说明: 禅意模式专注内容；单视图隔离则精简分类展示</p>
-            ${isZen ? '<p style="font-size: 11px; color: #e67e22; margin-top: 4px;"><i class="ri-information-line"></i> 禅意模式已开启，强制锁定单视图隔离状态</p>' : ''}
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 4px; line-height: 1.3;">说明: 禅意专注内容；单视图精简分类展陈</p>
+            ${isZen ? '<p style="font-size: 11px; color: #e67e22; margin-top: 4px; margin-bottom: 0;"><i class="ri-information-line"></i> 禅意模式下强制锁定单视图</p>' : ''}
         </div>
         <div class="visual-option-group">
             <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
@@ -986,7 +986,7 @@ const openVisualLab = () => {
                     </div>
                 </div>
             </div>
-            <p style="font-size: 11px; opacity: 0.6; margin-top: 8px;">说明: 控制新标签页跳转机制，以及常去网站磁贴显示</p>
+            <p style="font-size: 11px; opacity: 0.6; margin-top: 4px;">说明: 设定链接跳转行为与常去磁贴显示</p>
         </div>
     `;
     
@@ -3768,6 +3768,17 @@ const initSearch = () => {
         summonBtn.ontouchend = (e) => {
             e.preventDefault(); // 阻止默认点击，避免穿透与重复触发
             handleSummon(e);
+        };
+    }
+
+    // 初始化清空搜索按钮
+    const clearBtn = document.getElementById('sea-clear-btn');
+    if (clearBtn) {
+        clearBtn.onclick = (e) => {
+            e.stopPropagation();
+            sea.value = '';
+            sea.dispatchEvent(new Event('input'));
+            sea.focus();
         };
     }
 

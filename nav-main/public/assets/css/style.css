@@ -1142,7 +1142,7 @@ body.sidebar-style-classic .sidebar-nav-item.active::before {
 }
 
 .visual-option-group {
-    margin-bottom: 15px;
+    margin-bottom: 10px;
 }
 
 .visual-option-label {
@@ -1806,12 +1806,12 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
         left: auto; /* 重置 desktop 默认的左侧定位 */
         right: 15px; /* 改到右侧 */
         bottom: calc(192px + env(safe-area-inset-bottom, 0px)); /* 完美叠在搜索按钮之上（搜索按钮140px + 高度40px + 12px间距） */
-        transform: translateX(20px); /* 手机端平时向右退 20px 隐藏 */
+        transform: translateX(35px); /* 一半隐藏在右侧 (15px间距 + 20px半宽度) */
     }
     .summon-search-btn {
         right: 15px;
         bottom: calc(140px + env(safe-area-inset-bottom, 0px)); /* 中下部黄金单手触控区 */
-        transform: translateX(20px); /* 手机端平时向右退 20px 隐藏 */
+        transform: translateX(35px); /* 一半隐藏在右侧 (15px间距 + 20px半宽度) */
     }
 }
 
@@ -3645,9 +3645,11 @@ body.page-manage-active .sidebar-overlay {
 }
 
 /* ==================== 高颜值立体搜索框 (Summoned Overlay) ==================== */
-body.search-active {
+body.search-active,
+body.search-active .app-layout {
     overflow: hidden !important;
     height: 100% !important;
+    height: 100dvh !important;
 }
 
 /* 激活搜索框时，禁用底层一切可能误触的页面交互 (Task UI.27) */
@@ -3655,7 +3657,10 @@ body.search-active .main-content,
 body.search-active .sidebar,
 body.search-active .sidebar-toggle,
 body.search-active .summon-search-btn,
-body.search-active .sidebar-overlay {
+body.search-active .sidebar-overlay,
+body.search-active .zen-horizon,
+body.search-active .zen-expand-btn,
+body.search-active .quick-nav-group {
     pointer-events: none !important;
 }
 
@@ -3916,32 +3921,67 @@ body.light-theme .quick-nav-btn:hover {
         font-size: 22px;
     }
 
-    /* 移动端常驻防护：防止登录用户在禅意/静默状态下导致这三个按钮在手机端丢失/隐藏 */
-    body.zen-active .quick-nav-group,
-    body.zen-active.zen-silent .quick-nav-group,
+    /* 移动端常驻防护：防止在手机端禅意/静默状态下导致这些按钮完全丢失/隐藏。
+       恢复其可见性，并保持与常规模式完全对齐的收纳隐退策略。 */
     body.zen-active .sidebar-toggle,
     body.zen-active.zen-silent .sidebar-toggle,
     body.zen-active .summon-search-btn,
     body.zen-active.zen-silent .summon-search-btn {
-        opacity: 1 !important;
+        opacity: 0.45 !important; /* 默认未激活时为半透 */
         pointer-events: auto !important;
-        transform: none !important;
+        transform: translateX(35px) !important; /* 一半隐藏在右侧 */
+    }
+
+    body.zen-active .quick-nav-group,
+    body.zen-active.zen-silent .quick-nav-group {
+        opacity: 0.45 !important; /* 默认未激活时为半透 */
+        pointer-events: auto !important;
+        transform: translateX(60px) !important; /* 完全隐藏在右侧 */
+    }
+
+    /* 当激活弹出态时（正在滚动、侧边栏开启、或悬停激活）：强制全显并移回屏幕原位 */
+    body.zen-active.scroll-active .sidebar-toggle,
+    body.zen-active.sidebar-open .sidebar-toggle,
+    body.zen-active.scroll-active .summon-search-btn,
+    body.zen-active.sidebar-open .summon-search-btn,
+    body.zen-active .quick-nav-group:hover,
+    body.zen-active .quick-nav-group.active {
+        opacity: 1 !important;
+        transform: translateX(0) !important;
+    }
+
+    /* 搜索激活时在手机端彻底隐藏这三个按钮，防止在搜索遮罩层上穿透与折射 */
+    body.search-active.zen-active .sidebar-toggle,
+    body.search-active.zen-active .summon-search-btn,
+    body.search-active.zen-active .quick-nav-group {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transform: scale(0.9) translateY(-10px) !important;
     }
 }
 
 /* ==================== 搜索态与激活态隔离 (Task 2.5.2) ==================== */
 body.search-active .grid-container,
-body.is-searching .grid-container {
-    opacity: 0.15;
-    filter: none;
-    transform: none;
-    pointer-events: none;
+body.is-searching .grid-container,
+body.search-active .zen-horizon,
+body.is-searching .zen-horizon {
+    opacity: 0.15 !important;
+    filter: none !important;
+    transform: none !important;
+    pointer-events: none !important;
 }
 
 body.search-active .category-section-title,
 body.is-searching .category-section-title {
-    opacity: 0;
-    transform: none;
+    opacity: 0 !important;
+    transform: none !important;
+}
+
+/* 禅意模式悬浮展开按钮在搜索激活时自动隐退 */
+body.search-active .zen-expand-btn,
+body.is-searching .zen-expand-btn {
+    opacity: 0 !important;
+    pointer-events: none !important;
 }
 
 /* 当大搜索激活时，底层的侧边栏遮罩自动静音退场，消灭遮罩重叠和折射杂色 */
@@ -5116,9 +5156,9 @@ body.admin-mode .important-banner ~ .summon-search-btn {
 }
 
 @media (max-width: 768px) {
-    /* 移动端平时往右收进屏幕边缘 20px */
+    /* 移动端平时往右收进屏幕边缘，完全隐藏 (15px间距 + 40px宽度 = 55px，设为 60px 彻底藏好) */
     .quick-nav-group.visible {
-        transform: translateX(20px);
+        transform: translateX(60px);
     }
     
     /* 移动端触碰或滚动滑出 */
