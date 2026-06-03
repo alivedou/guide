@@ -3,7 +3,7 @@ name: Build and Publish Docker Image
 on:
   push:
     branches:
-      - main  # 当 push 到 main 分支时触发构建
+      - test  # 当 push 到 main 分支时触发构建
 
 jobs:
   build-and-push:
