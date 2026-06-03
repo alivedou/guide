@@ -864,10 +864,18 @@ app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
         }
 
         if (isAlertReceiver !== undefined) {
-            db.prepare('UPDATE user_settings SET is_alert_receiver = ? WHERE user_id = ?').run(isAlertReceiver ? 1 : 0, userId);
+            db.prepare(`
+                INSERT INTO user_settings (user_id, is_alert_receiver) 
+                VALUES (?, ?) 
+                ON CONFLICT(user_id) DO UPDATE SET is_alert_receiver = excluded.is_alert_receiver
+            `).run(userId, isAlertReceiver ? 1 : 0);
         }
         if (isDigestReceiver !== undefined) {
-            db.prepare('UPDATE user_settings SET is_digest_receiver = ? WHERE user_id = ?').run(isDigestReceiver ? 1 : 0, userId);
+            db.prepare(`
+                INSERT INTO user_settings (user_id, is_digest_receiver) 
+                VALUES (?, ?) 
+                ON CONFLICT(user_id) DO UPDATE SET is_digest_receiver = excluded.is_digest_receiver
+            `).run(userId, isDigestReceiver ? 1 : 0);
         }
 
         if (status) {

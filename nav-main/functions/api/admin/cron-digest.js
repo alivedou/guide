@@ -39,13 +39,16 @@ async function sendEmailHelper(recipient, subject, content, env) {
 }
 
 async function sendTelegramHelper(subject, content, env) {
-  if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+  const tgBotToken = env.TELEGRAM_BOT_TOKEN || env.TG_BOT_TOKEN || env.tg_bot_token || env.telegram_bot_token;
+  const tgChatId = env.TELEGRAM_CHAT_ID || env.TG_CHAT_ID || env.tg_chat_id || env.telegram_chat_id;
+
+  if (tgBotToken && tgChatId) {
     try {
-      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: env.TELEGRAM_CHAT_ID,
+          chat_id: tgChatId,
           text: `📢 <b>${subject}</b>\n\n${content}`,
           parse_mode: 'HTML'
         })
@@ -59,12 +62,14 @@ async function sendTelegramHelper(subject, content, env) {
 export async function onRequest(context) {
   const { request, env, data } = context;
   
-  // 1. 安全阻断校验：允许管理员会话直接调用，或者由 Cron Trigger 带密钥 x-cron-secret 触发
+  // 1. 安全阻断校验与容错别名解析：允许管理员会话直接调用，或者由 Cron Trigger 带密钥 x-cron-secret 触发
+  const url = new URL(request.url);
   const authUser = data.user;
-  const cronSecretHeader = request.headers.get("x-cron-secret");
+  const cronSecretHeader = request.headers.get("x-cron-secret") || url.searchParams.get("secret");
+  const cronSecret = env.CRON_SECRET || env.cron_secret;
   
   const isAuthorizedAdmin = (authUser && (authUser.role === "admin" || authUser.role === "super_user"));
-  const isAuthorizedCron = (env.CRON_SECRET && cronSecretHeader === env.CRON_SECRET);
+  const isAuthorizedCron = (cronSecret && cronSecretHeader === cronSecret);
 
   if (!isAuthorizedAdmin && !isAuthorizedCron) {
     return new Response(JSON.stringify({ error: "Forbidden", message: "您无权手动触发此定时任务" }), { status: 403 });
@@ -130,7 +135,7 @@ export async function onRequest(context) {
 
     // 4. 并发调度发送给所有授权接收的管理员邮箱和个人 TG
     const receivers = await env.DB.prepare(`
-      SELECT u.email, u.telegram_chat_id 
+      SELECT u.username, u.email, u.telegram_chat_id 
       FROM users u 
       JOIN user_settings s ON u.id = s.user_id 
       WHERE s.is_digest_receiver = 1
@@ -139,15 +144,28 @@ export async function onRequest(context) {
     const receiverList = receivers.results || [];
     const dispatchPromises = [];
 
+    // 🚀 核心优化一：对 Token 与 Chat ID 进行强力 .trim() 格式清洗，防范用户从 BotFather 复制时夹带换行符或空格，并支持 TG_BOT_TOKEN 别名
+    const tgBotTokenRaw = env.TELEGRAM_BOT_TOKEN || env.TG_BOT_TOKEN || env.tg_bot_token || env.telegram_bot_token;
+    const tgChatIdRaw = env.TELEGRAM_CHAT_ID || env.TG_CHAT_ID || env.tg_chat_id || env.telegram_chat_id;
+    const tgBotToken = tgBotTokenRaw ? tgBotTokenRaw.trim() : "";
+    const tgChatId = tgChatIdRaw ? tgChatIdRaw.trim() : "";
+
     // 发送 Email (如果有绑定邮箱)
     receiverList.forEach(r => {
       if (r.email) {
-        dispatchPromises.push(sendEmailHelper(r.email, reportSubject, reportText, env));
+        dispatchPromises.push((async () => {
+          try {
+            await sendEmailHelper(r.email.trim(), reportSubject, reportText, env);
+            return { type: 'email', target: r.username, email: r.email.trim(), status: 'success' };
+          } catch (e) {
+            return { type: 'email', target: r.username, email: r.email.trim(), status: 'failed', error: e.message };
+          }
+        })());
       }
     });
 
     // 发送个人 Telegram Bot 消息 (如果有绑定 Telegram Chat ID)
-    if (env.TELEGRAM_BOT_TOKEN) {
+    if (tgBotToken) {
       const htmlContent = reportText
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -155,36 +173,80 @@ export async function onRequest(context) {
       
       receiverList.forEach(r => {
         if (r.telegram_chat_id) {
-          // 动态利用全局的 Bot Token 发送给每个管理员个人私信
-          dispatchPromises.push(fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: r.telegram_chat_id,
-              text: `📢 <b>${reportSubject}</b>\n\n${htmlContent}`,
-              parse_mode: 'HTML'
-            })
-          }).catch(e => console.error('[TG Admin Digest] failed for', r.telegram_chat_id, e)));
+          const personalChatId = r.telegram_chat_id.trim();
+          // 动态利用全局的 Bot Token 发送给每个管理员个人私信，并在后端收集报错原因回传给响应结果
+          dispatchPromises.push((async () => {
+            try {
+              const tgRes = await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: personalChatId,
+                  text: `📢 <b>${reportSubject}</b>\n\n${htmlContent}`,
+                  parse_mode: 'HTML'
+                })
+              });
+              const tgData = await tgRes.json();
+              if (tgRes.ok && tgData.ok) {
+                return { type: 'telegram_personal', target: r.username, chat_id: personalChatId, status: 'success' };
+              } else {
+                return { type: 'telegram_personal', target: r.username, chat_id: personalChatId, status: 'failed', error: tgData.description || 'API Error' };
+              }
+            } catch (e) {
+              return { type: 'telegram_personal', target: r.username, chat_id: personalChatId, status: 'failed', error: e.message };
+            }
+          })());
         }
       });
     }
 
     // 同时也支持全局 Telegram 备份频道 (如果配置了全局 Chat ID)
-    if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+    if (tgBotToken && tgChatId) {
       const htmlContent = reportText
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
-      dispatchPromises.push(sendTelegramHelper(reportSubject, htmlContent, env));
+      dispatchPromises.push((async () => {
+        try {
+          const tgRes = await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: tgChatId,
+              text: `📢 <b>${reportSubject}</b>\n\n${htmlContent}`,
+              parse_mode: 'HTML'
+            })
+          });
+          const tgData = await tgRes.json();
+          if (tgRes.ok && tgData.ok) {
+            return { type: 'telegram_global', chat_id: tgChatId, status: 'success' };
+          } else {
+            return { type: 'telegram_global', chat_id: tgChatId, status: 'failed', error: tgData.description || 'API Error' };
+          }
+        } catch (e) {
+          return { type: 'telegram_global', chat_id: tgChatId, status: 'failed', error: e.message };
+        }
+      })());
     }
 
+    // 🚀 核心优化二：改用 await Promise.all 阻塞同步等待，严禁 Cloudflare Pages 提前断电杀进程！
+    let reports = [];
     if (dispatchPromises.length > 0) {
-      context.waitUntil(Promise.all(dispatchPromises));
+      reports = await Promise.all(dispatchPromises);
     }
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: `每日审计日报打包成功！已派发至 ${receiverList.length} 个授权接收者。` 
+      message: `每日审计日报打包成功！已派发至 ${receiverList.length} 个授权接收者。`,
+      dispatchReports: reports, // 🚀 极客反馈升级：将各个渠道（Email/TG个人/TG全局）的发送状态与具体报错细节全部输出
+      debug_receivers: receiverList.map(r => ({ 
+        username: r.username, 
+        has_email: !!r.email, 
+        email_val: r.email,
+        has_tg_chat_id: !!r.telegram_chat_id, 
+        tg_chat_id_val: r.telegram_chat_id 
+      })), // 🚀 调试黑科技：让您一眼看出 D1 数据库里到底有没有读取到您绑定的 TG Chat ID！
+      debug_env_keys: Object.keys(env) // 🚀 安全除错补丁：打印出当前 Cloudflare Edge 运行时加载出来的所有环境变量【键名】（仅显示名称，绝不泄露任何密钥内容），自证清白！
     }), { headers: { "Content-Type": "application/json" } });
 
   } catch (err) {

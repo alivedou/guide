@@ -40,14 +40,17 @@ async function triggerExceptionAlert(err, request, env) {
                `发生时间: ${new Date().toLocaleString('zh-CN')} (本地时区)\n\n` +
                `本邮件由安全网关中间件自动触发，已将事件记录审计并告警分发。`;
 
-  // 1. 发送 Telegram Bot
-  if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+  // 1. 发送 Telegram Bot (并支持 TG_BOT_TOKEN 容错别名)
+  const tgBotToken = env.TELEGRAM_BOT_TOKEN || env.TG_BOT_TOKEN || env.tg_bot_token || env.telegram_bot_token;
+  const tgChatId = env.TELEGRAM_CHAT_ID || env.TG_CHAT_ID || env.tg_chat_id || env.telegram_chat_id;
+
+  if (tgBotToken && tgChatId) {
     try {
-      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: env.TELEGRAM_CHAT_ID,
+          chat_id: tgChatId,
           text: `🚨 <b>${subject}</b>\n\n${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}`,
           parse_mode: 'HTML'
         })
@@ -161,9 +164,10 @@ async function handleRequest(context) {
       return await next();
     }
 
-    // 💡 特殊豁免 2：定时任务日报，若请求头携带有正确的 x-cron-secret，则直接放行至业务接口
-    const cronSecretHeader = request.headers.get("x-cron-secret");
-    if (path === '/api/admin/cron-digest' && env.CRON_SECRET && cronSecretHeader === env.CRON_SECRET) {
+    // 💡 特殊豁免 2：定时任务日报，若请求头或 URL 隐藏参数携带有正确的 x-cron-secret，则直接放行至业务接口
+    const cronSecretHeader = request.headers.get("x-cron-secret") || url.searchParams.get("secret");
+    const cronSecret = env.CRON_SECRET || env.cron_secret;
+    if (path === '/api/admin/cron-digest' && cronSecret && cronSecretHeader === cronSecret) {
       return await next();
     }
 

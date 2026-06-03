@@ -92,12 +92,20 @@ export async function onRequestPatch(context) {
       return new Response(JSON.stringify({ error: "管理员身份验证失败，请检查密码" }), { status: 401 });
     }
 
-    // 4. 更新通知授权设置
+    // 4. 更新通知授权设置 (采用 SQLite UPSERT 强力防静默越权与无记录静默更新失败问题)
     if (isAlertReceiver !== undefined) {
-      await env.DB.prepare('UPDATE user_settings SET is_alert_receiver = ? WHERE user_id = ?').bind(isAlertReceiver ? 1 : 0, userId).run();
+      await env.DB.prepare(`
+        INSERT INTO user_settings (user_id, is_alert_receiver) 
+        VALUES (?, ?) 
+        ON CONFLICT(user_id) DO UPDATE SET is_alert_receiver = excluded.is_alert_receiver
+      `).bind(userId, isAlertReceiver ? 1 : 0).run();
     }
     if (isDigestReceiver !== undefined) {
-      await env.DB.prepare('UPDATE user_settings SET is_digest_receiver = ? WHERE user_id = ?').bind(isDigestReceiver ? 1 : 0, userId).run();
+      await env.DB.prepare(`
+        INSERT INTO user_settings (user_id, is_digest_receiver) 
+        VALUES (?, ?) 
+        ON CONFLICT(user_id) DO UPDATE SET is_digest_receiver = excluded.is_digest_receiver
+      `).bind(userId, isDigestReceiver ? 1 : 0).run();
     }
 
     // 1. 更新用户状态

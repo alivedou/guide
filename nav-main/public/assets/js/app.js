@@ -3709,9 +3709,11 @@ const initSearch = () => {
         document.body.classList.toggle('is-searching', hasText);
         
         if (hasText) {
-            // 执行站内模糊搜索
+            // 执行站内模糊搜索 (升级为支持 Title, Desc 之外并列匹配 URL 协议和域名)
             const matches = appData.items.filter(i => 
-                (i.title.toLowerCase().includes(val) || (i.desc && i.desc.toLowerCase().includes(val))) &&
+                (i.title.toLowerCase().includes(val) || 
+                 (i.desc && i.desc.toLowerCase().includes(val)) || 
+                 (i.url && i.url.toLowerCase().includes(val))) &&
                 (isAdmin || !i.hidden)
             ).slice(0, 8); // 最多显示 8 个结果
 
@@ -3769,7 +3771,29 @@ const initSearch = () => {
         };
     }
 
-    // 点击外部关闭搜索层
+    // 🚀 核心增加：将关闭事件精准绑定在 search-section 背景上，并强力消费 touch 触控，防止点击穿透。
+    const searchSection = document.getElementById('search-section');
+    if (searchSection) {
+        const handleOverlayClose = (e) => {
+            if (e.target === searchSection) {
+                e.preventDefault();
+                e.stopPropagation();
+                closeSearch();
+            }
+        };
+        searchSection.onclick = handleOverlayClose;
+        searchSection.ontouchend = handleOverlayClose;
+
+        // 🚀 核心增加（针对 iOS/Android 独享防滚动穿透）：
+        searchSection.addEventListener('touchmove', (e) => {
+            // 只要手指滑动的不是联想结果下拉列表（search-dropdown），就强制禁止页面背景层发生任何弹性滑移
+            if (!e.target.closest('#sea-dropdown')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    }
+
+    // 点击外部关闭搜索层（兜底保留，但点击穿透已被上方的 search-section.onclick/ontouchend 在捕获和消费流中 100% 阻断）
     document.addEventListener('click', (e) => {
         if (document.body.classList.contains('search-active') && !e.target.closest('.search-wrapper')) {
             closeSearch();

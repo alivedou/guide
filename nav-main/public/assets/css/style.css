@@ -3655,6 +3655,7 @@ body.search-active {
     transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
     visibility: hidden;
     overscroll-behavior: contain; /* 阻止滚动溢出与弹性滚动穿透到底部 */
+    touch-action: none; /* 🚀 核心增加：彻底禁止移动端手势滑动穿透至背景层 */
 }
 
 body.search-active .search-section {
@@ -3685,6 +3686,7 @@ body.search-active .main-content {
     outline: 1px solid transparent;
     backface-visibility: hidden;
     transform: perspective(1000px) scale(0.9) translateY(30px);
+    touch-action: auto; /* 🚀 核心增加：保证搜索框内部和下拉匹配词能够正常触发纵向轻触滑动 */
 }
 
 body.search-active .search-wrapper {
