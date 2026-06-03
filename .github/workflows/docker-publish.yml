@@ -1,9 +1,7 @@
 name: Build and Publish Docker Image
 
 on:
-  push:
-    branches:
-      - main  # 当 push 到 main 分支时触发构建
+  workflow_dispatch: # 允许在 GitHub Actions 页面手动点击一键触发构建，避免频繁不必要自动触发
 
 jobs:
   build-and-push:
