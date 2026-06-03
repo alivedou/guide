@@ -28,7 +28,7 @@ COPY package*.json ./
 # 复制项目核心文件
 COPY server.js ./
 COPY migrations/ ./migrations/
-COPY nav-main/public/ ./nav-main/public/
+COPY nav-main/ ./nav-main/
 
 # 创建持久化挂载目录
 RUN mkdir -p local_kv
