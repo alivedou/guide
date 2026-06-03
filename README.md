@@ -10,7 +10,7 @@
 
 - **本项目地址**：[guide](https://github.com/alivedou/guide)
 
-- **本项目测试地址**：[项目测试地址](https://945.ccwu.cc/)
+- **本项目测试地址**：[项目测试地址](https://helyn-hygusfmcja.dcdeploy.cloud/)
 
 - 如果想要试用项目的注册邀请码体验一下，请联系邮箱： ` me@136898.xyz `
 
