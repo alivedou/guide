@@ -391,6 +391,12 @@ body.page-manage-active .logout-btn {
     display: none !important;
 }
 
+body.page-manage-active .summon-search-btn {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateY(-20px) !important;
+}
+
 /* Task 9.5: 只有正在激活的管理按钮可见，隐藏同级其他工具按钮 (控制中心、实验室等) */
 body.page-manage-active .sidebar-admin-toolbar .toolbar-item:not(.active) {
     display: none !important;
@@ -399,7 +405,6 @@ body.page-manage-active .sidebar-admin-toolbar .toolbar-item:not(.active) {
 body.page-manage-active .sidebar-admin-toolbar {
     justify-content: center; /* 居中显示仅剩的一个按钮 */
     padding: 10px 0;
-}
 }
 
 .banner-exit-btn:hover {
@@ -1768,6 +1773,7 @@ body.search-active .summon-search-btn {
     opacity: 1;
 }
 
+body.search-active .sidebar-toggle,
 body.search-active .summon-search-btn {
     opacity: 0;
     pointer-events: none;
@@ -1794,15 +1800,18 @@ body.zen-active:not(.zen-silent) .summon-search-btn {
         width: 40px;
         height: 40px;
         border-radius: 10px;
-        top: 15px;
+        top: auto !important; /* 强行屏蔽任何管理员顶栏或公告栏引起的吸顶规则，锁死底部定位 */
     }
     .sidebar-toggle {
-        left: 15px;
-        transform: translateX(-20px); /* 手机端平时向左退 20px */
+        left: auto; /* 重置 desktop 默认的左侧定位 */
+        right: 15px; /* 改到右侧 */
+        bottom: calc(192px + env(safe-area-inset-bottom, 0px)); /* 完美叠在搜索按钮之上（搜索按钮140px + 高度40px + 12px间距） */
+        transform: translateX(20px); /* 手机端平时向右退 20px 隐藏 */
     }
     .summon-search-btn {
         right: 15px;
-        transform: translateX(20px); /* 手机端平时向右退 20px */
+        bottom: calc(140px + env(safe-area-inset-bottom, 0px)); /* 中下部黄金单手触控区 */
+        transform: translateX(20px); /* 手机端平时向右退 20px 隐藏 */
     }
 }
 
@@ -2033,7 +2042,6 @@ body.light-theme .seg-btn {
     width: 100%;
     height: var(--card-h, 105px); /* 🚀 统一高度，解决因内容或新建卡片高度参差不齐的问题 */
     box-sizing: border-box;
-}
 }
 
 /* 淡入上浮动画 */
@@ -3529,8 +3537,11 @@ body.page-manage-active .sidebar-overlay {
         z-index: 15000 !important;
     }
 
-    /* 双保险防穿透：当移动端侧边栏滑出打开时，强制让三大悬浮按钮在手机端完美淡出，消除任何穿透与遮挡 */
-    body.sidebar-open .sidebar-toggle,
+    body.page-manage-active .sidebar-overlay.visible {
+        display: block !important;
+    }
+
+    /* 双保险防穿透：当移动端侧边栏滑出打开时，由于汉堡按钮已右置，保持其可见性以便一键关闭；其余按钮在手机端完美淡出，消除任何穿透与遮挡 */
     body.sidebar-open .summon-search-btn,
     body.sidebar-open .quick-nav-group {
         opacity: 0 !important;
@@ -4912,6 +4923,8 @@ body.light-theme .notice-list-item.is-top {
 body.light-theme .badge-top {
     color: #000;
 }
+
+.notice-item-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
