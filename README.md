@@ -12,7 +12,7 @@
 
 - **本项目测试地址**：[项目测试地址](https://helyn-hygusfmcja.dcdeploy.cloud/)
 
-- 如果想要试用项目的注册邀请码体验一下，请联系邮箱： ` me@136898.xyz `
+- 如果想要试用项目的注册邀请码体验一下，请联系邮箱： ` me@163898.xyz `
 
 > [!TIP]
 > 本项目是在 `880824` 同志的 `cloudflare-nav` [项目地址](https://github.com/880824/cloudflare-nav) 基础上开发的，针对日常使用痛点进行了深度优化。
