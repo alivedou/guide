@@ -12,7 +12,8 @@
 
 - **本项目测试地址**：[项目测试地址](https://helyn-hygusfmcja.dcdeploy.cloud/)
 
-- 如果想要试用项目的注册邀请码体验一下，请联系邮箱： ` me@163898.xyz `
+- 测试项目由于使用的是没有挂载外部存储的容器部署的，在运营方重启数据会丢失，所以 **测试项目仅用于操作示范和用户体验**。
+- 目前我个人正在使用的版本是用cloudflare pages + kv +d1 使用wrangler部署的,目前已稳定运行超一周。
 
 > [!TIP]
 > 本项目是在 `880824` 同志的 `cloudflare-nav` [项目地址](https://github.com/880824/cloudflare-nav) 基础上开发的，针对日常使用痛点进行了深度优化。
