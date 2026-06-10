@@ -4,6 +4,9 @@
 # @license MIT
 # @disclaimer 免责声明：本软件及相关代码仅用于学术研究与个人学习，作者不对因使用本软件产生的任何直接或间接损失承担责任。
 
+compatibility_date = "2024-05-28"
+compatibility_flags = ["nodejs_compat"]
+
 name = "cloudnav"
 pages_build_output_dir = "./nav-main/public"
 
