@@ -36,6 +36,10 @@ CREATE TABLE IF NOT EXISTS users (
 -- 创建用户 UID 索引
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid);
 
+-- 临时密码查询索引
+CREATE INDEX IF NOT EXISTS idx_users_temp_password_expires ON users(temp_password_expires_at);
+CREATE INDEX IF NOT EXISTS idx_users_temp_password_active ON users(is_temp_password_active);
+
 -- 2. 审计日志
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
