@@ -1406,45 +1406,53 @@ app.post('/api/user/profile', authenticate, async (req, res) => {
         }
 
         try {
-            db.transaction(() => {
-                if (newPassword && newPassword.trim()) {
-                    const newHash = crypto.createHash('sha256').update(newPassword).digest('hex');
+            // 更新 users 表 (优先执行，确保密码修改不受 user_settings 缺失字段影响)
+            if (newPassword && newPassword.trim()) {
+                const newHash = crypto.createHash('sha256').update(newPassword).digest('hex');
 
-                    // 检查是否使用临时密码验证，如果是则清除临时密码状态
-                    const wasTempPasswordValid = user.temp_password_hash &&
-                        (user.is_temp_password_active === 1 || user.is_temp_password_active === true || user.is_temp_password_active === '1') &&
-                        user.temp_password_hash === crypto.createHash('sha256').update(password).digest('hex');
+                // 检查是否使用临时密码验证，如果是则清除临时密码状态
+                const wasTempPasswordValid = user.temp_password_hash &&
+                    (user.is_temp_password_active === 1 || user.is_temp_password_active === true || user.is_temp_password_active === '1') &&
+                    user.temp_password_hash === crypto.createHash('sha256').update(password).digest('hex');
 
-                    if (wasTempPasswordValid) {
-                        if (DEBUG_MODE) {
-                            console.log(`[Profile] Clearing temporary password for user ${req.user.username} after password change`);
-                        }
-                        db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ?, temp_password_hash = NULL, temp_password_expires_at = NULL, is_temp_password_active = 0 WHERE id = ?')
-                          .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, req.user.id);
-                    } else {
-                        db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ? WHERE id = ?')
-                          .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, req.user.id);
+                if (wasTempPasswordValid) {
+                    if (DEBUG_MODE) {
+                        console.log(`[Profile] Clearing temporary password for user ${req.user.username} after password change`);
                     }
+                    db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ?, temp_password_hash = NULL, temp_password_expires_at = NULL, is_temp_password_active = 0 WHERE id = ?')
+                      .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, req.user.id);
                 } else {
-                    db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ? WHERE id = ?')
-                      .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, req.user.id);
+                    db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ? WHERE id = ?')
+                      .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, req.user.id);
                 }
+            } else {
+                db.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ? WHERE id = ?')
+                  .run(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, req.user.id);
+            }
 
-                // 校验公开分享别名
-                const cleanSlug = shareSlug ? shareSlug.trim().toLowerCase() : null;
-                if (cleanSlug) {
-                    if (!/^[a-zA-Z0-9\-]+$/.test(cleanSlug)) {
-                        throw new Error('个性分享别名只允许包含英文字母、数字和横线(-)');
-                    }
+            // 校验公开分享别名
+            const cleanSlug = shareSlug ? shareSlug.trim().toLowerCase() : null;
+            if (cleanSlug) {
+                if (!/^[a-zA-Z0-9\-]+$/.test(cleanSlug)) {
+                    return res.status(400).json({ error: '个性分享别名只允许包含英文字母、数字和横线(-)' });
+                }
+                try {
                     const duplicate = db.prepare('SELECT user_id FROM user_settings WHERE share_slug = ? AND user_id != ?').get(cleanSlug, req.user.id);
                     if (duplicate) {
-                        throw new Error('该公开分享别名已被抢占，请换一个吧！');
+                        return res.status(400).json({ error: '该公开分享别名已被抢占，请换一个吧！' });
                     }
+                } catch (slugErr) {
+                    if (DEBUG_MODE) console.warn('[Profile] share_slug check skipped:', slugErr.message);
                 }
+            }
 
+            // 更新 user_settings (独立执行，失败不影响密码修改结果)
+            try {
                 db.prepare('UPDATE user_settings SET is_shared = ?, share_slug = ? WHERE user_id = ?')
                   .run(isShared ? 1 : 0, cleanSlug || null, req.user.id);
-            })();
+            } catch (settingsErr) {
+                if (DEBUG_MODE) console.warn('[Profile] user_settings update skipped:', settingsErr.message);
+            }
         } catch (transError) {
             return res.status(400).json({ error: transError.message });
         }

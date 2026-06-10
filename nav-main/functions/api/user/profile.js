@@ -124,27 +124,31 @@ export async function onRequestPost(context) {
       }
     }
 
-    // 6. 执行 D1 事务修改
-    const queries = [];
-    if (newPassword && newPassword.trim()) {
-      const newHash = await sha256(newPassword);
+    // 6. 执行 users 表更新 (优先执行，确保密码修改不受 user_settings 缺失字段影响)
+    try {
+      if (newPassword && newPassword.trim()) {
+        const newHash = await sha256(newPassword);
 
-      // 检查是否使用临时密码验证，如果是则清除临时密码状态
-      const wasTempPasswordValid = user.temp_password_hash &&
-        (user.is_temp_password_active === 1 || user.is_temp_password_active === true || user.is_temp_password_active === '1') &&
-        user.temp_password_hash === oldHash;
+        // 检查是否使用临时密码验证，如果是则清除临时密码状态
+        const wasTempPasswordValid = user.temp_password_hash &&
+          (user.is_temp_password_active === 1 || user.is_temp_password_active === true || user.is_temp_password_active === '1') &&
+          user.temp_password_hash === oldHash;
 
-      if (wasTempPasswordValid) {
-        console.log(`[Profile] Clearing temporary password for user ${authUser.username} after password change`);
-        queries.push(env.DB.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ?, temp_password_hash = NULL, temp_password_expires_at = NULL, is_temp_password_active = 0 WHERE id = ?')
-          .bind(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, authUser.id));
+        if (wasTempPasswordValid) {
+          console.log(`[Profile] Clearing temporary password for user ${authUser.username} after password change`);
+          await env.DB.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ?, temp_password_hash = NULL, temp_password_expires_at = NULL, is_temp_password_active = 0 WHERE id = ?')
+            .bind(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, authUser.id).run();
+        } else {
+          await env.DB.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ? WHERE id = ?')
+            .bind(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, authUser.id).run();
+        }
       } else {
-        queries.push(env.DB.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ?, password_hash = ? WHERE id = ?')
-          .bind(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, newHash, authUser.id));
+        await env.DB.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ? WHERE id = ?')
+          .bind(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, authUser.id).run();
       }
-    } else {
-      queries.push(env.DB.prepare('UPDATE users SET username = ?, email = ?, telegram_chat_id = ? WHERE id = ?')
-        .bind(username.trim(), email ? email.trim() : null, telegramChatId ? telegramChatId.trim() : null, authUser.id));
+    } catch (userUpdateErr) {
+      console.error('[Profile users update failed]:', userUpdateErr.message);
+      return new Response(JSON.stringify({ error: `用户信息更新失败: ${userUpdateErr.message}` }), { status: 500 });
     }
 
     // 6.1 校验公开分享别名
@@ -153,25 +157,24 @@ export async function onRequestPost(context) {
       if (!/^[a-zA-Z0-9\-]+$/.test(cleanSlug)) {
         return new Response(JSON.stringify({ error: "个性分享别名只允许包含英文字母、数字和横线(-)" }), { status: 400 });
       }
-      const duplicate = await env.DB.prepare('SELECT user_id FROM user_settings WHERE share_slug = ? AND user_id != ?').bind(cleanSlug, authUser.id).first();
-      if (duplicate) {
-        return new Response(JSON.stringify({ error: "该公开分享别名已被抢占，请换一个吧！" }), { status: 400 });
+      try {
+        const duplicate = await env.DB.prepare('SELECT user_id FROM user_settings WHERE share_slug = ? AND user_id != ?').bind(cleanSlug, authUser.id).first();
+        if (duplicate) {
+          return new Response(JSON.stringify({ error: "该公开分享别名已被抢占，请换一个吧！" }), { status: 400 });
+        }
+      } catch (slugErr) {
+        // share_slug 字段可能不存在，忽略校验
+        console.warn('[Profile] share_slug check failed (maybe missing column):', slugErr.message);
       }
     }
 
-    queries.push(env.DB.prepare('UPDATE user_settings SET is_shared = ?, share_slug = ? WHERE user_id = ?')
-      .bind(isShared ? 1 : 0, cleanSlug || null, authUser.id));
-
+    // 6.2 更新 user_settings (独立执行，失败不影响密码修改结果)
     try {
-      await env.DB.batch(queries);
-    } catch (dbBatchErr) {
-      console.error('[Profile batch update failed]:', dbBatchErr.message);
-      if (dbBatchErr.message.includes("no such column") || dbBatchErr.message.includes("has no column")) {
-        return new Response(JSON.stringify({ 
-          error: "保存失败：检测到云端 D1 数据库尚未执行最新的数据表迁移（0008_user_shares），请在控制台执行 npx wrangler d1 migrations apply cloudnav-db --remote 予以升级。" 
-        }), { status: 500 });
-      }
-      return new Response(JSON.stringify({ error: `数据库更新失败: ${dbBatchErr.message}` }), { status: 500 });
+      await env.DB.prepare('UPDATE user_settings SET is_shared = ?, share_slug = ? WHERE user_id = ?')
+        .bind(isShared ? 1 : 0, cleanSlug || null, authUser.id).run();
+    } catch (settingsErr) {
+      console.warn('[Profile] user_settings update failed (ignored):', settingsErr.message);
+      // 不阻断流程 — user_settings 字段可能尚未迁移
     }
 
     // 7. 同步驱逐/更新 KV 缓存中的用户名 (如果有缓存的话)
