@@ -86,11 +86,12 @@ export async function onRequestPost(context) {
     }
 
     // 3. 校验原密码 (如果修改了密码)
+    let oldHash = null;
     if (newPassword && newPassword.trim()) {
       if (!password) {
         return new Response(JSON.stringify({ error: "修改密码需要输入原密码" }), { status: 400 });
       }
-      const oldHash = await sha256(password);
+      oldHash = await sha256(password);
 
       // 检查是否使用临时密码验证
       let isTempPasswordValid = false;

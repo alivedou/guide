@@ -1364,11 +1364,13 @@ app.post('/api/user/profile', authenticate, async (req, res) => {
         const user = db.prepare('SELECT password_hash, temp_password_hash, temp_password_expires_at, is_temp_password_active FROM users WHERE id = ?').get(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        let oldHash = null;
+
         if (newPassword && newPassword.trim()) {
             if (!password) {
                 return res.status(400).json({ error: '修改密码需要输入原密码' });
             }
-            const oldHash = crypto.createHash('sha256').update(password).digest('hex');
+            oldHash = crypto.createHash('sha256').update(password).digest('hex');
 
             // 检查是否使用临时密码验证
             let isTempPasswordValid = false;
