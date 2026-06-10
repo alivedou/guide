@@ -1,7 +1,0 @@
-{
-  "name": "cloudnav-functions",
-  "private": true,
-  "dependencies": {
-    "jose": "^6.2.3"
-  }
-}
