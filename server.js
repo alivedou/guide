@@ -167,7 +167,7 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'cloudnav-secret-2026';
-const CRON_SECRET = process.env.CRON_SECRET || '';
+const CRON_SECRET = process.env.CRON_SECRET || 'cloudnav-cron-secret-secure-key';
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const DEBUG_MODE = process.env.DEBUG_MODE === 'true'; // 调试模式开关
