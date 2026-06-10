@@ -36,6 +36,11 @@ RUN mkdir -p local_kv
 # 声明端口与环境变量
 ENV PORT=3000
 ENV NODE_ENV=production
+# ⚠️ 以下为可选环境变量，个人使用可保留注释状态
+# ENV JWT_SECRET=your_jwt_secret_here
+# ENV CRON_SECRET=your_cron_secret_here
+# ENV TELEGRAM_BOT_TOKEN=your_tgbot_token
+# ENV TELEGRAM_CHAT_ID=your_group_chat_id
 EXPOSE 3000
 
 # 启动服务器

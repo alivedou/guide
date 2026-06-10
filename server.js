@@ -167,6 +167,9 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'cloudnav-secret-2026';
+const CRON_SECRET = process.env.CRON_SECRET || '';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const DEBUG_MODE = process.env.DEBUG_MODE === 'true'; // 调试模式开关
 const secret = new TextEncoder().encode(JWT_SECRET);
 
@@ -1058,7 +1061,6 @@ app.delete('/api/admin/users', authenticate, adminOnly, (req, res) => {
 // ====== 4.4 定时审计日报 API (Task N.3) ======
 
 app.get('/api/admin/cron-digest', authenticate, adminOnly, (req, res) => {
-    try {
         // 查询 24 小时内增量审计日志 (使用 local SQLite)
         const logs = db.prepare(`
             SELECT l.id, u.username, l.action, l.details, l.ip, l.created_at 
