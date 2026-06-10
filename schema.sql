@@ -1,36 +1,36 @@
 -- ==========================================
--- 🚀 高度自定义高颜值导航网站 - 完整 D1 数据库结构
+-- 高度自定义高颜值导航网站 - 完整 D1 数据库结构
 -- ==========================================
--- 💡 数据库初始化方法（任选其一）：
+-- 数据库初始化方法（任选其一）：
 --
 -- 方法一（逐条粘贴，推荐）：
 --   1. 登录 Cloudflare 控制台 -> Workers & Pages -> D1
 --   2. 选中你的 cloudnav-db 数据库 -> 点击 Console 选项卡
---   3. 逐条复制下面每条 CREATE TABLE 语句，粘贴到 Console 执行
---      （提示：D1 Console 不支持一次性全量执行，需逐条操作）
+--   3. 逐条复制下面每条 CREATE TABLE/CREATE INDEX 语句，粘贴到 Console 执行
+--      （注意：不要带注释行，D1 Console 不支持行内注释）
 --
 -- 方法二（wrangler CLI）：
 --   npx wrangler d1 execute cloudnav-db --remote --file=./schema.sql
 --
--- 💡 超级管理员：初始化后在前端注册第一个账号，系统自动将其设为管理员。
+-- 超级管理员：初始化后在前端注册第一个账号，系统自动将其设为管理员。
 -- ==========================================
 
 -- 1. 用户主表
 CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,           -- UUID
-    username TEXT UNIQUE NOT NULL, -- 用户名
-    password_hash TEXT NOT NULL,   -- SHA-256 密码哈希
-    role TEXT DEFAULT 'user',      -- admin, user, super_user
-    status TEXT DEFAULT 'active',  -- active, frozen
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT DEFAULT 'user',
+    status TEXT DEFAULT 'active',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_login DATETIME,
-    uid INTEGER,                   -- 友好 UID
-    has_invite BOOLEAN DEFAULT 0,  -- 是否通过邀请码注册
-    email TEXT,                    -- 邮箱
-    telegram_chat_id TEXT,         -- Telegram Chat ID
-    temp_password_hash TEXT,       -- 临时密码哈希
-    temp_password_expires_at DATETIME,  -- 临时密码过期时间
-    is_temp_password_active BOOLEAN DEFAULT 0  -- 临时密码是否激活
+    uid INTEGER,
+    has_invite BOOLEAN DEFAULT 0,
+    email TEXT,
+    telegram_chat_id TEXT,
+    temp_password_hash TEXT,
+    temp_password_expires_at DATETIME,
+    is_temp_password_active BOOLEAN DEFAULT 0
 );
 
 -- 创建用户 UID 索引
@@ -91,11 +91,11 @@ CREATE TABLE IF NOT EXISTS user_settings (
     simple_mode BOOLEAN DEFAULT 0,
     open_in_new_tab BOOLEAN DEFAULT 1,
     theme_mode TEXT DEFAULT 'auto',
-    link_target TEXT DEFAULT '_blank',        -- 网址跳转模式
-    is_alert_receiver BOOLEAN DEFAULT 0,      -- 是否接收警报
-    is_digest_receiver BOOLEAN DEFAULT 0,     -- 是否接收日报
-    is_shared BOOLEAN DEFAULT 0,              -- 是否开启主页公开分享
-    share_slug TEXT,                          -- 主页公开分享个性尾缀 (Slug)
+    link_target TEXT DEFAULT '_blank',
+    is_alert_receiver BOOLEAN DEFAULT 0,
+    is_digest_receiver BOOLEAN DEFAULT 0,
+    is_shared BOOLEAN DEFAULT 0,
+    share_slug TEXT,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -107,8 +107,8 @@ CREATE TABLE IF NOT EXISTS announcements (
     creator_id TEXT,
     title TEXT,
     content TEXT,
-    type TEXT DEFAULT 'quiet',       -- silent, important
-    status TEXT DEFAULT 'published', -- draft, published, archived
+    type TEXT DEFAULT 'quiet',
+    status TEXT DEFAULT 'published',
     is_top BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     expire_at DATETIME,
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS invitation_codes (
     code TEXT PRIMARY KEY,
     creator_id TEXT,
     used_by TEXT,
-    status TEXT DEFAULT 'unused',    -- unused, used
+    status TEXT DEFAULT 'unused',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     used_at DATETIME,
     FOREIGN KEY(creator_id) REFERENCES users(id),
