@@ -1222,6 +1222,58 @@ const openProfileCenter = async () => {
 };
 window.openProfileCenter = openProfileCenter;
 
+// 临时密码登录后强制弹窗提醒修改密码（不可忽略，必须点击按钮才能关闭）
+const showTempPasswordChangeAlert = () => {
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    const closeBtn = document.getElementById('btn-close-edit');
+
+    if (!modal || !body) return;
+
+    // 暂存原来的 title 内容（此处 title 在 openProfileCenter 会重新设置）
+    title.innerHTML = `<i class="ri-error-warning-line" style="color:#f39c12;"></i> ⚠️ 安全提醒`;
+
+    body.innerHTML = `
+        <div style="text-align:center; padding:20px 10px;">
+            <div style="font-size:48px; color:#f39c12; margin-bottom:16px;">
+                <i class="ri-alert-fill"></i>
+            </div>
+            <h4 style="color:#e67e22; margin-bottom:12px; font-size:15px;">
+                您正在使用临时密码登录
+            </h4>
+            <p style="font-size:13px; color:var(--text-dim); line-height:1.8; margin-bottom:8px;">
+                临时密码有效期为 <b style="color:#e74c3c;">30分钟</b>，过期后将无法使用。
+            </p>
+            <p style="font-size:13px; color:var(--text-dim); line-height:1.8; margin-bottom:16px;">
+                为了您的账号安全，请<b style="color:#2ecc71;">立即前往个人资料中心</b>修改正式密码。
+            </p>
+            <div style="background:rgba(231,76,60,0.08); border:1px solid rgba(231,76,60,0.2); border-radius:6px; padding:8px 12px; font-size:11px; color:#e74c3c;">
+                <i class="ri-information-line"></i> 修改密码完成后，临时密码将被自动销毁。
+            </div>
+        </div>
+    `;
+
+    confirmBtn.style.display = 'block';
+    confirmBtn.innerText = '前往个人资料中心修改密码';
+    confirmBtn.onclick = () => {
+        modal.style.display = 'none';
+        // 恢复原始关闭按钮行为
+        if (closeBtn) closeBtn.onclick = () => { modal.style.display = 'none'; };
+        openProfileCenter();
+    };
+
+    // 阻止关闭按钮直接关闭弹窗，强制引导用户去修改密码
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            showToast("⚠️ 请务必立即修改密码，临时密码将在30分钟后失效", "#e67e22");
+        };
+    }
+
+    modal.style.display = 'flex';
+};
+
 window.setVisualSetting = (key, value) => {
     if (!appData.settings) appData.settings = {};
 
@@ -1464,13 +1516,9 @@ const doLogin = async () => {
         // 此处不需要 showToast，SyncUI 会自动显示成功提示
         await init(true);
 
-        // 临时密码登录后提醒修改密码
+        // 临时密码登录后弹窗强制提醒修改密码（不可忽略的交互弹窗）
         if (data.isTempPasswordLogin || data.requiresPasswordChange) {
-            showToast("⚠️ 您使用的是临时密码，请立即前往「个人资料」修改正式密码！", "#e67e22");
-            setTimeout(() => {
-                const profileBtn = document.querySelector('[onclick*="showProfile"]');
-                if (profileBtn) profileBtn.click();
-            }, 1500);
+            showTempPasswordChangeAlert();
         } else {
             // 登录成功时高亮消息提示，引导用户前往云端备份进行手动同步
             showToast("登录成功！检测到您在云端可能有配置备份，如果需要，请前往「云端备份」手动拉取以覆盖本地数据。", "#3498db");

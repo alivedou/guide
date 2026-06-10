@@ -1017,6 +1017,44 @@ app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
     }
 });
 
+app.delete('/api/admin/users', authenticate, adminOnly, (req, res) => {
+    const { userId, adminPassword } = req.body;
+    try {
+        if (!userId) return res.status(400).json({ error: '缺少 userId' });
+        if (!adminPassword) return res.status(400).json({ error: '删除操作非常危险，请输入管理员密码验证' });
+
+        const adminUser = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+        const adminHash = crypto.createHash('sha256').update(adminPassword).digest('hex');
+        if (adminUser.password_hash !== adminHash) {
+            return res.status(401).json({ error: '管理员身份验证失败，请检查密码' });
+        }
+
+        // 清理关联数据（避免外键冲突）
+        db.prepare('DELETE FROM invitation_codes WHERE used_by = ?').run(userId);
+        db.prepare('DELETE FROM invitation_codes WHERE creator_id = ?').run(userId);
+        db.prepare('DELETE FROM user_settings WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM items WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM categories WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM announcement_read_states WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM audit_logs WHERE user_id = ?').run(userId);
+
+        // 清除 KV 缓存（本地用 local_kv 目录）
+        const configPath = path.join(__dirname, 'local_kv', `user_config:${userId}.json`);
+        if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
+
+        // 删除用户主记录
+        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+
+        db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
+            .run(req.user.id, 'DELETE_USER', `Deleted user account ${userId}`, '[Protected]');
+
+        console.log(`[Admin] User ${userId} deleted by ${req.user.username}`);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: '删除用户失败', details: e.message });
+    }
+});
+
 // ====== 4.4 定时审计日报 API (Task N.3) ======
 
 app.get('/api/admin/cron-digest', authenticate, adminOnly, (req, res) => {
