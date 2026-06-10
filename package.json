@@ -1,0 +1,31 @@
+{
+  "name": "customizable-navigation-website",
+  "version": "1.0.0",
+  "description": "高度自定义的导航网站",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "lint": "eslint . --fix",
+    "format": "prettier --write .",
+    "preview": "wrangler pages dev ./nav-main/public --functions nav-main/functions --kv=nav --d1=DB --compatibility-date=2024-05-28 --local",
+    "db:migrate": "wrangler d1 migrations apply cloudnav-db --local",
+    "deploy": "wrangler pages deploy ./nav-main/public",
+    "clean": "rm -rf local_kv local_d1.db kv_mock.json",
+    "build": "echo 'Build successfully'"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.2",
+    "jose": "^6.2.3",
+    "node-html-parser": "^7.1.0"
+  },
+  "devDependencies": {
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "wrangler": "^4.95.0"
+  }
+}

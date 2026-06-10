@@ -1,0 +1,50 @@
+# Dependency directories
+node_modules/
+dist/
+build/
+.cache/
+
+# Cloudflare Wrangler
+.wrangler/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS metadata
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Project specific
+kv_mock.json
+local_kv/
+local_d1.db
+*.db-journal
+
+# Dev test / fix documentation
+test-hash-consistency.js
+FIX_INSTRUCTIONS.md
+TEMP_PASSWORD_CHANGE_TEST.md
+
