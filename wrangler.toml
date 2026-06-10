@@ -1,4 +1,4 @@
-# @fileoverview 
+# @fileoverview
 # @author adou
 # @copyright Copyright (c) 2026 adou. All rights reserved.
 # @license MIT
@@ -6,24 +6,3 @@
 
 compatibility_date = "2024-05-28"
 compatibility_flags = ["nodejs_compat"]
-
-name = "cloudnav"
-pages_build_output_dir = "./nav-main/public"
-
-[vars]
-# ⚠️ 注意：不要在公开仓库中写入您的真实密钥！
-# 生产环境请直接在 Cloudflare Pages 网页端后台配置以下 （4个，第一个必需，后面三个是可选） 环境变量
-JWT_SECRET = "your_jwt_secret_here"
-CRON_SECRET = "your_cron_secret_here"
-TELEGRAM_BOT_TOKEN = "your_tgbot_token"
-TELEGRAM_CHAT_ID = "your_group_chat_id"
-
-[[kv_namespaces]]
-binding = "nav"
-id = "your_kv_namespace_id_here"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "cloudnav-db"
-database_id = "your_d1_database_id_here"
-migrations_dir = "migrations"
