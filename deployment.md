@@ -111,7 +111,7 @@ JWT_SECRET →  （示例：英文和数字字符，可以使用任意复杂密�
 
 ### 第一步：自动打包生成镜像（通过 GitHub Actions）
 1. 确保您的代码已推送到 GitHub 仓库。
-2. 只要您向 `main` 分支推送（Push）代码，内置的 GitHub Actions 就会自动构建 Node.js 22 LTS 镜像并免费发布到您的 **GHCR** 仓库（镜像名格式：`ghcr.io/您的用户名/您的仓库名:latest`）。
+2. 需要GitHub Actions 手动构建 Node.js 22 LTS 镜像并免费发布到您的 **GHCR** 仓库（镜像名格式：`ghcr.io/您的用户名/您的仓库名:latest`）。
 
 ### 第二步：运行与环境变量配置
 
@@ -143,4 +143,104 @@ docker run -d \
 3. 直接在页面中以键值对的形式填入环境变量（如 `JWT_SECRET`、`TELEGRAM_BOT_TOKEN` 等）。
 4. **添加持久化磁盘（Volume）**：在服务设置中新增 Volume 并挂载到 `/app`，以确保本地 SQLite 数据库及缓存文件在容器更新时永久保留。
 5. 保存后 Railway 会自动启动，通关运行！
+
+
+**补一个内容**
+
+# 原生 Nginx 域名绑定与 HTTPS 自动化配置指南
+
+本指南适用于在 VPS 上已经安装原生 Nginx（如 nginx/1.24.0）的环境下，将“IP+端口”（如 `http://IP:3000`）的网站完美转换为“域名+HTTPS”（如 `https://nav.yourdomain.com`）的标准工业级操作流程。
+
+---
+
+## 🛠️ 第一步：环境准备与 Certbot 证书工具安装
+
+Certbot 是自动化申请和续期 Let's Encrypt 免费 SSL 证书的神器，它能自动识别 Nginx 配置并完成 HTTPS 升级。
+
+在 VPS 终端依次运行以下命令：
+```bash
+# 1. 更新系统软件包源
+sudo apt update
+
+# 2. 安装 snapd 包管理器
+sudo apt install snapd -y
+
+# 3. 通过 snap 安装最新版 certbot
+sudo snap install --classic certbot
+
+# 4. 创建软链接，确保全局可直接调用 certbot 命令
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+📝 第二步：编写 Nginx 反向代理配置文件
+无需修改 Nginx 全局臃肿的 nginx.conf，为其单独建立一个干净的虚拟主机配置文件。
+
+1. 创建并打开配置文件
+Bash
+# 创建一个名为 ikun-nav 的独立配置文件
+nano /etc/nginx/sites-available/ikun-nav
+2. 写入反向代理标准配置
+将以下内容原封不动粘贴进编辑器，务必注意大括号 {} 的完全闭合：
+
+Nginx
+server {
+    listen 80;
+    server_name nav.yourdomain.com; # 🚨 填写您解析好的真实域名
+
+    location / {
+        # 核心：将访问域名的流量，秘密转发给本地 Docker 容器的 3000 端口
+        proxy_pass http://127.0.0.1:3000; 
+        
+        # 传递真实的客户端真实 IP 和 Host 头，防止后端程序获取到错误的访问源
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 完美支持 WebSocket 通信（保证网站后台定时审计/日志流等长连接顺畅）
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+提示：在 nano 编辑器中，按 Ctrl + O 然后回车保存，按 Ctrl + X 退出。
+
+3. 激活配置文件并重载 Nginx
+Bash
+# 1. 创建软链接，将可用配置（sites-available）激活到已启用配置（sites-enabled）
+ln -s /etc/nginx/sites-available/ikun-nav /etc/nginx/sites-enabled/
+
+# 2. 核心语法检查（绝对不能省略！预防括号缺失导致全站瘫痪）
+nginx -t
+💡 预期输出：
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+如果看到 successful，即可安全重启 Nginx：
+
+Bash
+# 3. 重启 Nginx 服务使配置生效
+systemctl restart nginx
+🔒 第三步：全自动一键申请 SSL 证书并升级 HTTPS
+让 Certbot 登场，它会自动读取上一步写的 Nginx 配置文件，现场向权威机构申请证书，自动改写 Nginx 逻辑实现 HTTP 强制跳转 HTTPS。
+
+Bash
+# 运行一键证书配置命令
+sudo certbot --nginx -d nav.887991.xyz
+⌨️ 交互式命令选项说明：
+Enter email address：输入您的真实常用邮箱（用于证书发生未预期续期失败时接收官方警告邮件通知）。
+
+Terms of Service：输入 Y（接受服务条款）并回车。
+
+Share your email：输入 N（拒绝接受官方发起的其他资讯推广邮件）并回车。
+
+Configure Redirect (如有提示)：如果问你是否将所有 HTTP 流量强制重定向到 HTTPS，选择 2 (Redirect) 并回车。
+
+🏆 第四步：通关验证与底层安全加固
+当终端打印出 Congratulations! You have successfully enabled ...，代表大功告成！
+
+1. 验收
+直接在浏览器输入：https://nav.887991.xyz，网站将以无端口的形式，带着绿色安全锁（HTTPS）完美打开。
+
+2. 终极安全加固（强烈推荐）
+既然反向代理和域名已全部调通，外界访问流量都由 Nginx（80/443端口）接管。为了防止黑客绕过域名直接通过 IP 攻击您的底层 3000 端口，请前往您的 VPS 云厂商后台（阿里云/腾讯云/各路云的安全组或防火墙规则）中，彻底关闭 3000 端口的入站权限。
+
+3. 证书续期无忧
+Certbot 在安装时已自动在 Linux 系统中埋下了 systemd 定时任务。每隔 90 天证书即将到期前，它会自动在后台悄悄完成续期，无需人工介入，真正一劳永逸。
 

@@ -62,7 +62,8 @@ chmod -R 777 /opt/my-nav/local_kv_data
 1. 拉取最新的 GitHub 镜像
 
 ```Bash
-docker pull ghcr.io/2bdou/ikun_nav:sha-de7b278
+docker pull ghcr.io/2bdou/ikun_nav:xxxxxx
+#填写你自己githubaction生成的镜像
 ```
 
 2. 一键启动容器
