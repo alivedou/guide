@@ -103,7 +103,40 @@ docker ps
 
 - 后续直接访问 http://你的VPS公网IP:3000 即可。
 
-#### 💡 方法 B：在 Railway 等 PaaS 云平台上部署（免运维首选）
+## 如果后续忘记密码或者想要删除请执行
+
+### 1. 彻底停掉并删掉容器
+
+```bash
+docker rm -f ikun-navigation
+```
+### 2. 连文件夹带里面的所有未知文件一竿子全部打死
+
+```bash
+rm -rf /opt/my-nav/local_kv_data
+```
+
+### 3. 重新创建干净的文件夹
+
+```bash
+mkdir -p /opt/my-nav/local_kv_data
+chmod -R 777 /opt/my-nav/local_kv_data
+```
+
+**还要重新建.env作为环境变量**(请参照上面的第二步内容)
+
+### 4. 重新跑起你的 docker run 连招
+```bash
+docker run -d \
+  --name ikun-navigation \
+  -p 3000:3000 \
+  --env-file .env \
+  -v /opt/my-nav/local_kv_data:/app/local_kv \
+  --restart always \
+  ghcr.io/2bdou/ikun_nav:sha-de7b278
+```
+
+#### 💡 部署方法 B：在 Railway 等 PaaS 云平台上部署（免运维首选）
 
 1. 登录 Railway 控制台，关联您在 GitHub 的本项目仓库。
 2. 在新建的服务（Service）设置中，找到 **Variables** 选项卡。
