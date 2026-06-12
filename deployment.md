@@ -222,7 +222,7 @@ systemctl restart nginx
 
 Bash
 # 运行一键证书配置命令
-sudo certbot --nginx -d nav.887991.xyz
+sudo certbot --nginx -d nav.yourdomain.com
 ⌨️ 交互式命令选项说明：
 Enter email address：输入您的真实常用邮箱（用于证书发生未预期续期失败时接收官方警告邮件通知）。
 
@@ -236,7 +236,7 @@ Configure Redirect (如有提示)：如果问你是否将所有 HTTP 流量强�
 当终端打印出 Congratulations! You have successfully enabled ...，代表大功告成！
 
 1. 验收
-直接在浏览器输入：https://nav.887991.xyz，网站将以无端口的形式，带着绿色安全锁（HTTPS）完美打开。
+直接在浏览器输入：https://nav.yourdomain.com，网站将以无端口的形式，带着绿色安全锁（HTTPS）完美打开。
 
 2. 终极安全加固（强烈推荐）
 既然反向代理和域名已全部调通，外界访问流量都由 Nginx（80/443端口）接管。为了防止黑客绕过域名直接通过 IP 攻击您的底层 3000 端口，请前往您的 VPS 云厂商后台（阿里云/腾讯云/各路云的安全组或防火墙规则）中，彻底关闭 3000 端口的入站权限。
