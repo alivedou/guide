@@ -1061,6 +1061,7 @@ app.delete('/api/admin/users', authenticate, adminOnly, (req, res) => {
 // ====== 4.4 定时审计日报 API (Task N.3) ======
 
 app.get('/api/admin/cron-digest', authenticate, adminOnly, (req, res) => {
+    try {
         // 查询 24 小时内增量审计日志 (使用 local SQLite)
         const logs = db.prepare(`
             SELECT l.id, u.username, l.action, l.details, l.ip, l.created_at 
