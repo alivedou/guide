@@ -8,7 +8,7 @@
 
 这是一个具有超强自适应性、高辨识度视觉设计、支持实时自定义编辑的极致导航网站。本项目支持 **Cloudflare Pages +  KV + D1** 无服务器极速部署，同时也自带本地 Node.js 离线开发模拟服务，为您实现“线上线下、一键全通”的无缝体验。
 
-- **本项目地址**：[guide](https://github.com/alivedou/guide)
+- **本项目地址**：[guide](https://github.com/alivedou/CF-nav/tree/v4)
 
 - **本项目测试地址**：[项目测试地址](https://helyn-hygusfmcja.dcdeploy.cloud/)
 
@@ -93,11 +93,37 @@ graph TD
 
 *   **安全审计日志**：自动记录敏感操作，并在每日通过邮件/Telegram 发送安全汇总日报。
 
-**本项目地址**：[guide](https://github.com/alivedou/guide)
+**本项目地址**：[guide](https://github.com/alivedou/CF-nav/tree/v4)
 
 ---
+## ☁️ 部署方式一：vps-docker极速部署
+具体原理详解在deployment-docker.md有具体说明，只是把手动操作步骤变成了菜单样式的交互命令。
+### 最新vps-docker部署方式
 
-## ☁️ 部署至 Cloudflare Pages 详细步骤
+极速版两种方式，任选其一：
+方式1：
+```bash
+curl -sSMy https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh | bash
+```
+- curl：负责去 GitHub 把你的脚本内容抓下来。
+
+- -sSMy：这是个高阶网络连招。-sS 让下载过程保持安静（不弹进度条）但报错时会说话；-M 和 -y 分别限制了最长连接和传输时间，防止因为网络墙掉导致终端死卡。
+
+- | bash：管道符，意思是把抓下来的脚本内容直接塞给系统的 Bash 解释器去无盘运行，用户本地甚至不需要手动去创建文件。
+
+方式2:
+```bash
+# 1. 下载脚本
+curl -O [https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh](https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh)
+
+# 2. 赋予脚本可执行权限
+chmod +x ikun.sh
+
+# 3. 启动傻瓜菜单
+./ikun.sh
+```
+
+## ☁️ 部署方式二：手动部署至 Cloudflare Pages 详细步骤
 
 部署本项目需要 `GitHub` 和 `Cloudflare` 账号。
 
@@ -117,11 +143,11 @@ graph TD
 
 ### 第二步：部署 Cloudflare Pages 项目
 1. 将本项目 **fork** 到您的 GitHub 仓库。
-   - **项目源码**：[项目地址](https://github.com/alivedou/guide)
+   - **项目源码**：[项目地址](https://github.com/alivedou/CF-nav/tree/v4)
 2. 在 Cloudflare 点击 **Workers 和 Pages** -> **创建项目** -> **Pages** 标签页。
 3. 点击 **“连接到 Git”** 并授权选择您的导航项目仓库。
 4. **构建设置** (非常重要)：
-   *   **项目名称**：`guide` (或自定义)
+   *   **项目名称**：`mynav` (或自定义)
    *   **生产分支**：`multiple`
    *   **框架预设**：`None`
    *   **构建命令**：`npm install`
@@ -182,9 +208,11 @@ graph TD
 
 ---
 
-## 💻 本地开发与预览
+
+## 💻 其他内容：本地开发与预览
 
 ### 1. 准备工作
+需要先下载代码到本地。
 ```bash
 npm install
 ```
@@ -209,6 +237,7 @@ npm install
 复制根目录下的 `.env.example` 并重命名为 `.env`，定义 `TOKEN` 变量。程序默认在 `http://localhost:3000` 启动，并读取 `kv_mock.json`。
 
 ---
+
 
 ## 📂 项目结构预览
 
