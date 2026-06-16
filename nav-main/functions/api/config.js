@@ -255,12 +255,27 @@ export async function onRequestPost(context) {
     } catch (batchErr) {
         if (batchErr.message.includes('has no column named') || batchErr.message.includes('no such column')) {
             // 自动修补缺少的列
-            try {
-                await env.DB.prepare("ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'").run();
-            } catch(e) {}
-            try {
-                await env.DB.prepare("ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7").run();
-            } catch(e) {}
+            const columnsToPolyfill = [
+                "ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'",
+                "ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7",
+                "ALTER TABLE user_settings ADD COLUMN theme_mode TEXT DEFAULT 'auto'",
+                "ALTER TABLE user_settings ADD COLUMN simple_mode BOOLEAN DEFAULT 0",
+                "ALTER TABLE user_settings ADD COLUMN hide_bg_mask BOOLEAN DEFAULT 0",
+                "ALTER TABLE user_settings ADD COLUMN isolated_view BOOLEAN DEFAULT 0",
+                "ALTER TABLE user_settings ADD COLUMN density TEXT DEFAULT 'standard'",
+                "ALTER TABLE user_settings ADD COLUMN card_width INTEGER DEFAULT 85",
+                "ALTER TABLE user_settings ADD COLUMN zen_mode BOOLEAN DEFAULT 1",
+                "ALTER TABLE user_settings ADD COLUMN show_frequent BOOLEAN DEFAULT 1",
+                "ALTER TABLE user_settings ADD COLUMN bg_url TEXT",
+                "ALTER TABLE items ADD COLUMN bg_color TEXT",
+                "ALTER TABLE items ADD COLUMN hidden BOOLEAN DEFAULT 0",
+                "ALTER TABLE categories ADD COLUMN hidden BOOLEAN DEFAULT 0"
+            ];
+            for (const query of columnsToPolyfill) {
+                try {
+                    await env.DB.prepare(query).run();
+                } catch(e) {}
+            }
             
             // 修补后重试
             for (let i = 0; i < writeQueries.length; i += chunkSize) {
@@ -338,7 +353,34 @@ export async function onRequestDelete(context) {
       }
     }
 
-    await env.DB.batch(queries);
+    try {
+      await env.DB.batch(queries);
+    } catch (batchErr) {
+      if (batchErr.message.includes('has no column named') || batchErr.message.includes('no such column')) {
+          const columnsToPolyfill = [
+              "ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'",
+              "ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7",
+              "ALTER TABLE user_settings ADD COLUMN theme_mode TEXT DEFAULT 'auto'",
+              "ALTER TABLE user_settings ADD COLUMN simple_mode BOOLEAN DEFAULT 0",
+              "ALTER TABLE user_settings ADD COLUMN hide_bg_mask BOOLEAN DEFAULT 0",
+              "ALTER TABLE user_settings ADD COLUMN isolated_view BOOLEAN DEFAULT 0",
+              "ALTER TABLE user_settings ADD COLUMN density TEXT DEFAULT 'standard'",
+              "ALTER TABLE user_settings ADD COLUMN card_width INTEGER DEFAULT 85",
+              "ALTER TABLE user_settings ADD COLUMN zen_mode BOOLEAN DEFAULT 1",
+              "ALTER TABLE user_settings ADD COLUMN show_frequent BOOLEAN DEFAULT 1",
+              "ALTER TABLE user_settings ADD COLUMN bg_url TEXT",
+              "ALTER TABLE items ADD COLUMN bg_color TEXT",
+              "ALTER TABLE items ADD COLUMN hidden BOOLEAN DEFAULT 0",
+              "ALTER TABLE categories ADD COLUMN hidden BOOLEAN DEFAULT 0"
+          ];
+          for (const query of columnsToPolyfill) {
+              try { await env.DB.prepare(query).run(); } catch(e) {}
+          }
+          await env.DB.batch(queries);
+      } else {
+          throw batchErr;
+      }
+    }
 
     // 3. 同步 KV 缓存
     const resetData = { ...onboardingData, lastUpdated: formatCNTime(new Date()) };

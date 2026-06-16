@@ -3920,7 +3920,10 @@ const openJsonEditor = () => {
 
             appData = parsed;
             showLoader('正在同步专家配置...');
-            await syncConfigToCloud();
+            window.isDataDirty = true;
+            if (window.manualSyncCloud) {
+                await window.manualSyncCloud();
+            }
             renderNav();
             modal.style.display = 'none';
         } catch (e) {
@@ -4441,6 +4444,47 @@ const initGlobalEvents = () => {
             throw new Error("JSON 格式解析失败: " + e.message);
         }
     };
+
+    // 绑定导入文件变化事件
+    const importFileInput = document.getElementById('import-file');
+    if (importFileInput) {
+        importFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const parsedData = parseImportedData(event.target.result);
+                    
+                    if (!parsedData.categories || !parsedData.items) {
+                        throw new Error("无效的书签数据格式");
+                    }
+                    
+                    appData.categories = parsedData.categories;
+                    appData.items = parsedData.items;
+                    if (parsedData.settings) {
+                        appData.settings = { ...appData.settings, ...parsedData.settings };
+                    }
+                    
+                    window.isDataDirty = true;
+                    if (window.manualSyncCloud) {
+                        window.manualSyncCloud();
+                    }
+                    renderNav();
+                    updateStyles();
+                    closeAllModals(true);
+                    showToast("本地导入解析成功，配置已同步");
+                } catch (err) {
+                    console.error(err);
+                    showToast(`导入失败: ${err.message}`, "#e74c3c");
+                }
+                
+                e.target.value = '';
+            };
+            reader.readAsText(file);
+        });
+    }
 
     // 监听全局键盘事件 (Core Shortcuts and Geometric Navigation)
     document.addEventListener('keydown', (e) => {

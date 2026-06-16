@@ -252,7 +252,7 @@ window.manualSyncCloud = async (refreshUI = false) => {
                 // 使用同步后回调逻辑，由 SyncUI 自动弹出成功提示
                 if (refreshUI && typeof window.openSyncCenter === 'function') window.openSyncCenter();
             } else {
-                throw new Error(data.error || "服务器拒绝保存");
+                throw new Error((data.error || "服务器拒绝保存") + " - " + (data.message || ""));
             }
         });
     }

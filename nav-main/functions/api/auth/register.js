@@ -102,8 +102,18 @@ export async function onRequestPost(context) {
         } catch (batchErr) {
             if (batchErr.message.includes('has no column named') || batchErr.message.includes('no such column')) {
                 // 自动修补缺少的列
-                try { await env.DB.prepare("ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'").run(); } catch(e) {}
-                try { await env.DB.prepare("ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7").run(); } catch(e) {}
+                const columnsToPolyfill = [
+                    "ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'",
+                    "ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7",
+                    "ALTER TABLE user_settings ADD COLUMN theme_mode TEXT DEFAULT 'auto'",
+                    "ALTER TABLE user_settings ADD COLUMN simple_mode BOOLEAN DEFAULT 0",
+                    "ALTER TABLE items ADD COLUMN bg_color TEXT",
+                    "ALTER TABLE items ADD COLUMN hidden BOOLEAN DEFAULT 0",
+                    "ALTER TABLE categories ADD COLUMN hidden BOOLEAN DEFAULT 0"
+                ];
+                for (const query of columnsToPolyfill) {
+                    try { await env.DB.prepare(query).run(); } catch(e) {}
+                }
                 // 修补后重试
                 await env.DB.batch(initQueries);
             } else {
