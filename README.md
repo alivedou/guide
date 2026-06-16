@@ -10,7 +10,7 @@
 
 - **本项目地址**：[cf-nav](https://github.com/alivedou/CF-nav/tree/v4)
 
-- **本项目测试地址**：[项目测试地址](https://helyn-hygusfmcja.dcdeploy.cloud/)
+- **本项目测试地址**：[项目测试地址](https://test--ikun-nav--25d5j47qxf4z.code.run)
 
 - 测试项目由于使用的是没有挂载外部存储的容器部署的，在运营方重启后(运营方经常重启)，数据会丢失，因此:
 - **测试项目仅用于操作示范和用户体验**。
