@@ -106,27 +106,43 @@ graph TD
 
 您可以选择以下两种极速安装方式中的任意一种：
 
-### 🔹 方式1：在线一键无感运行（强烈推荐）
+### 🔹 方式1：在线一键运行（推荐）
+
+# 境外 VPS 用户（GitHub 原生链接）
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh | bash
+bash <(curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh)
 ```
 
-- curl：负责去 GitHub 把你的脚本内容抓下来。
+# 大陆境内 VPS 用户（jsDelivr 加速镜像，解决连不上 GitHub 的问题）
 
-- -sSL：-s (silent): 静默模式，不显示进度条或错误信息。-S (show-error): 发生错误时显示错误信息（通常与 -s 连用）。-L (location): 如果页面发生了重定向（比如 GitHub 的短链接或文件地址变化），curl 会自动跟随。
-
-- | bash：管道符，意思是把抓下来的脚本内容直接塞给系统的 Bash 解释器去无盘运行，用户本地甚至不需要手动去创建文件。
-
-### 🔹 方式2：分步本地下载运行（适合需要留存脚本的用户）
 ```bash
-# 1. 下载脚本
-curl -sSL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh -o ikun.sh
+bash <(curl -sSfL https://cdn.jsdelivr.net/gh/alivedou/CF-nav@v4/ikun.sh)
+```
 
-# 2. 赋予脚本可执行权限
+---
+### 🔹 方式2：分步本地下载运行（适合需要留存脚本的用户）
+1.下载脚本（境外 VPS）
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh -o ikun.sh
+```
+
+大陆境内 VPS 请使用下方这行下载：
+
+```bash
+curl -sSfL https://cdn.jsdelivr.net/gh/alivedou/CF-nav@v4/ikun.sh -o ikun.sh
+```
+
+2.赋予脚本可执行权限
+
+```bash
 chmod +x ikun.sh
+```
 
-# 3. 启动傻瓜菜单
+3.启动傻瓜菜单
+
+```bash
 ./ikun.sh
 ```
 
