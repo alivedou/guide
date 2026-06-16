@@ -109,19 +109,19 @@ graph TD
 ### 🔹 方式1：在线一键无感运行（强烈推荐）
 
 ```bash
-curl -sSMy https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh | bash
+curl -sSL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh | bash
 ```
 
 - curl：负责去 GitHub 把你的脚本内容抓下来。
 
-- -sSMy：这是个高阶网络连招。-sS 让下载过程保持安静（不弹进度条）但报错时会说话；-M 和 -y 分别限制了最长连接和传输时间，防止因为网络墙掉导致终端死卡。
+- -sSL：-s (silent): 静默模式，不显示进度条或错误信息。-S (show-error): 发生错误时显示错误信息（通常与 -s 连用）。-L (location): 如果页面发生了重定向（比如 GitHub 的短链接或文件地址变化），curl 会自动跟随。
 
 - | bash：管道符，意思是把抓下来的脚本内容直接塞给系统的 Bash 解释器去无盘运行，用户本地甚至不需要手动去创建文件。
 
 ### 🔹 方式2：分步本地下载运行（适合需要留存脚本的用户）
 ```bash
 # 1. 下载脚本
-curl -O [https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh](https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh)
+curl -sSL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh -o ikun.sh
 
 # 2. 赋予脚本可执行权限
 chmod +x ikun.sh
