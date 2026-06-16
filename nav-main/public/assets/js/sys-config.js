@@ -42,6 +42,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
         
         if (!modal || !body) return;
 
+        modal.dataset.modalType = 'system-config';
         title.innerHTML = `<i class="ri-settings-5-line"></i> 系统配置中心`;
         const sec = config.security || { maxLoginAttempts: 5, loginLockoutMin: 10, maxRegisterPerHour: 3, registerLockoutHours: 24 };
 

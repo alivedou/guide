@@ -391,9 +391,22 @@ window.SyncUI = {
         'ANNOUNCE_DEL': { loading: '正在清理该公告记录...', success: '公告已成功下架' },
         'LAYOUT_SAVE': () => {
             const isGuest = !sysToken;
+            if (isGuest) {
+                return {
+                    loading: '正在保存修改至本地...',
+                    success: '保存成功！登录后可实现多设备同步'
+                };
+            }
+            const intervalDays = window.appData?.settings?.syncInterval || 0;
+            if (intervalDays > 0) {
+                return {
+                    loading: '正在暂存修改至本地...',
+                    success: '已暂存至本地！将根据您的自动备份周期同步至云端'
+                };
+            }
             return {
-                loading: isGuest ? '正在保存修改至本地...' : '正在暂存修改至本地...',
-                success: isGuest ? '保存成功！登录后可实现多设备同步' : '已保存至本地！由于您目前是手动备份模式，请记得前往「云端备份」手动同步'
+                loading: '正在暂存修改至本地...',
+                success: '已保存至本地！由于您目前是手动备份模式，请记得前往「云端备份」手动同步'
             };
         },
         'BACKUP_AUTO': { loading: '正在保存并自动同步到云端...', success: '保存到本地成功，且已自动同步至云端！' },
@@ -439,13 +452,16 @@ document.addEventListener('DOMContentLoaded', () => {
     initGlobalEvents();
 
     // Task 2: PWA 离线感知与状态自愈
-    window.updateNetworkStatus = () => {
+    window.updateNetworkStatus = (event) => {
         const dot = document.getElementById('network-status');
         if (!dot) return;
         if (navigator.onLine) {
             dot.className = 'network-status-dot online';
             dot.title = '网络状态：云端在线同步中';
-            if (sysToken && isDataDirty) {
+            
+            const isOnlineEvent = event && event.type === 'online';
+            const intervalDays = window.appData?.settings?.syncInterval || 0;
+            if (sysToken && isDataDirty && !isPageManagementMode && isOnlineEvent && intervalDays > 0) {
                 console.log('[Network] Connection restored. Auto-syncing to cloud...');
                 showToast("检测到网络已恢复，正在自动同步本地修改...", "#2ecc71");
                 manualSyncCloud();
@@ -453,7 +469,11 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             dot.className = 'network-status-dot offline';
             dot.title = '网络状态：本地离线暂存中';
-            showToast("网络连接已断开，您当前处于离线模式。修改将暂存本地！", "#e67e22");
+            
+            const isOfflineEvent = event && event.type === 'offline';
+            if (isOfflineEvent) {
+                showToast("网络连接已断开，您当前处于离线模式。修改将暂存本地！", "#e67e22");
+            }
         }
     };
     window.addEventListener('online', window.updateNetworkStatus);
@@ -889,7 +909,11 @@ const syncClicksToCloud = async () => {
 const handleAuthError = () => {
     console.warn('[Auth] Session expired or invalid');
     localStorage.removeItem('nav_token');
+    localStorage.removeItem('nav_current_user');
+    localStorage.removeItem('nav_app_data');
+    localStorage.removeItem('nav_last_cloud_sync');
     sysToken = '';
+    currentUser = null;
     isAdmin = false;
     showToast("会话已过期，请重新登录", "#e67e22");
     openLoginModal();
@@ -1031,6 +1055,7 @@ window.openNoticeCenter = async (targetId = null) => {
     
     if (!modal || !body) return;
 
+    modal.dataset.modalType = 'notice-center';
     title.innerText = "公告中心 (Notice Center)";
     body.innerHTML = '<div style="text-align:center; padding:30px; opacity:0.6;">正在同步最新公示内容...</div>';
     modal.style.display = 'flex';
@@ -1325,6 +1350,7 @@ const openProfileCenter = async () => {
         
         if (!modal || !body) return;
 
+        modal.dataset.modalType = 'user-profile';
         title.innerHTML = `<i class="ri-user-settings-line"></i> 个人资料中心`;
         
         const DEFAULT_AVATARS = [
@@ -1762,6 +1788,7 @@ const doLogout = async () => {
     currentUser = null;
     isAdmin = false;
     localStorage.removeItem('nav_app_data');
+    localStorage.removeItem('nav_last_cloud_sync');
     await init(true);
     showToast("已退出登录");
 };
@@ -2074,7 +2101,11 @@ const init = async (forceRender = false) => {
                     const parseTime = Date.parse(cloudData.lastUpdated.trim().replace(/-/g, '/'));
                     if (!isNaN(parseTime)) {
                         localStorage.setItem('nav_last_cloud_sync', parseTime.toString());
+                    } else {
+                        localStorage.removeItem('nav_last_cloud_sync');
                     }
+                } else if (sysToken) {
+                    localStorage.removeItem('nav_last_cloud_sync');
                 }
             
             // 同步最新的用户信息 (包含 UID)
@@ -3473,9 +3504,9 @@ const closeAllModals = (silent = false) => {
     // 1. 逻辑分流：仅当是个性化设置(Visual)或页面管理退出时，才执行“暂存引导”
     // 注意：admin-hub 和 system-config 拥有自己的独立即时保存按钮，此处不干预
     const isPersonalSettings = (modalType === 'visual-lab' || !isPageManagementMode);
-    const isAdminAction = (modalType === 'admin-hub' || modalType === 'system-config' || modalType === 'sync-center');
+    const isAdminAction = (modalType === 'admin-hub' || modalType === 'system-config' || modalType === 'sync-center' || modalType === 'notice-center' || modalType === 'user-profile');
 
-    if (!silent && isDataDirty && !isAdminAction) {
+    if (!silent && isDataDirty && !isAdminAction && !isPageManagementMode) {
         handleDataSaveOnExit();
     }
 

@@ -33,7 +33,19 @@ export async function onRequestPost(context) {
 
     // 0. 获取全局注册策略
     const configStr = await env.nav.get("system:site_config");
-    const config = configStr ? JSON.parse(configStr) : { allowOpenRegistration: true, requireInvitation: false };
+    let config = { allowOpenRegistration: true, requireInvitation: false };
+    if (configStr) {
+      try {
+        const rawConfig = JSON.parse(configStr);
+        config = {
+          allowOpenRegistration: rawConfig.allowOpenRegistration !== undefined ? rawConfig.allowOpenRegistration : true,
+          requireInvitation: rawConfig.requireInvitation !== undefined ? rawConfig.requireInvitation : false,
+          ...rawConfig
+        };
+      } catch (e) {
+        console.error('[Auth] Failed to parse system:site_config from KV:', e);
+      }
+    }
 
     const passwordHash = await sha256(password);
     const uuid = crypto.randomUUID();

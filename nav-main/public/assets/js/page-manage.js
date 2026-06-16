@@ -1029,7 +1029,12 @@ const bindImportFileListener = () => {
                     closeAllModals(true);
                     
                     if (window.sysToken) {
-                        showToast("配置已成功导入本地，退出管理时将自动同步至云端", "#27ae60");
+                        const autoSync = (window.appData.settings?.syncInterval || 0) > 0;
+                        if (autoSync) {
+                            showToast("配置已成功导入本地，退出管理时将自动同步至云端", "#27ae60");
+                        } else {
+                            showToast("配置已成功导入本地，退出管理后请记得手动同步至云端", "#3498db");
+                        }
                     } else {
                         showToast("访客模式：配置已成功导入本地", "#e67e22");
                     }

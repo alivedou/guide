@@ -458,12 +458,29 @@ app.get('/api/proxy/fetch-metadata', authenticate, async (req, res) => {
 
 // ====== 核心业务逻辑 (4.6 数据持久化) ======
 
+const formatCNTime = (date) => {
+    const d = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
 const syncUserToKV = (userId) => {
     console.log(`[KV] Syncing data for user: ${userId}`);
     const categories = db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY sort_order ASC, name ASC').all(userId);
     const items = db.prepare('SELECT * FROM items WHERE user_id = ? ORDER BY sort_order ASC, title ASC').all(userId);
     const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId);
     
+    let existingLastUpdated = null;
+    const kvDir = path.join(__dirname, 'local_kv');
+    const filePath = path.join(kvDir, `user_${userId}.json`);
+    if (fs.existsSync(filePath)) {
+        try {
+            const oldData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+            existingLastUpdated = oldData.lastUpdated;
+        } catch (e) {
+            console.error('[KV] Error reading existing file for lastUpdated:', e);
+        }
+    }
+
     const userData = {
         categories: categories.map(c => ({
             ...c, 
@@ -489,7 +506,8 @@ const syncUserToKV = (userId) => {
             link_target: settings.link_target || '_blank',
             syncInterval: settings.sync_interval !== null && settings.sync_interval !== undefined ? settings.sync_interval : 7,
             themeMode: settings.theme_mode
-        } : defaultData.settings
+        } : defaultData.settings,
+        lastUpdated: existingLastUpdated || null
     };
     
     // 强制修正 settings 中的 showFrequent 拼写 (容错)
@@ -497,10 +515,8 @@ const syncUserToKV = (userId) => {
         userData.settings.showFrequent = !!settings.show_frequent;
     }
 
-    const kvDir = path.join(__dirname, 'local_kv');
     if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
     
-    const filePath = path.join(kvDir, `user_${userId}.json`);
     fs.writeFileSync(filePath, JSON.stringify(userData, null, 2));
     console.log(`[KV] Successfully wrote ${categories.length} cats and ${items.length} items to ${filePath}`);
     return userData;
@@ -531,7 +547,18 @@ app.post('/api/auth/register', (req, res) => {
     // 0. 模拟获取策略
     const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
     let config = { allowOpenRegistration: true, requireInvitation: false };
-    if (fs.existsSync(configPath)) config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    if (fs.existsSync(configPath)) {
+        try {
+            const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            config = {
+                allowOpenRegistration: rawConfig.allowOpenRegistration !== undefined ? rawConfig.allowOpenRegistration : true,
+                requireInvitation: rawConfig.requireInvitation !== undefined ? rawConfig.requireInvitation : false,
+                ...rawConfig
+            };
+        } catch (e) {
+            console.error('[Auth] Failed to parse site_config.json:', e);
+        }
+    }
 
     const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
     const uuid = crypto.randomUUID();
@@ -1811,11 +1838,12 @@ app.post('/api/config', authenticate, (req, res) => {
     
     // 关键加固：在同步到 KV 时保留点击历史 (Task 2.5.4)
     const currentData = syncUserToKV(userId);
+    currentData.lastUpdated = formatCNTime(new Date());
     if (clicks_history) {
         currentData.clicks_history = clicks_history;
-        const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
-        fs.writeFileSync(kvPath, JSON.stringify(currentData, null, 2));
     }
+    const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
+    fs.writeFileSync(kvPath, JSON.stringify(currentData, null, 2));
     
     res.json({ success: true });
 });

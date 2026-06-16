@@ -36,6 +36,7 @@ window.openAdminHub = async (defaultTab = 'users') => {
     
     if (!modal || !body) return;
 
+    modal.dataset.modalType = 'admin-hub';
     title.innerText = "管理员控制中心 (Admin Hub)";
     body.innerHTML = '<div class="admin-hub-loading">正在加载全站数据...</div>';
     modal.style.display = 'flex';

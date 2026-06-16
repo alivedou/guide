@@ -18,6 +18,7 @@ window.openSyncCenter = () => {
     
     if (!modal || !body) return;
 
+    modal.dataset.modalType = 'sync-center';
     title.innerHTML = `<i class="ri-cloud-line"></i> 云端同步中心`;
     
     // 获取同步状态
