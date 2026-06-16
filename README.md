@@ -121,7 +121,7 @@ bash <(curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh)
 curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh -o ikun.sh
 ```
 
-大陆境内 VPS 请使用直接创建一个`ikun.sh`，复制本项目中`ikun.sh`的内容执行吧。（我试了好几个镜像源都不行，只有这个土办法了）
+大陆境内 VPS 请直接创建一个`ikun.sh`，复制本项目中`ikun.sh`的内容执行吧。（我试了好几个镜像源都不行，只有这个土办法了）
 
 
 2.赋予脚本可执行权限
