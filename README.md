@@ -93,25 +93,28 @@ graph TD
 
 *   **安全审计日志**：自动记录敏感操作，并在每日通过邮件/Telegram 发送安全汇总日报。
 
-**本项目地址**：[guide](https://github.com/alivedou/CF-nav/tree/v4)
+**本项目地址**：[项目地址](https://github.com/alivedou/CF-nav/tree/v4)
 
 ---
-## ☁️ 部署方式一：vps-docker极速部署
-具体原理详解在deployment-docker.md有具体说明，只是把手动操作步骤变成了菜单样式的交互命令。
-### 最新vps-docker部署方式
+## ☁️ 部署方式一：VPS-Docker 极速部署
 
-极速版两种方式，任选其一：
-方式1：
+具体原理详解在 `deployment-docker.md` 中有具体说明，本脚本只是将复杂的手动操作步骤封装成了菜单样式的交互式命令。
+
+您可以选择以下两种极速安装方式中的任意一种：
+
+### 🔹 方式1：在线一键无感运行（强烈推荐）
+
 ```bash
 curl -sSMy https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh | bash
 ```
+
 - curl：负责去 GitHub 把你的脚本内容抓下来。
 
 - -sSMy：这是个高阶网络连招。-sS 让下载过程保持安静（不弹进度条）但报错时会说话；-M 和 -y 分别限制了最长连接和传输时间，防止因为网络墙掉导致终端死卡。
 
 - | bash：管道符，意思是把抓下来的脚本内容直接塞给系统的 Bash 解释器去无盘运行，用户本地甚至不需要手动去创建文件。
 
-方式2:
+### 🔹 方式2：分步本地下载运行（适合需要留存脚本的用户）
 ```bash
 # 1. 下载脚本
 curl -O [https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh](https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh)
@@ -123,7 +126,7 @@ chmod +x ikun.sh
 ./ikun.sh
 ```
 
-## ☁️ 部署方式二：手动部署至 Cloudflare Pages 详细步骤
+## ☁️ 部署方式二：手动部署至 Cloudflare Pages
 
 部署本项目需要 `GitHub` 和 `Cloudflare` 账号。
 
@@ -177,7 +180,7 @@ chmod +x ikun.sh
 
 5. **点击保存。**
 
-### 第四步：初始化 D1 数据库表结构 (D1 数据库初始化)
+### 第四步：初始化 D1 数据库表结构 (D1 数据库初始化，一般只有在更新时候可能会用到，第一次部署用不上)
 系统基于多用户 D1 关系型 SQLite 运作，在首次运行前必须进行 D1 数据库的表结构初始化。我们为您提供了 **网页端一键导入（小白推荐）** 和 **本地命令行执行（开发者推荐）** 两种方式：
 
 #### 💡 方案 A：网页端控制台一键初始化 (小白极力推荐 🌟)
@@ -187,7 +190,7 @@ chmod +x ikun.sh
 2. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)，在左侧菜单点击 **“存储和数据库” (Storage & Databases)** -> **“D1”**。
 3. 点击您在第一步中创建的 **`cloudnav-db`** 数据库。
 4. 切换到顶部的 **“控制台” (Console)** 选项卡。
-5. 将刚刚复制的 SQL 代码全部粘贴到控制台的输入框内。
+5. 将刚刚复制的 SQL 代码分步粘贴到控制台的输入框内。
 6. 点击 **“执行” (Execute / Run)** 按钮。
 7. 看到下方提示执行成功，数据库表就全部创建好了！🎉
 
