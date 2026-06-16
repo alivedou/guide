@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人网站导航</title>
+    
+    <!-- DNS 预解析与预连接（优化图标及静态资源加载速度） -->
+    <link rel="dns-prefetch" href="https://icons.duckduckgo.com">
+    <link rel="preconnect" href="https://icons.duckduckgo.com" crossorigin>
+    <link rel="dns-prefetch" href="https://www.google.com">
+    <link rel="preconnect" href="https://www.google.com" crossorigin>
+    <link rel="dns-prefetch" href="https://api.iowen.cn">
+    <link rel="preconnect" href="https://api.iowen.cn" crossorigin>
+    <link rel="dns-prefetch" href="https://lib.baomitu.com">
+    <link rel="preconnect" href="https://lib.baomitu.com" crossorigin>
+    <link rel="dns-prefetch" href="https://images.unsplash.com">
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin>
+    
+    <!-- 引入外部样式资源 (使用国内加速节点) -->
+    <link href="https://lib.baomitu.com/remixicon/3.5.0/remixicon.css" rel="stylesheet">
+    
+    <!-- PWA 配置 -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#111111">
+    <link rel="apple-touch-icon" href="https://images.unsplash.com/photo-1534447677768-be436bb09401?w=192&h=192&fit=crop">
+    
+    <!-- 拖拽排序库 (国内加速) -->
+    <script src="https://lib.baomitu.com/Sortable/1.15.0/Sortable.min.js" defer></script>
+    
+    <!-- Monaco Editor (国内加速) -->
+    <script src="https://lib.baomitu.com/monaco-editor/0.45.0/min/vs/loader.js" defer></script>
+    
+    <!-- 样式文件 -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+    <!-- 管理员高亮状态栏 -->
+    <div id="admin-active-banner" class="admin-active-banner" style="display: none;">
+        <i class="ri-shield-flash-line"></i>
+        <span>当前处于管理员模式 - 所有修改将同步至全局</span>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div id="toast">操作成功</div>
+    
+    <!-- 全局加载遮罩 -->
+    <div id="global-loading-overlay" class="modal" style="z-index: 9999;">
+        <div class="global-spinner"></div>
+        <div id="global-loading-text" style="color: #fff; font-size: 15px; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">正在处理中...</div>
+    </div>
+
+    <!-- 移动端汉堡菜单按钮 -->
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="打开导航菜单">
+        <i class="ri-menu-line"></i>
+    </button>
+    <!-- 移动端/禅意模式搜索唤起按钮 (Task S.3) -->
+    <button id="btn-summon-search" class="summon-search-btn" title="搜索 (/)">
+        <i class="ri-search-2-line"></i>
+    </button>
+    <!-- 移动端遮罩 -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <div class="app-layout">
+        <!-- 左侧导航栏 -->
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-title">个人导航</span>
+                <button id="btn-notice-center" class="notice-center-btn" title="公告中心" tabindex="0">
+                    <i class="ri-notification-3-line"></i>
+                    <span class="notice-dot"></span>
+                </button>
+                <button id="btn-sidebar-pin" class="sidebar-pin-btn" title="固定/取消固定侧边栏" tabindex="0">
+                    <i class="ri-pushpin-2-line"></i>
+                </button>
+            </div>
+            <div id="sidebar-user-section" class="sidebar-user-section"></div>
+            <nav id="sidebar-nav" class="sidebar-nav"></nav>
+            <div id="sidebar-footer" class="sidebar-footer">
+                <div id="sidebar-admin-area" class="sidebar-admin-section"></div>
+            </div>
+        </aside>
+
+        <!-- 高自定义立体搜索框区域 (提升为 app-layout 级，解决 nested position:fixed 在 transform 容器下偏移截断的 W3C 规范 Bug) -->
+        <div class="search-section" id="search-section">
+            <div class="search-wrapper" id="search-wrapper">
+                <div class="search-input-group">
+                    <div class="search-engine-selector" id="search-engine-selector">
+                        <div class="current-engine" id="current-engine-trigger" tabindex="0">
+                            <i class="ri-search-2-line"></i>
+                        </div>
+                        <div class="engine-list" id="engine-list">
+                            <div class="engine-item active" data-engine="bing" data-action="https://cn.bing.com/search?q=" tabindex="0">
+                                <span class="engine-logo">🔍</span> 必应
+                            </div>
+                            <div class="engine-item" data-engine="google" data-action="https://www.google.com/search?q=" tabindex="0">
+                                <span class="engine-logo">🌐</span> 谷歌
+                            </div>
+                            <div class="engine-item" data-engine="sogou" data-action="https://www.sogou.com/web?query=" tabindex="0">
+                                <span class="engine-logo">🐶</span> 搜狗
+                            </div>
+                            <div class="engine-item" data-engine="baidu" data-action="https://www.baidu.com/s?wd=" tabindex="0">
+                                <span class="engine-logo">🇨🇳</span> 百度
+                            </div>
+                        </div>
+                    </div>
+                    <input type="text" id="sea-input" placeholder="输入关键词搜索本站，回车进行云端跳转..." autocomplete="off">
+                    <button id="sea-clear-btn" class="sea-clear-btn" title="清空"><i class="ri-close-line"></i></button>
+                </div>
+                <div class="search-dropdown" id="sea-dropdown" style="display: none;">
+                    <!-- 站内搜索匹配项或全部分类菜单列表 -->
+                    <div class="local-results-container">
+                        <div class="local-results-header" id="local-results-header"><i class="ri-global-line"></i> 直达本站内容</div>
+                        <div id="local-results-list" class="local-results-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 骨架屏（加载占位） -->
+            <div id="skeleton-screen">
+                <div class="skel-tabs">
+                    <div class="skel-tab skel-anim"></div>
+                    <div class="skel-tab skel-anim"></div>
+                    <div class="skel-tab skel-anim"></div>
+                </div>
+                <div class="skel-grid">
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                    <div class="skel-card skel-anim"></div>
+                </div>
+            </div>
+
+            <!-- 导航内容 -->
+            <div id="main-content" style="display: none;">
+                
+                <!-- 导航视界 (Navigation Horizon) - 禅意模式专用 -->
+                <div id="zen-horizon" class="zen-horizon">
+                    <div id="zen-frequent-sites" class="zen-frequent-container"></div>
+                    <div id="zen-nav-menu" class="zen-nav-menu"></div>
+                </div>
+
+                <div id="grid-container" class="grid-container"></div>
+                <!-- 沉浸模式展开按钮 -->
+                <div id="zen-expand-btn" class="zen-expand-btn" style="display: none;">
+                    <i class="ri-arrow-down-double-line"></i>
+                    <span>展开发现更多</span>
+                </div>
+                
+                <!-- 页脚版权信息 -->
+                <div class="footer-info">
+                    <div class="copyright-text">Copyright &copy; 2026 adou. Licensed under <a href="/LICENSE.txt" target="_blank" style="color: inherit; text-decoration: underline; opacity: 0.8;">MIT</a>.</div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- 隐藏的文件输入框（用于导入配置） -->
+    <input type="file" id="import-file" accept=".json,.html,.htm,.txt,.md" style="display:none">
+
+    <!-- 登录/注册验证弹窗 -->
+    <div id="auth-overlay" class="modal">
+        <div class="modal-content" style="text-align:center">
+            <button id="btn-close-auth" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#777; cursor:pointer; font-size:24px">×</button>
+            
+            <!-- 视图 1: 登录注册表单 -->
+            <div id="auth-form-view">
+                <div id="auth-title-group" class="auth-title-group">
+                    <h3 id="tab-login" class="auth-tab active">登录</h3>
+                    <h3 id="tab-register" class="auth-tab">注册</h3>
+                </div>
+                <div class="auth-form">
+                    <input type="text" id="auth-username" placeholder="用户名" autocomplete="off" style="text-align:center; margin-bottom: 12px;">
+                    <input type="password" id="auth-password" placeholder="密码" autocomplete="new-password" style="text-align:center; margin-bottom: 12px;">
+                    <input type="text" id="auth-invite-code" placeholder="邀请码 (必填/选填)" autocomplete="off" style="text-align:center; margin-bottom: 20px; display: none;">
+                    <button id="btn-auth-submit" class="tab-btn active" style="width:100%">确认</button>
+                </div>
+                <p id="auth-switch-tip" style="font-size:12px; color:#888; margin-top:15px;">还没有账号？点击上方“注册”开始</p>
+            </div>
+
+            <!-- 视图 2: 已登录用户信息 (Task 39.1) -->
+            <div id="auth-user-view" style="display:none; padding: 10px 0;">
+                <div class="user-avatar-placeholder" style="font-size: 40px; color: var(--primary-color); margin-bottom: 10px;">
+                    <i class="ri-user-smile-line"></i>
+                </div>
+                <h3 style="margin: 5px 0 10px;">当前登录用户</h3>
+                <div id="auth-user-info" style="margin-bottom: 25px;">
+                    <p style="font-size: 18px; font-weight: bold; margin: 0;" id="auth-current-user-name">加载中...</p>
+                    <p style="font-size: 12px; color: #888; margin-top: 5px;" id="auth-user-role-label">普通用户</p>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <button id="btn-logout-fast" class="tab-btn" style="width:100%; background: #e74c3c;">退出登录</button>
+                    <button id="btn-switch-auth" style="background:none; border:none; color:var(--primary-color); cursor:pointer; font-size:13px; text-decoration: underline;">切换账号 / 登录其他用户</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑弹窗 -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <button id="btn-close-edit" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#777; cursor:pointer; font-size:24px">×</button>
+            <h4 id="edit-title" style="margin-bottom:20px; font-size:16px">编辑详情</h4>
+            <div id="edit-form-body"></div>
+            <button id="btn-confirm-edit" class="tab-btn active" style="width:100%; margin-top:10px">确认保存修改</button>
+        </div>
+    </div>
+
+    <!-- 管理员高危操作二次验证弹窗 (Task NT-V2.18) -->
+    <div id="admin-auth-modal" class="modal" style="z-index: 11000;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; position: relative;">
+            <div style="font-size: 32px; color: #f1c40f; margin-bottom: 15px;"><i class="ri-shield-keyhole-line"></i></div>
+            <h4 id="auth-modal-title" style="margin-bottom:10px; font-size:16px; color: var(--text);">管理员二次核验</h4>
+            <p id="auth-modal-message" style="font-size:12px; color: var(--text-dim); margin-bottom: 20px; line-height: 1.5;"></p>
+            <div class="form-group" style="text-align: left;">
+                <label>验证密码</label>
+                <input type="password" id="auth-modal-password" placeholder="请输入管理员密码..." style="width: 100%;">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button id="btn-auth-cancel" class="tab-btn" style="flex: 1;">取消</button>
+                <button id="btn-auth-confirm" class="tab-btn active" style="flex: 1;">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通用二次确认弹窗 (Task NT-V2.10) -->
+    <div id="sys-confirm-modal" class="modal" style="z-index: 12000;">
+        <div class="modal-content" style="max-width: 400px; text-align: center; position: relative;">
+            <div id="confirm-modal-icon" style="font-size: 42px; color: #f39c12; margin-bottom: 15px; animation: focus-pulse 1.5s infinite;"><i class="ri-error-warning-line"></i></div>
+            <h4 id="confirm-modal-title" style="margin-bottom:10px; font-size:16px; color: var(--text);">安全确认</h4>
+            <p id="confirm-modal-message" style="font-size:12px; color: var(--text-dim); margin-bottom: 20px; line-height: 1.5;"></p>
+            <div style="display: flex; gap: 10px;">
+                <button id="btn-confirm-cancel" class="tab-btn" style="flex: 1; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: var(--text-dim); cursor: pointer; border-radius: 8px;">取消</button>
+                <button id="btn-confirm-ok" class="tab-btn active" style="flex: 1; cursor: pointer; border-radius: 8px;">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 视频播放弹窗 -->
+    <div id="video-modal" class="modal">
+        <div class="video-modal-content">
+            <button id="btn-close-video" class="video-close-btn"><i class="ri-close-line"></i></button>
+            <div class="video-player-wrapper">
+                <iframe id="video-iframe" src="" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" frameborder="0"></iframe>
+            </div>
+            <div class="video-info">
+                <h3 id="video-title"></h3>
+                <p id="video-desc"></p>
+                <a id="video-link" href="#" target="_blank" class="video-ext-link">
+                    <i class="ri-external-link-line"></i> 在原平台打开
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 批量管理工具栏 (Task 3.3) -->
+    <div id="batch-actions-bar" class="batch-actions-bar">
+        <div class="batch-info">
+            <i class="ri-checkbox-multiple-line"></i>
+            <span>已选中 <b id="batch-count">0</b> 项</span>
+        </div>
+        <div class="batch-btns">
+            <button class="batch-btn move" onclick="openBatchMoveModal()">
+                <i class="ri-drag-move-fill"></i> 移动分类
+            </button>
+            <button class="batch-btn hide" onclick="doBatchToggleHidden()" style="background: rgba(243, 156, 18, 0.85);">
+                <i class="ri-eye-off-line"></i> 批量显隐
+            </button>
+            <button class="batch-btn delete" onclick="doBatchDelete()">
+                <i class="ri-delete-bin-line"></i> 批量删除
+            </button>
+            <button class="batch-btn cancel" onclick="togglePageManagement(false)">
+                <i class="ri-close-line"></i> 退出管理
+            </button>
+        </div>
+    </div>
+
+    <!-- Monaco Editor 弹窗 -->
+    <div id="monaco-modal" class="modal">
+        <div class="monaco-modal-content">
+            <div class="monaco-header">
+                <h4><i class="ri-code-s-slash-line"></i> JSON 数据编辑器</h4>
+                <div class="monaco-actions">
+                    <button id="btn-monaco-format" class="monaco-action-btn" title="格式化"><i class="ri-align-left"></i> 格式化</button>
+                    <button id="btn-monaco-save" class="monaco-action-btn primary" title="保存"><i class="ri-save-line"></i> 保存</button>
+                    <button id="btn-close-monaco" class="monaco-action-btn close" title="关闭"><i class="ri-close-line"></i></button>
+                </div>
+            </div>
+            <div id="monaco-container" class="monaco-container"></div>
+        </div>
+    </div>
+
+    <!-- 快捷导航按钮组 -->
+    <div id="quick-nav-group" class="quick-nav-group">
+        <button id="scroll-to-top" class="quick-nav-btn" title="回到顶部">
+            <i class="ri-arrow-up-s-line"></i>
+        </button>
+        <button id="scroll-to-bottom" class="quick-nav-btn" title="直达底部">
+            <i class="ri-arrow-down-s-line"></i>
+        </button>
+    </div>
+
+    <!-- 键盘快捷键帮助手册弹窗 -->
+    <div id="keyboard-help-modal" class="modal" style="z-index: 10500;">
+        <div class="modal-content" style="max-width: 480px; text-align: left; position: relative;">
+            <button id="btn-close-keyboard-help" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#777; cursor:pointer; font-size:24px">×</button>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="font-size: 36px; color: var(--primary-color);"><i class="ri-keyboard-line"></i></div>
+                <h4 style="font-size:16px; color: var(--text); margin-top: 5px;">键盘快捷键指南</h4>
+            </div>
+            <div class="keyboard-shortcuts-list" style="display: flex; flex-direction: column; gap: 16px; font-size: 13px; max-height: 480px; overflow-y: auto; padding-right: 4px;">
+                <!-- 分组 1：全局核心调度 -->
+                <div>
+                    <div style="font-weight: bold; color: var(--primary-color); margin-bottom: 8px; border-left: 3px solid var(--primary-color); padding-left: 6px; font-size: 13px;">视图与核心调度</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Ctrl</kbd> + <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">B</kbd></span>
+                            <span style="color: var(--text-dim);">隐藏/显示侧边栏分类</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Alt</kbd> + <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Z</kbd></span>
+                            <span style="color: var(--text-dim);">开启/退出极简禅意模式</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Ctrl</kbd> / <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Alt</kbd> + <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">L</kbd></span>
+                            <span style="color: var(--text-dim);">唤起个人中心/登录弹窗</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 分组 2：搜索与呼出 -->
+                <div>
+                    <div style="font-weight: bold; color: var(--primary-color); margin-bottom: 8px; border-left: 3px solid var(--primary-color); padding-left: 6px; font-size: 13px;">智能搜索与唤醒</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">/</kbd> 或 <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">任意字母</kbd></span>
+                            <span style="color: var(--text-dim);">自动激活并聚焦中央搜索框</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Ctrl</kbd> + <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">K</kbd></span>
+                            <span style="color: var(--text-dim);">一键清空搜索并重新聚焦</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Esc</kbd></span>
+                            <span style="color: var(--text-dim);">智能退栈（关闭弹窗➔搜索➔管理➔侧边栏）</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 分组 3：全键盘极客操控 -->
+                <div>
+                    <div style="font-weight: bold; color: var(--primary-color); margin-bottom: 8px; border-left: 3px solid var(--primary-color); padding-left: 6px; font-size: 13px;">无鼠标全键盘操控</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">←</kbd> <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">↑</kbd> <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">→</kbd> <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">↓</kbd></span>
+                            <span style="color: var(--text-dim);">智能 4 向空间网格几何焦点流转</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Enter</kbd> 或 <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Space</kbd></span>
+                            <span style="color: var(--text-dim);">访问/激活选中高亮的导航卡片项</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Home</kbd> / <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">End</kbd></span>
+                            <span style="color: var(--text-dim);">平滑滚动直达页面最顶端/最底端</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 分组 4：本指南 -->
+                <div>
+                    <div style="font-weight: bold; color: var(--primary-color); margin-bottom: 8px; border-left: 3px solid var(--primary-color); padding-left: 6px; font-size: 13px;">帮助手册</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 4px;">
+                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Shift + /</kbd> (即 <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">?</kbd> 键)</span>
+                            <span style="color: var(--text-dim);">唤起/关闭本快捷键指南</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 文件 -->
+    <script src="/assets/js/utils.js"></script>
+    <script src="/assets/js/colorExtractor.js"></script>
+    <script src="/assets/js/emoji-pool.js"></script>
+    <script src="/assets/js/theme-mode.js"></script>
+    <script src="/assets/js/personalization.js"></script>
+    <script src="/assets/js/cloud-sync.js"></script>
+    <script src="/assets/js/sys-config.js"></script>
+    <script src="/assets/js/user-manage.js"></script>
+    <script src="/assets/js/page-manage.js"></script>
+    <script src="/assets/js/app.js"></script>
+</body>
+</html>
