@@ -1,4 +1,4 @@
-# 🚀 高度自定义高颜值导航网站
+# 🚀 高度自定义高颜值导航网站(含vps极速部署方式)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -8,7 +8,7 @@
 
 这是一个具有超强自适应性、高辨识度视觉设计、支持实时自定义编辑的极致导航网站。本项目支持 **Cloudflare Pages +  KV + D1** 无服务器极速部署，同时也自带本地 Node.js 离线开发模拟服务，为您实现“线上线下、一键全通”的无缝体验。
 
-- **本项目地址**：[guide](https://github.com/alivedou/CF-nav/tree/v4)
+- **本项目地址**：[cf-nav](https://github.com/alivedou/CF-nav/tree/v4)
 
 - **本项目测试地址**：[项目测试地址](https://helyn-hygusfmcja.dcdeploy.cloud/)
 
@@ -20,6 +20,10 @@
 > 本项目是在 `880824` 同志的 `cloudflare-nav` [项目地址](https://github.com/880824/cloudflare-nav) 基础上开发的，针对日常使用痛点进行了深度优化。
 
 ---
+## 📍 快速导航
+* [🚀 飞往：VPS-Docker 极速部署](#️-部署方式一vps-docker-极速部署)
+* [⚡ 飞往：手动部署至 Cloudflare Pages](#️-部署方式二手动部署至-cloudflare-pages白嫖cloudflare)
+* [🔌 飞往：浏览器插件配合使用](#-浏览器插件配合使用推荐)
 
 ## 🏗️ 系统架构
 
@@ -126,7 +130,7 @@ chmod +x ikun.sh
 ./ikun.sh
 ```
 
-## ☁️ 部署方式二：手动部署至 Cloudflare Pages
+## ☁️ 部署方式二：手动部署至 Cloudflare Pages（白嫖cloudflare）
 
 部署本项目需要 `GitHub` 和 `Cloudflare` 账号。
 
