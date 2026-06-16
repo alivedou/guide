@@ -108,18 +108,11 @@ graph TD
 
 ### 🔹 方式1：在线一键运行（推荐）
 
-# 境外 VPS 用户（GitHub 原生链接）
+境外 VPS 用户（GitHub 原生链接）
 
 ```bash
 bash <(curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh)
 ```
-
-# 大陆境内 VPS 用户（jsDelivr 加速镜像，解决连不上 GitHub 的问题）
-
-```bash
-bash <(curl -sSfL https://cdn.jsdelivr.net/gh/alivedou/CF-nav@v4/ikun.sh)
-```
-
 ---
 ### 🔹 方式2：分步本地下载运行（适合需要留存脚本的用户）
 1.下载脚本（境外 VPS）
@@ -128,11 +121,8 @@ bash <(curl -sSfL https://cdn.jsdelivr.net/gh/alivedou/CF-nav@v4/ikun.sh)
 curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh -o ikun.sh
 ```
 
-大陆境内 VPS 请使用下方这行下载：
+大陆境内 VPS 请使用直接创建一个`ikun.sh`，复制本项目中`ikun.sh`的内容执行吧。（我试了好几个镜像源都不行，只有这个土办法了）
 
-```bash
-curl -sSfL https://cdn.jsdelivr.net/gh/alivedou/CF-nav@v4/ikun.sh -o ikun.sh
-```
 
 2.赋予脚本可执行权限
 
