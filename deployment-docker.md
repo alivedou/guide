@@ -6,7 +6,54 @@
 
 # 📋 导航站：VPS 生产环境标准部署指南
 
-## ps：需要先手动去到github actions手动生成一个docker镜像
+
+## 一：极速版本（最新vps-docker部署方式）
+
+您可以选择以下两种极速安装方式中的任意一种：
+
+### 🔹 方式1：在线一键运行（推荐）
+
+# 境外 VPS 用户（GitHub 原生链接）
+
+```bash
+bash <(curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh)
+```
+
+# 大陆境内 VPS 用户（jsDelivr 加速镜像，解决连不上 GitHub 的问题）
+
+```bash
+bash <(curl -sSfL https://cdn.jsdelivr.net/gh/alivedou/CF-nav@v4/ikun.sh)
+```
+
+---
+### 🔹 方式2：分步本地下载运行（适合需要留存脚本的用户）
+1.下载脚本（境外 VPS）
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh -o ikun.sh
+```
+
+大陆境内 VPS 请使用下方这行下载：
+
+```bash
+curl -sSfL https://cdn.jsdelivr.net/gh/alivedou/CF-nav@v4/ikun.sh -o ikun.sh
+```
+
+2.赋予脚本可执行权限
+
+```bash
+chmod +x ikun.sh
+```
+
+3.启动傻瓜菜单
+
+```bash
+./ikun.sh
+```
+
+## 二：手动版本(初代vps-docker部署方式)
+
+### ps：需要先手动去到github actions手动生成一个docker镜像
 
 ## 📂 第一步：准备宿主机工作目录
 
