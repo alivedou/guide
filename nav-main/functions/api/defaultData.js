@@ -60,7 +60,7 @@ export const defaultData = {
 
     // ===== AI分类 (D01) =====
     { id: "D001", catId: "D01", title: "文心一言", url: "https://yiyan.baidu.com/", desc: "百度 AI 助手", icon: "", hidden: false },
-    { id: "D002", catId: "D01", title: "通义千问", url: "https://tongyi.aliyun.com/", desc: "阿里 AI 助手", icon: "", hidden: false },
+    { id: "D002", catId: "D01", title: "通义千问", url: "https://chat.qwen.ai/", desc: "阿里 AI 助手", icon: "", hidden: false },
     { id: "D003", catId: "D01", title: "Kimi", url: "https://www.kimi.com/", desc: "超长上下文 AI", icon: "", hidden: false },
     { id: "D004", catId: "D01", title: "豆包", url: "https://www.doubao.com/", desc: "字节 AI 助手", icon: "", hidden: false },
     { id: "D005", catId: "D01", title: "DeepSeek", url: "https://www.deepseek.com/", desc: "深度求索 AI", icon: "", hidden: false }

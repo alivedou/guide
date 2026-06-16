@@ -1017,6 +1017,224 @@ const updateStyles = () => {
     // Task 6.3: 同步响应式侧边栏状态
     if (window.autoAdjustSidebar) window.autoAdjustSidebar();
 };
+
+// Task 6.8: 公告中心交互逻辑
+window.openNoticeCenter = async (targetId = null) => {
+    lastFocusedElement = document.activeElement; // Task 37.2
+    // Task 9.6: 互斥显示
+    closeAllModals();
+
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    
+    if (!modal || !body) return;
+
+    title.innerText = "公告中心 (Notice Center)";
+    body.innerHTML = '<div style="text-align:center; padding:30px; opacity:0.6;">正在同步最新公示内容...</div>';
+    modal.style.display = 'flex';
+    confirmBtn.style.display = 'none';
+
+    const renderList = (announcements) => {
+        if (!announcements || announcements.length === 0) {
+            const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            body.innerHTML = `
+                <div class="empty-notice" style="text-align:center; padding:40px; opacity:0.6;">
+                    <i class="ri-inbox-line" style="font-size:32px; display:block; margin-bottom:10px;"></i>
+                    暂无公示中的公告
+                    ${isLocal ? `
+                        <div style="margin-top:20px; padding:12px; background:rgba(241,196,15,0.1); border:1px dashed #f1c40f; border-radius:8px; font-size:11px; color:#d35400;">
+                            <strong>👨‍💻 开发者提示 (Local Dev):</strong><br>
+                            本地 D1 数据库可能尚未同步或未添加公告。<br>
+                            请检查 <code>migrations/</code> 是否执行，或进入管理后台添加。
+                        </div>
+                    ` : ''}
+                </div>`;
+            return;
+        }
+
+        const unreadCount = announcements.filter(a => !(a.is_read || localStorage.getItem(`read_notice_${a.id}`))).length;
+        const hideRead = localStorage.getItem('nav_hide_read_announcements') === 'true';
+        const isGuest = !sysToken;
+
+        body.innerHTML = `
+            <div id="notice-center-batch-bar" class="admin-batch-bar visible" style="margin-bottom:15px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; width:100%; box-sizing:border-box;">
+                <span style="font-size:12px; font-weight:bold; color:var(--text);"><i class="ri-notification-3-line"></i> 公告实时公示</span>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <label class="toggle-hide-read" ${isGuest ? 'style="opacity:0.5; cursor:not-allowed; font-size:11px;" title="登录后可同步阅读状态"' : 'style="font-size:11px; cursor:pointer;"'}>
+                        <input type="checkbox" ${hideRead ? 'checked' : ''} ${isGuest ? 'disabled' : 'onchange="toggleHideRead(this.checked)"'}> 隐藏已读
+                    </label>
+                    ${isGuest 
+                        ? `<button class="batch-btn" onclick="openLoginModal()"><i class="ri-user-shared-line"></i> 登录同步</button>`
+                        : (unreadCount > 0 ? `<button class="batch-btn" onclick="markAllNoticesRead()"><i class="ri-checkbox-multiple-line"></i> 全部标记已读</button>` : '')
+                    }
+                </div>
+            </div>
+            
+            <div class="form-group" style="margin-bottom:15px;">
+                <input type="text" id="notice-search-kw" placeholder="输入关键字模糊检索公告..." style="width:100%;" oninput="handleNoticeCenterSearch(this.value)">
+            </div>
+            
+            <div style="font-size: 12px; opacity: 0.5; margin-bottom:10px;">共 ${announcements.length} 条公告</div>
+            <div class="notice-list-container">
+                ${announcements.map(a => {
+                    const isRead = a.is_read || localStorage.getItem(`read_notice_${a.id}`) === 'true';
+                    // 如果是目标 ID，则强制显示（即使开启了隐藏已读）
+                    const forceShow = targetId && targetId == a.id;
+                    return `
+                        <div class="notice-list-item ${a.is_top ? 'is-top' : ''} ${isRead ? 'is-read' : 'is-unread'} ${hideRead && isRead && !forceShow ? 'hide-read' : ''}" 
+                             id="notice-item-${a.id}" data-id="${a.id}" onclick="toggleNotice(this, '${a.id}')">
+                            <div class="notice-item-header">
+                                <span class="notice-item-title">
+                                    ${a.is_top ? '<span class="notice-badge badge-top">置顶</span>' : ''}
+                                    ${!isRead ? '<span class="notice-badge badge-new">NEW</span>' : ''}
+                                    <span class="title-text" style="margin-left: ${a.is_top || !isRead ? '8px' : '0'}">${a.title}</span>
+                                </span>
+                                <span class="notice-item-date">${formatSystemDate(a.created_at, false)}</span>
+                                <i class="ri-arrow-down-s-line notice-item-arrow"></i>
+                            </div>
+                            <div class="notice-item-content">${a.content.replace(/\n/g, '<br>')}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+
+        // 处理 targetId 自动展开和滚动
+        if (targetId) {
+            setTimeout(() => {
+                const targetEl = document.getElementById(`notice-item-${targetId}`);
+                if (targetEl) {
+                    toggleNotice(targetEl, targetId);
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 100);
+        }
+    };
+
+    try {
+        const res = await fetch('/api/announcements', {
+            headers: sysToken ? { 'Authorization': sysToken } : {}
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        
+        if (data && Array.isArray(data.announcements)) {
+            cachedAnnouncements = data.announcements;
+            renderList(cachedAnnouncements);
+
+            // Task 37.2: 自动聚焦第一个项
+            setTimeout(() => {
+                modal.querySelector('.notice-list-item')?.focus();
+            }, 50);
+            
+            // Task 37.2: 自动聚焦第一个 Tab
+            setTimeout(() => {
+                modal.querySelector('.hub-tab')?.focus();
+            }, 50);
+        } else {
+            throw new Error('Invalid data format');
+        }
+    } catch (e) {
+        console.error('[Notice Center] Error:', e);
+        if (cachedAnnouncements && cachedAnnouncements.length > 0) {
+            showToast("使用本地缓存数据...", "#e67e22");
+            renderList(cachedAnnouncements);
+        } else {
+            body.innerHTML = `
+                <div class="error-text" style="text-align:center; padding:30px;">
+                    <i class="ri-wifi-off-line" style="font-size:32px; display:block; margin-bottom:10px; opacity:0.3;"></i>
+                    无法获取公告信息，请检查网络连接<br>
+                    <small style="opacity:0.5; font-size:11px;">Error: ${e.message}</small>
+                </div>`;
+        }
+    }
+};
+
+window.handleNoticeCenterSearch = (kw) => {
+    const keyword = kw.trim().toLowerCase();
+    const items = document.querySelectorAll('.notice-list-container .notice-list-item');
+    items.forEach(el => {
+        const title = el.querySelector('.title-text')?.innerText.toLowerCase() || '';
+        const content = el.querySelector('.notice-item-content')?.innerText.toLowerCase() || '';
+        const matched = title.includes(keyword) || content.includes(keyword);
+        el.style.display = matched ? 'block' : 'none';
+    });
+};
+
+window.toggleNotice = async (el, id) => {
+    const isExpanded = el.classList.contains('is-expanded');
+    
+    // 折叠其他已展开的 (Accordion 模式)
+    document.querySelectorAll('.notice-list-item.is-expanded').forEach(item => {
+        if (item !== el) item.classList.remove('is-expanded');
+    });
+
+    el.classList.toggle('is-expanded');
+
+    // 如果是第一次展开且未读，标记为已读 (Task 7.3: 游客也可在本地标记已读)
+    const isUnread = el.classList.contains('is-unread');
+    if (!isExpanded && isUnread) {
+        el.classList.remove('is-unread');
+        el.classList.add('is-read');
+        const badge = el.querySelector('.badge-new');
+        if (badge) badge.remove();
+        
+        // 记录到本地，消除红点
+        localStorage.setItem(`read_notice_${id}`, 'true');
+        const notice = cachedAnnouncements.find(a => a.id == id);
+        if (notice) notice.is_read = 1;
+
+        // Task 7.4: 立即刷新全局 Badge
+        refreshNoticeBadge();
+        
+        if (sysToken) {
+            try {
+                await fetch('/api/announcements', {
+                    method: 'POST',
+                    headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: [id] })
+                });
+            } catch (e) { console.warn('[Notice] Sync read state failed'); }
+        }
+    }
+};
+
+window.toggleHideRead = (checked) => {
+    localStorage.setItem('nav_hide_read_announcements', checked);
+    const items = document.querySelectorAll('.notice-list-item.is-read');
+    items.forEach(item => item.classList.toggle('hide-read', checked));
+    
+    // Task 6.31: 切换隐藏状态后同步刷新 Badge 状态 (仅针对已读项被过滤的情况)
+    refreshNoticeBadge();
+};
+
+window.markAllNoticesRead = async () => {
+    if (!cachedAnnouncements.length) return;
+    
+    const unreadIds = cachedAnnouncements.filter(a => !(a.is_read || localStorage.getItem(`read_notice_${a.id}`))).map(a => a.id);
+    if (unreadIds.length === 0) return;
+
+    unreadIds.forEach(id => localStorage.setItem(`read_notice_${id}`, 'true'));
+    cachedAnnouncements.forEach(a => { if (unreadIds.includes(a.id)) a.is_read = 1; });
+    
+    showToast("已全部标记为已读");
+    refreshNoticeBadge();
+    
+    if (sysToken) {
+        try {
+            await fetch('/api/announcements', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${sysToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: unreadIds })
+            });
+        } catch (e) { console.warn('[Notice] Sync bulk read failed'); }
+    }
+    
+    openNoticeCenter(); // 刷新列表状态
+};
+
 window.updateStyles = updateStyles;
 
 // Task 12.1 & 16.3 & 20.3: Bing 壁纸获取与缓存优化 (先用旧图，异步更同步)
@@ -3616,8 +3834,6 @@ window.requireSystemConfirm = (title, message, isDanger = false) => {
     });
 };
 
-
-
 window.formatMonacoJson = () => {
     if (!monacoEditor) return;
     try {
@@ -3629,229 +3845,6 @@ window.formatMonacoJson = () => {
         showToast("JSON 格式错误，无法格式化", "#e74c3c");
     }
 };
-
-
-
-// Task 6.8: 公告中心交互逻辑
-window.openNoticeCenter = async (targetId = null) => {
-    lastFocusedElement = document.activeElement; // Task 37.2
-    // Task 9.6: 互斥显示
-    closeAllModals();
-
-    const modal = document.getElementById('edit-modal');
-    const title = document.getElementById('edit-title');
-    const body = document.getElementById('edit-form-body');
-    const confirmBtn = document.getElementById('btn-confirm-edit');
-    
-    if (!modal || !body) return;
-
-    title.innerText = "公告中心 (Notice Center)";
-    body.innerHTML = '<div style="text-align:center; padding:30px; opacity:0.6;">正在同步最新公示内容...</div>';
-    modal.style.display = 'flex';
-    confirmBtn.style.display = 'none';
-
-    const renderList = (announcements) => {
-        if (!announcements || announcements.length === 0) {
-            const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-            body.innerHTML = `
-                <div class="empty-notice" style="text-align:center; padding:40px; opacity:0.6;">
-                    <i class="ri-inbox-line" style="font-size:32px; display:block; margin-bottom:10px;"></i>
-                    暂无公示中的公告
-                    ${isLocal ? `
-                        <div style="margin-top:20px; padding:12px; background:rgba(241,196,15,0.1); border:1px dashed #f1c40f; border-radius:8px; font-size:11px; color:#d35400;">
-                            <strong>👨‍💻 开发者提示 (Local Dev):</strong><br>
-                            本地 D1 数据库可能尚未同步或未添加公告。<br>
-                            请检查 <code>migrations/</code> 是否执行，或进入管理后台添加。
-                        </div>
-                    ` : ''}
-                </div>`;
-            return;
-        }
-
-        const unreadCount = announcements.filter(a => !(a.is_read || localStorage.getItem(`read_notice_${a.id}`))).length;
-        const hideRead = localStorage.getItem('nav_hide_read_announcements') === 'true';
-        const isGuest = !sysToken;
-
-        body.innerHTML = `
-            <div id="notice-center-batch-bar" class="admin-batch-bar visible" style="margin-bottom:15px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; width:100%; box-sizing:border-box;">
-                <span style="font-size:12px; font-weight:bold; color:var(--text);"><i class="ri-notification-3-line"></i> 公告实时公示</span>
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <label class="toggle-hide-read" ${isGuest ? 'style="opacity:0.5; cursor:not-allowed; font-size:11px;" title="登录后可同步阅读状态"' : 'style="font-size:11px; cursor:pointer;"'}>
-                        <input type="checkbox" ${hideRead ? 'checked' : ''} ${isGuest ? 'disabled' : 'onchange="toggleHideRead(this.checked)"'}> 隐藏已读
-                    </label>
-                    ${isGuest 
-                        ? `<button class="batch-btn" onclick="openLoginModal()"><i class="ri-user-shared-line"></i> 登录同步</button>`
-                        : (unreadCount > 0 ? `<button class="batch-btn" onclick="markAllNoticesRead()"><i class="ri-checkbox-multiple-line"></i> 全部标记已读</button>` : '')
-                    }
-                </div>
-            </div>
-            
-            <div class="form-group" style="margin-bottom:15px;">
-                <input type="text" id="notice-search-kw" placeholder="输入关键字模糊检索公告..." style="width:100%;" oninput="handleNoticeCenterSearch(this.value)">
-            </div>
-            
-            <div style="font-size: 12px; opacity: 0.5; margin-bottom:10px;">共 ${announcements.length} 条公告</div>
-            <div class="notice-list-container">
-                ${announcements.map(a => {
-                    const isRead = a.is_read || localStorage.getItem(`read_notice_${a.id}`) === 'true';
-                    // 如果是目标 ID，则强制显示（即使开启了隐藏已读）
-                    const forceShow = targetId && targetId == a.id;
-                    return `
-                        <div class="notice-list-item ${a.is_top ? 'is-top' : ''} ${isRead ? 'is-read' : 'is-unread'} ${hideRead && isRead && !forceShow ? 'hide-read' : ''}" 
-                             id="notice-item-${a.id}" data-id="${a.id}" onclick="toggleNotice(this, '${a.id}')">
-                            <div class="notice-item-header">
-                                <span class="notice-item-title">
-                                    ${a.is_top ? '<span class="notice-badge badge-top">置顶</span>' : ''}
-                                    ${!isRead ? '<span class="notice-badge badge-new">NEW</span>' : ''}
-                                    <span class="title-text" style="margin-left: ${a.is_top || !isRead ? '8px' : '0'}">${a.title}</span>
-                                </span>
-                                <span class="notice-item-date">${formatSystemDate(a.created_at, false)}</span>
-                                <i class="ri-arrow-down-s-line notice-item-arrow"></i>
-                            </div>
-                            <div class="notice-item-content">${a.content.replace(/\n/g, '<br>')}</div>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        `;
-
-        // 处理 targetId 自动展开和滚动
-        if (targetId) {
-            setTimeout(() => {
-                const targetEl = document.getElementById(`notice-item-${targetId}`);
-                if (targetEl) {
-                    toggleNotice(targetEl, targetId);
-                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 100);
-        }
-    };
-
-    try {
-        const res = await fetch('/api/announcements', {
-            headers: sysToken ? { 'Authorization': sysToken } : {}
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        
-        if (data && Array.isArray(data.announcements)) {
-            cachedAnnouncements = data.announcements;
-            renderList(cachedAnnouncements);
-
-            // Task 37.2: 自动聚焦第一个项
-            setTimeout(() => {
-                modal.querySelector('.notice-list-item')?.focus();
-            }, 50);
-            
-            // Task 37.2: 自动聚焦第一个 Tab
-            setTimeout(() => {
-                modal.querySelector('.hub-tab')?.focus();
-            }, 50);
-        } else {
-            throw new Error('Invalid data format');
-        }
-    } catch (e) {
-        console.error('[Notice Center] Error:', e);
-        if (cachedAnnouncements && cachedAnnouncements.length > 0) {
-            showToast("使用本地缓存数据...", "#e67e22");
-            renderList(cachedAnnouncements);
-        } else {
-            body.innerHTML = `
-                <div class="error-text" style="text-align:center; padding:30px;">
-                    <i class="ri-wifi-off-line" style="font-size:32px; display:block; margin-bottom:10px; opacity:0.3;"></i>
-                    无法获取公告信息，请检查网络连接<br>
-                    <small style="opacity:0.5; font-size:11px;">Error: ${e.message}</small>
-                </div>`;
-        }
-    }
-};
-
-window.handleNoticeCenterSearch = (kw) => {
-    const keyword = kw.trim().toLowerCase();
-    const items = document.querySelectorAll('.notice-list-container .notice-list-item');
-    items.forEach(el => {
-        const title = el.querySelector('.title-text')?.innerText.toLowerCase() || '';
-        const content = el.querySelector('.notice-item-content')?.innerText.toLowerCase() || '';
-        const matched = title.includes(keyword) || content.includes(keyword);
-        el.style.display = matched ? 'block' : 'none';
-    });
-};
-
-window.toggleNotice = async (el, id) => {
-    const isExpanded = el.classList.contains('is-expanded');
-    
-    // 折叠其他已展开的 (Accordion 模式)
-    document.querySelectorAll('.notice-list-item.is-expanded').forEach(item => {
-        if (item !== el) item.classList.remove('is-expanded');
-    });
-
-    el.classList.toggle('is-expanded');
-
-    // 如果是第一次展开且未读，标记为已读 (Task 7.3: 游客也可在本地标记已读)
-    const isUnread = el.classList.contains('is-unread');
-    if (!isExpanded && isUnread) {
-        el.classList.remove('is-unread');
-        el.classList.add('is-read');
-        const badge = el.querySelector('.badge-new');
-        if (badge) badge.remove();
-        
-        // 记录到本地，消除红点
-        localStorage.setItem(`read_notice_${id}`, 'true');
-        const notice = cachedAnnouncements.find(a => a.id == id);
-        if (notice) notice.is_read = 1;
-
-        // Task 7.4: 立即刷新全局 Badge
-        refreshNoticeBadge();
-        
-        if (sysToken) {
-            try {
-                await fetch('/api/announcements', {
-                    method: 'POST',
-                    headers: { 'Authorization': sysToken, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ids: [id] })
-                });
-            } catch (e) { console.warn('[Notice] Sync read state failed'); }
-        }
-    }
-};
-
-window.toggleHideRead = (checked) => {
-    localStorage.setItem('nav_hide_read_announcements', checked);
-    const items = document.querySelectorAll('.notice-list-item.is-read');
-    items.forEach(item => item.classList.toggle('hide-read', checked));
-    
-    // Task 6.31: 切换隐藏状态后同步刷新 Badge 状态 (仅针对已读项被过滤的情况)
-    refreshNoticeBadge();
-};
-
-window.markAllNoticesRead = async () => {
-    if (!cachedAnnouncements.length) return;
-    
-    const unreadIds = cachedAnnouncements.filter(a => !(a.is_read || localStorage.getItem(`read_notice_${a.id}`))).map(a => a.id);
-    if (unreadIds.length === 0) return;
-
-    unreadIds.forEach(id => localStorage.setItem(`read_notice_${id}`, 'true'));
-    cachedAnnouncements.forEach(a => { if (unreadIds.includes(a.id)) a.is_read = 1; });
-    
-    showToast("已全部标记为已读");
-    refreshNoticeBadge();
-    
-    if (sysToken) {
-        try {
-            await fetch('/api/announcements', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${sysToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: unreadIds })
-            });
-        } catch (e) { console.warn('[Notice] Sync bulk read failed'); }
-    }
-    
-    openNoticeCenter(); // 刷新列表状态
-};
-
-// Task 13.3: 移除冗余的 saveSiteConfig (已由 saveSystemConfig 接管)
-
-// ==================== 11. Task 3.5: JSON 专家模式 & 导入导出 ====================
 
 let monacoEditor = null;
 
@@ -3870,13 +3863,13 @@ const openJsonEditor = () => {
     body.innerHTML = `
         <div style="margin-bottom: 10px; display:flex; gap:10px;">
             <button class="action-link" onclick="formatMonacoJson()"><i class="ri-magic-line"></i> 一键美化</button>
-            <span style="color:var(--text-dim); font-size:12px;">提示: 修改后点击下方“应用”保存到云端</span>
+            <span style="color:var(--text-dim); font-size:12px;">提示: 修改后点击下方“应用”保存本地</span>
         </div>
         <div id="monaco-container" style="height: 400px; border-radius: 8px; overflow: hidden; border: 1px solid var(--glass-border);"></div>
     `;
     modal.style.display = 'flex';
     confirmBtn.style.display = 'block';
-    confirmBtn.innerText = "应用并同步到云端";
+    confirmBtn.innerText = "应用并暂存本地";
 
     // 异步初始化 Monaco
     if (typeof require !== 'undefined') {
@@ -3919,13 +3912,16 @@ const openJsonEditor = () => {
             }
 
             appData = parsed;
-            showLoader('正在同步专家配置...');
+            showLoader('正在应用专家配置...');
             window.isDataDirty = true;
-            if (window.manualSyncCloud) {
-                await window.manualSyncCloud();
-            }
+            localStorage.setItem('nav_app_data', JSON.stringify(appData));
             renderNav();
             modal.style.display = 'none';
+            if (window.sysToken) {
+                showToast("配置已应用至本地，退出页面管理时将自动同步至云端", "#27ae60");
+            } else {
+                showToast("访客模式：配置已应用至本地", "#e67e22");
+            }
         } catch (e) {
             showToast(`JSON 格式错误: ${e.message}`, "#e74c3c");
         } finally {
@@ -3933,311 +3929,7 @@ const openJsonEditor = () => {
         }
     };
 };
-
-let currentImportExportMode = 'import'; // 'import' | 'export'
-let currentExportFormat = 'json'; // 'json' | 'html'
-
-const openImportExportModal = () => {
-    lastFocusedElement = document.activeElement;
-    closeAllModals(true);
-
-    const modal = document.getElementById('edit-modal');
-    const title = document.getElementById('edit-title');
-    const body = document.getElementById('edit-form-body');
-    const confirmBtn = document.getElementById('btn-confirm-edit');
-    
-    if (!modal || !body) return;
-
-    title.innerHTML = `<i class="ri-database-2-line"></i> 本地导入/导出`;
-    
-    currentImportExportMode = 'import';
-    currentExportFormat = 'json';
-
-    const renderModalBody = () => {
-        body.innerHTML = `
-            <div class="visual-option-group">
-                <span class="visual-option-label"><i class="ri-swap-line"></i> 选择操作类型</span>
-                <div class="visual-btn-group">
-                    <button class="tab-btn ${currentImportExportMode === 'import' ? 'active' : ''}" onclick="setImportExportMode('import')">导入数据</button>
-                    <button class="tab-btn ${currentImportExportMode === 'export' ? 'active' : ''}" onclick="setImportExportMode('export')">导出数据</button>
-                </div>
-            </div>
-            
-            <div class="visual-option-group" id="export-format-group" style="${currentImportExportMode === 'export' ? 'display: block;' : 'display: none;'}">
-                <span class="visual-option-label"><i class="ri-file-settings-line"></i> 选择数据格式</span>
-                <div class="visual-btn-group">
-                    <button class="tab-btn ${currentExportFormat === 'json' ? 'active' : ''}" onclick="setExportFormat('json')">JSON 格式</button>
-                    <button class="tab-btn ${currentExportFormat === 'html' ? 'active' : ''}" onclick="setExportFormat('html')">HTML格式</button>
-                </div>
-                <p style="font-size: 11px; opacity: 0.6; margin-top: 8px; line-height: 1.4;">
-                    ${currentExportFormat === 'json' 
-                        ? '说明: 包含所有配置、分类和网址的完整数据。可再次导入本站100%还原。' 
-                        : '说明: 导出为标准 HTML 书签文件，可直接导入到 Edge, Chrome 等浏览器。'}
-                </p>
-            </div>
-            
-            <div class="visual-option-group" id="import-tip-group" style="${currentImportExportMode === 'import' ? 'display: block;' : 'display: none;'}">
-                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.5;">
-                    <i class="ri-information-line" style="color: var(--primary);"></i> 
-                    智能导入适配器支持导入标准 HTML 书签、本站导出的 JSON 文件以及 Markdown 列表等。导入后将覆写本地当前所有配置。
-                </div>
-            </div>
-        `;
-
-        if (currentImportExportMode === 'import') {
-            confirmBtn.innerHTML = `<i class="ri-upload-2-line"></i> 选择文件并导入`;
-            confirmBtn.onclick = () => {
-                document.getElementById('import-file').click();
-            };
-        } else {
-            confirmBtn.innerHTML = `<i class="ri-download-2-line"></i> 确认导出本地文件`;
-            confirmBtn.onclick = () => {
-                if (currentExportFormat === 'json') {
-                    doExportJson();
-                } else {
-                    doExportHtml('clean');
-                }
-            };
-        }
-    };
-
-    window.setImportExportMode = (mode) => {
-        currentImportExportMode = mode;
-        renderModalBody();
-    };
-
-    window.setExportFormat = (format) => {
-        currentExportFormat = format;
-        renderModalBody();
-    };
-
-    renderModalBody();
-    modal.style.display = 'flex';
-};
-
-const exportConfig = () => {
-    closeAllModals(true);
-
-    const modal = document.getElementById('edit-modal');
-    const title = document.getElementById('edit-title');
-    const body = document.getElementById('edit-form-body');
-    const confirmBtn = document.getElementById('btn-confirm-edit');
-    
-    if (!modal || !body) return;
-
-    title.innerHTML = '<i class="ri-download-2-line"></i> 本地数据导出向导';
-    
-    body.innerHTML = `
-        <div style="margin-bottom: 15px; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; font-size: 13px; color: var(--text-dim); line-height: 1.5;">
-            <i class="ri-information-line" style="color: var(--primary);"></i> 
-            本地导出可将您自定义的导航数据下载到本地。如需在云端备份，请使用侧边栏的 <strong>云端备份中心</strong>。
-        </div>
-
-        <div class="form-row" style="margin-bottom: 15px;">
-            <label style="font-weight: bold; margin-bottom: 8px; display: block;"><i class="ri-file-settings-line"></i> 选择导出格式</label>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-                <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; cursor: pointer; border: 1px solid var(--glass-border);">
-                    <input type="radio" name="export-format" value="json" checked style="margin-top: 3px;" onchange="toggleExportOptions(this.value)">
-                    <div style="margin-left: 8px;">
-                        <div style="font-weight: bold; color: var(--text);">原生 JSON 备份文件</div>
-                        <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">包含所有配置、分类和网址的完整数据。可再次通过“本地数据导入”来100%还原。</div>
-                    </div>
-                </label>
-                <label style="display: flex; align-items: flex-start; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px; cursor: pointer; border: 1px solid var(--glass-border);">
-                    <input type="radio" name="export-format" value="html" style="margin-top: 3px;" onchange="toggleExportOptions(this.value)">
-                    <div style="margin-left: 8px;">
-                        <div style="font-weight: bold; color: var(--text);">标准 HTML 书签文件</div>
-                        <div style="font-size: 11px; color: var(--text-dim); margin-top: 2px;">导出为 Netscape 格式，可直接导入到 Edge, Chrome, Safari 等浏览器。</div>
-                    </div>
-                </label>
-            </div>
-        </div>
-
-        <div id="html-export-suboptions" class="form-row" style="margin-bottom: 15px; display: none; padding: 12px; background: rgba(0,0,0,0.15); border-radius: 8px; border-left: 3px solid var(--primary);">
-            <label style="font-weight: bold; margin-bottom: 8px; display: block;"><i class="ri-settings-4-line"></i> HTML 书签配置选项</label>
-            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12px;">
-                <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer;">
-                    <input type="radio" name="html-mode" value="clean" checked style="margin-top: 2px;">
-                    <div style="margin-left: 6px;">
-                        <span style="font-weight: bold; color: var(--text);">清爽模式 (强烈推荐 ⭐)</span>
-                        <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
-                            Edge 导入后书签只显示短标题，不会把网址描述拼到标题里。描述将存放在标准 &lt;DD&gt; 标签与 comment 属性中，干净且支持重新导入本站还原。
-                        </div>
-                    </div>
-                </label>
-                <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; margin-top: 4px;">
-                    <input type="radio" name="html-mode" value="merge" style="margin-top: 2px;">
-                    <div style="margin-left: 6px;">
-                        <span style="font-weight: bold; color: var(--text);">标题拼接模式</span>
-                        <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
-                            将描述内容合并写入书签标题中（形如：'标题 - 描述'）。适合不支持显示描述的极简浏览器书签栏，但会导致 Edge 收藏夹里的标题极其冗长。
-                        </div>
-                    </div>
-                </label>
-            </div>
-        </div>
-    `;
-
-    // 挂载全局切换函数供 DOM 触发
-    window.toggleExportOptions = (val) => {
-        const subOpts = document.getElementById('html-export-suboptions');
-        if (subOpts) {
-            subOpts.style.display = (val === 'html') ? 'block' : 'none';
-        }
-    };
-
-    confirmBtn.innerText = "确认导出本地 file";
-    confirmBtn.onclick = () => {
-        const format = document.querySelector('input[name="export-format"]:checked')?.value || 'json';
-        if (format === 'json') {
-            doExportJson();
-        } else {
-            const htmlMode = document.querySelector('input[name="html-mode"]:checked')?.value || 'clean';
-            doExportHtml(htmlMode);
-        }
-    };
-
-    modal.style.display = 'flex';
-};
-
-const doExportJson = () => {
-    try {
-        const date = new Date();
-        const filename = `CloudNav_Config_${date.getMonth() + 1}${date.getDate()}.json`;
-        
-        // 智能清洗脏配置 (Task NT-V2.12)
-        const exportData = JSON.parse(JSON.stringify(appData));
-        if (exportData.settings) {
-            delete exportData.settings.cardWidth;
-        }
-        
-        const dataStr = JSON.stringify(exportData, null, 2);
-        const blob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        closeAllModals(true);
-        showToast("本地 JSON 配置导出成功");
-    } catch (e) {
-        console.error(e);
-        showToast(`导出失败: ${e.message}`, "#e74c3c");
-    }
-};
-
-const doExportHtml = (htmlMode) => {
-    try {
-        const date = new Date();
-        const filename = `CloudNav_Bookmarks_${date.getMonth() + 1}${date.getDate()}.html`;
-        
-        let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
-<!-- This is an automatically generated file.
-     It will be read and written.
-     DO NOT EDIT! -->
-<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
-<TITLE>Bookmarks</TITLE>
-<H1>Bookmarks</H1>
-<DL><p>
-`;
-
-        // 遍历分类
-        if (appData.categories && appData.categories.length > 0) {
-            appData.categories.forEach(cat => {
-                // 跳过加载中临时分类
-                if (cat.id === 'temp_init') return;
-                
-                const catName = utils.escapeHTML(cat.name || '默认分类');
-                html += `    <DT><H3 ADD_DATE="${Math.floor(Date.now()/1000)}" LAST_MODIFIED="${Math.floor(Date.now()/1000)}">${catName}</H3>\n`;
-                html += `    <DL><p>\n`;
-                
-                // 筛选出属于此分类的书签
-                const items = appData.items.filter(item => (item.catId === cat.id || item.cat_id === cat.id));
-                items.forEach(item => {
-                    const url = utils.escapeHTML(item.url || '');
-                    if (!url || !url.startsWith('http')) return;
-                    
-                    let linkText = utils.escapeHTML(item.title || '未命名书签');
-                    let commentAttr = '';
-                    let descTag = '';
-                    
-                    if (item.desc) {
-                        const cleanDesc = utils.escapeHTML(item.desc);
-                        if (htmlMode === 'clean') {
-                            // 清爽模式：不拼接标题。把描述放到 comment 属性和 DD 标签里
-                            commentAttr = ` comment="${cleanDesc}"`;
-                            descTag = `\n        <DD>${cleanDesc}`;
-                        } else {
-                            // 拼接模式：拼接到标题中
-                            linkText = `${linkText} - ${cleanDesc}`;
-                        }
-                    }
-                    
-                    let iconAttr = '';
-                    if (item.icon && item.icon.startsWith('http')) {
-                        iconAttr = ` ICON="${utils.escapeHTML(item.icon)}"`;
-                    }
-                    
-                    html += `        <DT><A HREF="${url}" ADD_DATE="${Math.floor(Date.now()/1000)}"${iconAttr}${commentAttr}>${linkText}</A>${descTag}\n`;
-                });
-                
-                html += `    </DL><p>\n`;
-            });
-        } else {
-            // 没有分类时，输出所有书签
-            if (appData.items && appData.items.length > 0) {
-                appData.items.forEach(item => {
-                    const url = utils.escapeHTML(item.url || '');
-                    if (!url || !url.startsWith('http')) return;
-                    
-                    let linkText = utils.escapeHTML(item.title || '未命名书签');
-                    let commentAttr = '';
-                    let descTag = '';
-                    
-                    if (item.desc) {
-                        const cleanDesc = utils.escapeHTML(item.desc);
-                        if (htmlMode === 'clean') {
-                            commentAttr = ` comment="${cleanDesc}"`;
-                            descTag = `\n    <DD>${cleanDesc}`;
-                        } else {
-                            linkText = `${linkText} - ${cleanDesc}`;
-                        }
-                    }
-                    
-                    let iconAttr = '';
-                    if (item.icon && item.icon.startsWith('http')) {
-                        iconAttr = ` ICON="${utils.escapeHTML(item.icon)}"`;
-                    }
-                    html += `    <DT><A HREF="${url}" ADD_DATE="${Math.floor(Date.now()/1000)}"${iconAttr}${commentAttr}>${linkText}</A>${descTag}\n`;
-                });
-            }
-        }
-        
-        html += `</DL><p>\n`;
-        
-        const blob = new Blob([html], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        closeAllModals(true);
-        showToast("HTML书签本地导出成功");
-    } catch (e) {
-        console.error(e);
-        showToast(`导出失败: ${e.message}`, "#e74c3c");
-    }
-};
+window.openJsonEditor = openJsonEditor;
 
 const initGlobalEvents = () => {
     // 快捷导航按钮逻辑 (Task 4.2)
@@ -4266,224 +3958,6 @@ const initGlobalEvents = () => {
             clearTimeout(scrollActiveTimer);
             scrollActiveTimer = setTimeout(() => document.body.classList.remove('scroll-active'), 2000);
         }, { passive: true });
-    }
-
-    // 智能书签自适应解析网关 (Smart Import Adapter)
-    const parseImportedData = (rawText) => {
-        let text = rawText.trim();
-        if (!text) throw new Error("导入内容不能为空");
-
-        // 辅助提取 HTML 标准书签描述
-        const getBookmarkDesc = (link) => {
-            let desc = link.getAttribute('comment') || '';
-            if (desc) return desc.trim();
-
-            let next = link.nextSibling;
-            while (next && next.nodeType === 3) {
-                next = next.nextSibling;
-            }
-            if (next && next.tagName === 'DD') {
-                return next.textContent.trim();
-            }
-
-            const parentDt = link.closest('dt');
-            if (parentDt) {
-                let nextSibling = parentDt.nextElementSibling;
-                if (nextSibling && nextSibling.tagName === 'DD') {
-                    return nextSibling.textContent.trim();
-                }
-            }
-            return '';
-        };
-
-        // 1. 尝试检测浏览器 HTML 书签文件
-        if (text.includes("NETSCAPE-Bookmark-file-1") || /<!DOCTYPE\s+NETSCAPE-Bookmark-file-1/i.test(text)) {
-            console.log("[Import] Detected Netscape HTML Bookmark format");
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, "text/html");
-            const categories = [];
-            const items = [];
-            
-            // 查找所有文件夹标题 (H3)
-            const h3s = doc.querySelectorAll('h3');
-            if (h3s.length > 0) {
-                h3s.forEach((h3, catIdx) => {
-                    const catName = h3.textContent.trim().slice(0, 10) || `分类 ${catIdx + 1}`;
-                    const catId = `imported_cat_${catIdx + 1}_${Date.now()}`;
-                    categories.push({ id: catId, name: catName, icon: "🔖", hidden: false });
-                    
-                    // 查找该 H3 同级紧随其后的 <DL> 或 <UL>
-                    let sibling = h3.nextElementSibling;
-                    while (sibling && sibling.tagName !== 'DL' && sibling.tagName !== 'UL') {
-                        sibling = sibling.nextElementSibling;
-                    }
-                    
-                    if (sibling) {
-                        const links = sibling.querySelectorAll('a');
-                        links.forEach((link, itemIdx) => {
-                            const url = link.getAttribute('href');
-                            const title = link.textContent.trim().slice(0, 12) || '未命名书签';
-                            const desc = getBookmarkDesc(link).slice(0, 30);
-                            if (url && url.startsWith('http')) {
-                                items.push({
-                                    id: `imported_item_${catIdx}_${itemIdx}_${Math.random().toString(36).substring(2, 7)}`,
-                                    catId: catId,
-                                    cat_id: catId,
-                                    title: title,
-                                    url: url,
-                                    desc: desc,
-                                    icon: `https://icons.duckduckgo.com/ip3/${new URL(url).hostname}.ico`,
-                                    hidden: false
-                                });
-                            }
-                        });
-                    }
-                });
-            } else {
-                // 没有分类文件夹，将所有 a 标签归入默认分类
-                const links = doc.querySelectorAll('a');
-                if (links.length > 0) {
-                    const catId = `imported_cat_default_${Date.now()}`;
-                    categories.push({ id: catId, name: "默认导入", icon: "📥", hidden: false });
-                    links.forEach((link, itemIdx) => {
-                        const url = link.getAttribute('href');
-                        const title = link.textContent.trim().slice(0, 12) || '未命名书签';
-                        if (url && url.startsWith('http')) {
-                            const desc = getBookmarkDesc(link).slice(0, 30);
-                            items.push({
-                                id: `imported_item_def_${itemIdx}_${Math.random().toString(36).substring(2, 7)}`,
-                                catId: catId,
-                                cat_id: catId,
-                                title: title,
-                                url: url,
-                                desc: desc,
-                                icon: `https://icons.duckduckgo.com/ip3/${new URL(url).hostname}.ico`,
-                                hidden: false
-                            });
-                        }
-                    });
-                }
-            }
-            
-            if (categories.length > 0) return { categories, items };
-            throw new Error("HTML 文件中未解析到有效的 A 标签链接");
-        }
-
-        // 2. 尝试 JSON 解析（标准、扁平或键值对）
-        try {
-            const parsed = JSON.parse(text);
-            
-            // 2.1 标准 CloudNav 格式
-            if (parsed.categories && parsed.items) {
-                console.log("[Import] Detected standard CloudNav format");
-                return parsed;
-            }
-
-            // 2.2 扁平链接数组 [{title, url, desc}]
-            if (Array.isArray(parsed)) {
-                console.log("[Import] Detected flat JSON array format");
-                const catId = `imported_cat_json_${Date.now()}`;
-                const categories = [{ id: catId, name: "外部导入", icon: "🔗", hidden: false }];
-                const items = parsed.map((item, idx) => {
-                    const url = item.url || item.href || (typeof item === 'string' ? item : '');
-                    const title = (item.title || item.name || '未命名网址').slice(0, 12);
-                    const desc = (item.desc || item.description || '').slice(0, 30);
-                    return {
-                        id: `imported_item_json_${idx}_${Math.random().toString(36).substring(2, 7)}`,
-                        catId: catId,
-                        cat_id: catId,
-                        title: title,
-                        url: url,
-                        desc: desc,
-                        icon: url ? `https://icons.duckduckgo.com/ip3/${new URL(url).hostname}.ico` : '',
-                        hidden: false
-                    };
-                }).filter(i => i.url && i.url.startsWith('http'));
-
-                return { categories, items };
-            }
-
-            // 2.3 分组键值对格式 {"分类1": [{"title": "...", "url": "..."}, ...]}
-            if (typeof parsed === 'object' && parsed !== null) {
-                console.log("[Import] Detected nested JSON dictionary format");
-                const categories = [];
-                const items = [];
-                let catIdx = 0;
-                
-                for (const [catName, list] of Object.entries(parsed)) {
-                    const catId = `imported_cat_dict_${catIdx}_${Date.now()}`;
-                    categories.push({ id: catId, name: catName, icon: "📁", hidden: false });
-                    if (Array.isArray(list)) {
-                        list.forEach((item, itemIdx) => {
-                            const url = item.url || item.href || (typeof item === 'string' ? item : '');
-                            const title = (item.title || item.name || '未命名网址').slice(0, 12);
-                            const desc = (item.desc || item.description || '').slice(0, 30);
-                            if (url && url.startsWith('http')) {
-                                items.push({
-                                    id: `imported_item_dict_${catIdx}_${itemIdx}_${Math.random().toString(36).substring(2, 7)}`,
-                                    catId: catId,
-                                    cat_id: catId,
-                                    title: title,
-                                    url: url,
-                                    desc: desc,
-                                    icon: `https://icons.duckduckgo.com/ip3/${new URL(url).hostname}.ico`,
-                                    hidden: false
-                                });
-                            }
-                        });
-                    }
-                    catIdx++;
-                }
-                if (categories.length > 0) return { categories, items };
-            }
-            throw new Error("JSON 内容不符合任何支持的书签导入格式");
-        } catch (e) {
-            if (e.message && e.message.includes("JSON")) {
-                throw e;
-            }
-            throw new Error("JSON 格式解析失败: " + e.message);
-        }
-    };
-
-    // 绑定导入文件变化事件
-    const importFileInput = document.getElementById('import-file');
-    if (importFileInput) {
-        importFileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = async (event) => {
-                try {
-                    const parsedData = parseImportedData(event.target.result);
-                    
-                    if (!parsedData.categories || !parsedData.items) {
-                        throw new Error("无效的书签数据格式");
-                    }
-                    
-                    appData.categories = parsedData.categories;
-                    appData.items = parsedData.items;
-                    if (parsedData.settings) {
-                        appData.settings = { ...appData.settings, ...parsedData.settings };
-                    }
-                    
-                    window.isDataDirty = true;
-                    if (window.manualSyncCloud) {
-                        window.manualSyncCloud();
-                    }
-                    renderNav();
-                    updateStyles();
-                    closeAllModals(true);
-                    showToast("本地导入解析成功，配置已同步");
-                } catch (err) {
-                    console.error(err);
-                    showToast(`导入失败: ${err.message}`, "#e74c3c");
-                }
-                
-                e.target.value = '';
-            };
-            reader.readAsText(file);
-        });
     }
 
     // 监听全局键盘事件 (Core Shortcuts and Geometric Navigation)
@@ -4715,201 +4189,6 @@ const initGlobalEvents = () => {
         });
     }
 };
-
-const RECOMMENDED_EMOJI_KEYWORDS = {
-    'github': '🐙', 'git': '📦', 'code': '💻', '编程': '💻', '开发': '🛠️',
-    'google': '🔍', 'search': '🔍', '搜索': '🔍',
-    'youtube': '📺', 'video': '🎬', '视频': '🎬', 'music': '🎵', '音乐': '🎵',
-    'twitter': '🐦', 'facebook': '👥', 'social': '🌐', '社交': '🌐',
-    'mail': '📧', 'email': '📧', '邮箱': '📧', 'message': '💬', '消息': '💬',
-    'shop': '🛒', 'store': '🏪', '购物': '🛒', 'buy': '🛍️',
-    'game': '🎮', 'games': '🎲', '游戏': '🎮', 'play': '▶️',
-    'book': '📚', 'read': '📖', 'learn': '📝', '学习': '📚', '教育': '🎓',
-    'news': '📰', 'newspaper': '📰', '新闻': '📰', 'blog': '📝',
-    'weather': '🌤️', '天气': '🌤️',
-    'photo': '📷', 'image': '🖼️', '图片': '🖼️', 'camera': '📸',
-    'food': '🍔', 'restaurant': '🍽️', '美食': '🍜', 'eat': '🍕',
-    'travel': '✈️', 'trip': '🧳', '旅行': '🧳', 'map': '🗺️',
-    'money': '💰', 'finance': '💵', 'pay': '💳', '支付': '💳', 'bank': '🏦',
-    'cloud': '☁️', 'cloudflare': '☁️', 'aws': '☁️', 'server': '🖥️',
-    'chat': '💬', 'talk': '🗣️', 'ai': '🤖', 'bot': '🤖',
-    'home': '🏠', '生活': '🏠',
-    'work': '💼', 'office': '🏢', 'business': '💼', '工作': '💼',
-    'health': '🏥', 'medical': '🏥', '医院': '🏥', 'doctor': '👨‍⚕️',
-    'sport': '⚽', 'sports': '🏃', '运动': '⚽', 'fitness': '💪',
-    'star': '⭐', 'favorite': '⭐', '收藏': '⭐', 'bookmark': '🔖',
-    'setting': '⚙️', 'config': '🔧', '设置': '⚙️', 'tool': '🛠️',
-    'download': '⬇️', 'upload': '⬆️', 'file': '📁', 'folder': '📁',
-    'link': '🔗', 'connect': '🔗', 'chain': '🔗', '链接': '🔗',
-    'lock': '🔒', 'security': '🔐', 'secure': '🔒', '安全': '🔐',
-    'design': '🎨', 'art': '🎨', 'creative': '🎨', '设计': '🎨',
-    'api': '🔌', 'data': '📊', 'database': '🗄️', '数据': '📊',
-    'terminal': '💻', 'console': '⌨️', 'ssh': '🔐', '命令': '⌨️',
-    'wifi': '📶', 'network': '🌐', 'internet': '🌐', 'web': '🌐',
-    'notification': '🔔', 'bell': '🔔', 'alert': '⚠️', '通知': '🔔',
-    'fire': '🔥', 'hot': '🔥', 'trending': '📈', '热门': '🔥',
-    'bilibili': '📺', 'b站': '📺', '哔哩哔哩': '📺'
-};
-
-const getRecommendedEmojis = (title) => {
-    const results = new Set();
-    const lowerTitle = (title || "").toLowerCase();
-    for (const [keyword, emoji] of Object.entries(RECOMMENDED_EMOJI_KEYWORDS)) {
-        if (lowerTitle.includes(keyword)) results.add(emoji);
-    }
-    if (results.size === 0) {
-        return window.emojiPool ? window.emojiPool.getRandomEmojis(8) : ['🌐', '🔗', '📌', '⭐', '💡', '✨', '🎯', '🚀'];
-    }
-    const extras = window.emojiPool ? window.emojiPool.getRandomEmojis(4) : ['🌟', '💫', '✨', '🔮'];
-    return [...results, ...extras].slice(0, 8);
-};
-
-const selectIcon = (url) => {
-    if (!url) return;
-    const input = document.getElementById('edit-icon');
-    if (input) {
-        input.value = url;
-        input.dispatchEvent(new Event('input')); 
-    }
-};
-
-const handleUrlInput = (url, autoSelect = false) => {
-    if (!url || !url.startsWith('http')) {
-        ['0', '1', '2', '3'].forEach(n => {
-            const txt = document.getElementById('txt-fav' + n);
-            const img = document.getElementById('img-fav' + n);
-            const opt = document.getElementById('opt-fav' + n);
-            if (txt) txt.value = "";
-            if (img) { img.src = ""; img.style.display = 'none'; }
-            if (opt) { opt.checked = false; opt.disabled = true; }
-        });
-        return;
-    }
-
-    try {
-        const urlObj = new URL(url);
-        const domain = urlObj.hostname;
-        const origin = urlObj.origin;
-        
-        const favs = [
-            `${origin}/favicon.ico`,
-            `https://icons.duckduckgo.com/ip3/${domain}.ico`,
-            `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
-            `https://api.iowen.cn/favicon/${domain}.png`
-        ];
-
-        let firstSuccessIdx = -1;
-
-        favs.forEach((favUrl, i) => {
-            const txt = document.getElementById('txt-fav' + i);
-            const img = document.getElementById('img-fav' + i);
-            const opt = document.getElementById('opt-fav' + i);
-            if (i === 3 && !txt) return; 
-
-            if (txt && img) {
-                txt.value = favUrl;
-                img.src = favUrl;
-                img.style.display = 'block';
-                
-                img.onerror = () => {
-                    img.style.display = 'none';
-                    if (opt) opt.disabled = true;
-                };
-
-                img.onload = () => {
-                    img.style.display = 'block';
-                    if (opt) opt.disabled = false;
-                    
-                    if (autoSelect) {
-                        const currentIconVal = document.getElementById('edit-icon').value.trim();
-                        if (!currentIconVal || currentIconVal === '') {
-                             if (firstSuccessIdx === -1) {
-                                 firstSuccessIdx = i;
-                                 selectIcon(favUrl);
-                                 if (opt) opt.checked = true;
-                                 const labels = ['原站', 'DDG', 'Google', 'Iowen'];
-                                 showToast(`已自动匹配最优图标 (${labels[i] || '未知'})`);
-                             }
-                        }
-                    }
-                };
-            }
-        });
-
-        const currentIconInput = document.getElementById('edit-icon');
-        if (currentIconInput && !currentIconInput.value) {
-            const preview = document.getElementById('edit-icon-preview');
-            if (preview) {
-                preview.innerHTML = `<img src="${favs[1]}">`;
-            }
-        }
-    } catch (e) { }
-};
-
-const debouncedHandleUrlInput = utils.debounce((val) => handleUrlInput(val), 500);
-
-function renderEmojiSuggestions(emojis) {
-    const container = document.getElementById('emoji-results');
-    if (!container) return;
-    container.innerHTML = '';
-    emojis.forEach(emoji => {
-        const span = document.createElement('span');
-        span.className = 'emoji-suggestion';
-        span.textContent = emoji;
-        span.dataset.emoji = emoji;
-        span.onclick = () => {
-            document.querySelectorAll('.emoji-suggestion').forEach(el => el.classList.remove('selected'));
-            span.classList.add('selected');
-            selectIcon(emoji);
-        };
-        container.appendChild(span);
-    });
-}
-
-async function recommendEmojisAndSearchIconify(isRefreshEmojiOnly = false) {
-    const query = document.getElementById('emoji-recommend-title').value.trim();
-    const fallbackTitleInput = document.getElementById('edit-title-input') || document.getElementById('edit-cat-name');
-    const fallbackTitle = fallbackTitleInput ? fallbackTitleInput.value.trim() : '';
-    const searchWord = query || fallbackTitle;
-
-    renderEmojiSuggestions(getRecommendedEmojis(searchWord));
-
-    if (isRefreshEmojiOnly) return; 
-
-    if (!searchWord) return;
-    const resBox = document.getElementById('iconify-results');
-    if (!resBox) return;
-    resBox.innerHTML = '<span style="font-size:12px; color:#aaa;">搜索中...</span>';
-    try {
-        const req = await fetch(`https://api.iconify.design/search?query=${encodeURIComponent(searchWord)}&limit=12`);
-        const data = await req.json();
-        resBox.innerHTML = '';
-        if (data.icons && data.icons.length > 0) {
-            data.icons.forEach(iconName => {
-                const imgUrl = `https://api.iconify.design/${iconName}.svg`;
-                const img = document.createElement('img');
-                img.src = imgUrl;
-                img.style.cssText = 'width:30px; height:30px; cursor:pointer; background:rgba(255,255,255,0.06); border-radius:6px; padding:4px; transition: 0.2s; border:1px solid rgba(255,255,255,0.1);';
-                img.onmouseover = () => img.style.background = 'rgba(255,255,255,0.2)';
-                img.onmouseout = () => img.style.background = 'rgba(255,255,255,0.06)';
-                img.onclick = () => selectIcon(imgUrl);
-                resBox.appendChild(img);
-            });
-        } else {
-            resBox.innerHTML = '<span style="font-size:12px; color:#aaa;">未找到结果</span>';
-        }
-    } catch (e) {
-        resBox.innerHTML = '<span style="font-size:12px; color:#e74c3c;">网络或接口错误</span>';
-    }
-}
-
-// 导出一键抓取与智能搜索辅助函数至 window 级别的全局空间中，保障模块间调用畅通
-window.getRecommendedEmojis = getRecommendedEmojis;
-window.selectIcon = selectIcon;
-window.handleUrlInput = handleUrlInput;
-window.debouncedHandleUrlInput = debouncedHandleUrlInput;
-window.renderEmojiSuggestions = renderEmojiSuggestions;
-window.recommendEmojisAndSearchIconify = recommendEmojisAndSearchIconify;
 
 // ====== 书签管理及编辑逻辑 (已迁移至 page-manage.js) ======
 

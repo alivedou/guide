@@ -814,3 +814,457 @@ window.doBatchToggleHidden = doBatchToggleHidden;
 window.openBatchMoveModal = openBatchMoveModal;
 window.initSortable = initSortable;
 window.destroySortable = destroySortable;
+
+// ==================== 7. 本地导入与导出 (Migrated from app.js with page-manage context) ====================
+let currentImportExportMode = 'import'; // 'import' | 'export'
+let currentExportFormat = 'json'; // 'json' | 'html'
+
+// 智能书签自适应解析网关 (Smart Import Adapter)
+const parseImportedData = (rawText) => {
+    let text = rawText.trim();
+    if (!text) throw new Error("导入内容不能为空");
+
+    // 辅助提取 HTML 标准书签描述
+    const getBookmarkDesc = (link) => {
+        let desc = link.getAttribute('comment') || '';
+        if (desc) return desc.trim();
+
+        let next = link.nextSibling;
+        while (next && next.nodeType === 3) {
+            next = next.nextSibling;
+        }
+        if (next && next.tagName === 'DD') {
+            return next.textContent.trim();
+        }
+
+        const parentDt = link.closest('dt');
+        if (parentDt) {
+            let nextSibling = parentDt.nextElementSibling;
+            if (nextSibling && nextSibling.tagName === 'DD') {
+                return nextSibling.textContent.trim();
+            }
+        }
+        return '';
+    };
+
+    // 1. 尝试检测浏览器 HTML 书签文件
+    if (text.includes("NETSCAPE-Bookmark-file-1") || /<!DOCTYPE\s+NETSCAPE-Bookmark-file-1/i.test(text)) {
+        console.log("[Import] Detected Netscape HTML Bookmark format");
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, "text/html");
+        const categories = [];
+        const items = [];
+        
+        // 查找所有文件夹标题 (H3)
+        const h3s = doc.querySelectorAll('h3');
+        if (h3s.length > 0) {
+            h3s.forEach((h3, catIdx) => {
+                const catName = h3.textContent.trim().slice(0, 10) || `分类 ${catIdx + 1}`;
+                const catId = `imported_cat_${catIdx + 1}_${Date.now()}`;
+                categories.push({ id: catId, name: catName, icon: "🔖", hidden: false });
+                
+                // 查找该 H3 同级紧随其后的 <DL> 或 <UL>
+                let sibling = h3.nextElementSibling;
+                while (sibling && sibling.tagName !== 'DL' && sibling.tagName !== 'UL') {
+                    sibling = sibling.nextElementSibling;
+                }
+                
+                if (sibling) {
+                    const links = sibling.querySelectorAll('a');
+                    links.forEach((link, itemIdx) => {
+                        const url = link.getAttribute('href');
+                        const title = link.textContent.trim().slice(0, 12) || '未命名书签';
+                        const desc = getBookmarkDesc(link).slice(0, 30);
+                        if (url && url.startsWith('http')) {
+                            items.push({
+                                id: `imported_item_${catIdx}_${itemIdx}_${Math.random().toString(36).substring(2, 7)}`,
+                                catId: catId,
+                                cat_id: catId,
+                                title: title,
+                                url: url,
+                                desc: desc,
+                                icon: `https://icons.duckduckgo.com/ip3/${new URL(url).hostname}.ico`,
+                                hidden: false
+                            });
+                        }
+                    });
+                }
+            });
+        } else {
+            // 没有分类文件夹，将所有 a 标签归入默认分类
+            const links = doc.querySelectorAll('a');
+            if (links.length > 0) {
+                const catId = `imported_cat_default_${Date.now()}`;
+                categories.push({ id: catId, name: "默认导入", icon: "📥", hidden: false });
+                links.forEach((link, itemIdx) => {
+                    const url = link.getAttribute('href');
+                    const title = link.textContent.trim().slice(0, 12) || '未命名书签';
+                    if (url && url.startsWith('http')) {
+                        const desc = getBookmarkDesc(link).slice(0, 30);
+                        items.push({
+                            id: `imported_item_def_${itemIdx}_${Math.random().toString(36).substring(2, 7)}`,
+                            catId: catId,
+                            cat_id: catId,
+                            title: title,
+                            url: url,
+                            desc: desc,
+                            icon: `https://icons.duckduckgo.com/ip3/${new URL(url).hostname}.ico`,
+                            hidden: false
+                        });
+                    }
+                });
+            }
+        }
+        
+        if (categories.length > 0) return { categories, items };
+        throw new Error("HTML 文件中未解析到有效的 A 标签链接");
+    }
+
+    // 2. 尝试 JSON 解析（标准、扁平或键值对）
+    try {
+        const parsed = JSON.parse(text);
+        
+        // 2.1 标准 CloudNav 格式
+        if (parsed.categories && parsed.items) {
+            console.log("[Import] Detected standard CloudNav format");
+            return parsed;
+        }
+
+        // 2.2 扁平链接数组 [{title, url, desc}]
+        if (Array.isArray(parsed)) {
+            console.log("[Import] Detected flat JSON array format");
+            const catId = `imported_cat_json_${Date.now()}`;
+            const categories = [{ id: catId, name: "外部导入", icon: "🔗", hidden: false }];
+            const items = parsed.map((item, idx) => {
+                const url = item.url || item.href || (typeof item === 'string' ? item : '');
+                const title = (item.title || item.name || '未命名网址').slice(0, 12);
+                const desc = (item.desc || item.description || '').slice(0, 30);
+                return {
+                    id: `imported_item_json_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+                    catId: catId,
+                    cat_id: catId,
+                    title: title,
+                    url: url,
+                    desc: desc,
+                    icon: url ? `https://icons.duckduckgo.com/ip3/${new URL(url).hostname}.ico` : '',
+                    hidden: false
+                };
+            }).filter(i => i.url && i.url.startsWith('http'));
+
+            return { categories, items };
+        }
+
+        // 2.3 分组键值对格式 {"分类1": [{"title": "...", "url": "..."}, ...]}
+        if (typeof parsed === 'object' && parsed !== null) {
+            console.log("[Import] Detected nested JSON dictionary format");
+            const categories = [];
+            const items = [];
+            let catIdx = 0;
+            
+            for (const [catName, list] of Object.entries(parsed)) {
+                const catId = `imported_cat_dict_${catIdx}_${Date.now()}`;
+                categories.push({ id: catId, name: catName, icon: "📁", hidden: false });
+                if (Array.isArray(list)) {
+                    list.forEach((item, itemIdx) => {
+                        const url = item.url || item.href || (typeof item === 'string' ? item : '');
+                        const title = (item.title || item.name || '未命名网址').slice(0, 12);
+                        const desc = (item.desc || item.description || '').slice(0, 30);
+                        if (url && url.startsWith('http')) {
+                            items.push({
+                                id: `imported_item_dict_${catIdx}_${itemIdx}_${Math.random().toString(36).substring(2, 7)}`,
+                                catId: catId,
+                                cat_id: catId,
+                                title: title,
+                                url: url,
+                                desc: desc,
+                                icon: `https://icons.duckduckgo.com/ip3/${new URL(url).hostname}.ico`,
+                                hidden: false
+                            });
+                        }
+                    });
+                }
+                catIdx++;
+            }
+            if (categories.length > 0) return { categories, items };
+        }
+        throw new Error("JSON 内容不符合任何支持的书签导入格式");
+    } catch (e) {
+        if (e.message && e.message.includes("JSON")) {
+            throw e;
+        }
+        throw new Error("JSON 格式解析失败: " + e.message);
+    }
+};
+
+// 确保 import-file 元素已绑定 change 监听器
+const bindImportFileListener = () => {
+    const input = document.getElementById('import-file');
+    if (input && !input.hasAttribute('data-listener-bound')) {
+        input.setAttribute('data-listener-bound', 'true');
+        input.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const parsedData = parseImportedData(event.target.result);
+                    
+                    if (!parsedData.categories || !parsedData.items) {
+                        throw new Error("无效的书签数据格式");
+                    }
+                    
+                    window.appData.categories = parsedData.categories;
+                    window.appData.items = parsedData.items;
+                    if (parsedData.settings) {
+                        window.appData.settings = { ...window.appData.settings, ...parsedData.settings };
+                    }
+                    
+                    window.isDataDirty = true;
+                    // 保存至本地，并延迟到页面管理模式退出时（handleDataSaveOnExit）统一进行云端备份
+                    localStorage.setItem('nav_app_data', JSON.stringify(window.appData));
+                    
+                    renderNav();
+                    updateStyles();
+                    closeAllModals(true);
+                    
+                    if (window.sysToken) {
+                        showToast("配置已成功导入本地，退出管理时将自动同步至云端", "#27ae60");
+                    } else {
+                        showToast("访客模式：配置已成功导入本地", "#e67e22");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showToast(`导入失败: ${err.message}`, "#e74c3c");
+                }
+                
+                e.target.value = '';
+            };
+            reader.readAsText(file);
+        });
+    }
+};
+
+const doExportJson = () => {
+    try {
+        const date = new Date();
+        const filename = `CloudNav_Config_${date.getMonth() + 1}${date.getDate()}.json`;
+        
+        // 智能清洗脏配置 (Task NT-V2.12)
+        const exportData = JSON.parse(JSON.stringify(window.appData));
+        if (exportData.settings) {
+            delete exportData.settings.cardWidth;
+        }
+        
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        closeAllModals(true);
+        showToast("本地 JSON 配置导出成功");
+    } catch (e) {
+        console.error(e);
+        showToast(`导出失败: ${e.message}`, "#e74c3c");
+    }
+};
+
+const doExportHtml = (htmlMode) => {
+    try {
+        const date = new Date();
+        const filename = `CloudNav_Bookmarks_${date.getMonth() + 1}${date.getDate()}.html`;
+        
+        let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<!-- This is an automatically generated file.
+     It will be read and written.
+     DO NOT EDIT! -->
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Bookmarks</TITLE>
+<H1>Bookmarks</H1>
+<DL><p>
+`;
+
+        // 遍历分类
+        if (window.appData.categories && window.appData.categories.length > 0) {
+            window.appData.categories.forEach(cat => {
+                // 跳过加载中临时分类
+                if (cat.id === 'temp_init') return;
+                
+                const catName = utils.escapeHTML(cat.name || '默认分类');
+                html += `    <DT><H3 ADD_DATE="${Math.floor(Date.now()/1000)}" LAST_MODIFIED="${Math.floor(Date.now()/1000)}">${catName}</H3>\n`;
+                html += `    <DL><p>\n`;
+                
+                // 筛选出属于此分类的书签
+                const items = window.appData.items.filter(item => (item.catId === cat.id || item.cat_id === cat.id));
+                items.forEach(item => {
+                    const url = utils.escapeHTML(item.url || '');
+                    if (!url || !url.startsWith('http')) return;
+                    
+                    let linkText = utils.escapeHTML(item.title || '未命名书签');
+                    let commentAttr = '';
+                    let descTag = '';
+                    
+                    if (item.desc) {
+                        const cleanDesc = utils.escapeHTML(item.desc);
+                        if (htmlMode === 'clean') {
+                            // 清爽模式：不拼接标题。把描述放到 comment 属性和 DD 标签里
+                            commentAttr = ` comment="${cleanDesc}"`;
+                            descTag = `\n        <DD>${cleanDesc}`;
+                        } else {
+                            // 拼接模式：拼接到标题中
+                            linkText = `${linkText} - ${cleanDesc}`;
+                        }
+                    }
+                    
+                    let iconAttr = '';
+                    if (item.icon && item.icon.startsWith('http')) {
+                        iconAttr = ` ICON="${utils.escapeHTML(item.icon)}"`;
+                    }
+                    
+                    html += `        <DT><A HREF="${url}" ADD_DATE="${Math.floor(Date.now()/1000)}"${iconAttr}${commentAttr}>${linkText}</A>${descTag}\n`;
+                });
+                
+                html += `    </DL><p>\n`;
+            });
+        } else {
+            // 没有分类时，输出所有书签
+            if (window.appData.items && window.appData.items.length > 0) {
+                window.appData.items.forEach(item => {
+                    const url = utils.escapeHTML(item.url || '');
+                    if (!url || !url.startsWith('http')) return;
+                    
+                    let linkText = utils.escapeHTML(item.title || '未命名书签');
+                    let commentAttr = '';
+                    let descTag = '';
+                    
+                    if (item.desc) {
+                        const cleanDesc = utils.escapeHTML(item.desc);
+                        if (htmlMode === 'clean') {
+                            commentAttr = ` comment="${cleanDesc}"`;
+                            descTag = `\n    <DD>${cleanDesc}`;
+                        } else {
+                            linkText = `${linkText} - ${cleanDesc}`;
+                        }
+                    }
+                    
+                    let iconAttr = '';
+                    if (item.icon && item.icon.startsWith('http')) {
+                        iconAttr = ` ICON="${utils.escapeHTML(item.icon)}"`;
+                    }
+                    html += `    <DT><A HREF="${url}" ADD_DATE="${Math.floor(Date.now()/1000)}"${iconAttr}${commentAttr}>${linkText}</A>${descTag}\n`;
+                });
+            }
+        }
+        
+        html += `</DL><p>\n`;
+        
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        closeAllModals(true);
+        showToast("HTML书签本地导出成功");
+    } catch (e) {
+        console.error(e);
+        showToast(`导出失败: ${e.message}`, "#e74c3c");
+    }
+};
+
+const openImportExportModal = () => {
+    window.lastFocusedElement = document.activeElement;
+    closeAllModals(true);
+
+    // 绑定导入文件 input 的变化
+    bindImportFileListener();
+
+    const modal = document.getElementById('edit-modal');
+    const title = document.getElementById('edit-title');
+    const body = document.getElementById('edit-form-body');
+    const confirmBtn = document.getElementById('btn-confirm-edit');
+    
+    if (!modal || !body) return;
+
+    title.innerHTML = `<i class="ri-database-2-line"></i> 本地导入/导出`;
+    
+    currentImportExportMode = 'import';
+    currentExportFormat = 'json';
+
+    const renderModalBody = () => {
+        body.innerHTML = `
+            <div class="visual-option-group">
+                <span class="visual-option-label"><i class="ri-swap-line"></i> 选择操作类型</span>
+                <div class="visual-btn-group">
+                    <button class="tab-btn ${currentImportExportMode === 'import' ? 'active' : ''}" onclick="setImportExportMode('import')">导入数据</button>
+                    <button class="tab-btn ${currentImportExportMode === 'export' ? 'active' : ''}" onclick="setImportExportMode('export')">导出数据</button>
+                </div>
+            </div>
+            
+            <div class="visual-option-group" id="export-format-group" style="${currentImportExportMode === 'export' ? 'display: block;' : 'display: none;'}">
+                <span class="visual-option-label"><i class="ri-file-settings-line"></i> 选择数据格式</span>
+                <div class="visual-btn-group">
+                    <button class="tab-btn ${currentExportFormat === 'json' ? 'active' : ''}" onclick="setExportFormat('json')">JSON 格式</button>
+                    <button class="tab-btn ${currentExportFormat === 'html' ? 'active' : ''}" onclick="setExportFormat('html')">HTML格式</button>
+                </div>
+                <p style="font-size: 11px; opacity: 0.6; margin-top: 8px; line-height: 1.4;">
+                    ${currentExportFormat === 'json' 
+                        ? '说明: 包含所有配置、分类和网址的完整数据。可再次导入本站100%还原。' 
+                        : '说明: 导出为标准 HTML 书签文件，可直接导入到 Edge, Chrome 等浏览器。'}
+                </p>
+            </div>
+            
+            <div class="visual-option-group" id="import-tip-group" style="${currentImportExportMode === 'import' ? 'display: block;' : 'display: none;'}">
+                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.5;">
+                    <i class="ri-information-line" style="color: var(--primary);"></i> 
+                    智能导入适配器支持导入标准 HTML 书签、本站导出的 JSON 文件以及 Markdown 列表等。导入后将覆写本地当前所有配置并暂存。
+                </div>
+            </div>
+        `;
+
+        if (currentImportExportMode === 'import') {
+            confirmBtn.innerHTML = `<i class="ri-upload-2-line"></i> 选择文件并导入`;
+            confirmBtn.onclick = () => {
+                document.getElementById('import-file').click();
+            };
+        } else {
+            confirmBtn.innerHTML = `<i class="ri-download-2-line"></i> 确认导出本地文件`;
+            confirmBtn.onclick = () => {
+                if (currentExportFormat === 'json') {
+                    doExportJson();
+                } else {
+                    doExportHtml('clean');
+                }
+            };
+        }
+    };
+
+    window.setImportExportMode = (mode) => {
+        currentImportExportMode = mode;
+        renderModalBody();
+    };
+
+    window.setExportFormat = (format) => {
+        currentExportFormat = format;
+        renderModalBody();
+    };
+
+    renderModalBody();
+    modal.style.display = 'flex';
+};
+
+// 挂载到全局
+window.openImportExportModal = openImportExportModal;
+
