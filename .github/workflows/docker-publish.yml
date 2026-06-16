@@ -1,7 +1,13 @@
-name: Build and Publish Docker Image
+name: Build and Publish ikun-nav Docker Image
 
 on:
-  workflow_dispatch: # 允许在 GitHub Actions 页面手动点击一键触发构建，避免频繁不必要自动触发
+  workflow_dispatch: # 允许在 GitHub Actions 页面手动点击一键触发构建
+    # 👇 新增：在手动触发时，弹窗让用户/你自己输入版本号
+    inputs:
+      version:
+        description: '请输入本次构建的 Docker 镜像 Tag (例如: v1.0.0，不填则默认只更新 latest)'
+        required: false
+        default: ''
 
 jobs:
   build-and-push:
@@ -33,11 +39,12 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # 💡 在此自定义您设计的镜像名称（例如：此处将其设定为与您 Pages 项目同名的 cloudnav）
           images: ghcr.io/${{ github.repository_owner }}/ikun_nav
+          # 👇 修改这里的 tags 逻辑：完美联动手动输入的版本号 👇
           tags: |
             type=raw,value=latest
             type=sha,format=short
+            ${{ github.event.inputs.version != '' && format('type=raw,value={0}', github.event.inputs.version) || '' }}
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
