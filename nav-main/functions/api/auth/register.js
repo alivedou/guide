@@ -96,7 +96,21 @@ export async function onRequestPost(context) {
       }
     }
 
-    if (initQueries.length > 0) await env.DB.batch(initQueries);
+    if (initQueries.length > 0) {
+        try {
+            await env.DB.batch(initQueries);
+        } catch (batchErr) {
+            if (batchErr.message.includes('has no column named') || batchErr.message.includes('no such column')) {
+                // 自动修补缺少的列
+                try { await env.DB.prepare("ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'").run(); } catch(e) {}
+                try { await env.DB.prepare("ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7").run(); } catch(e) {}
+                // 修补后重试
+                await env.DB.batch(initQueries);
+            } else {
+                throw batchErr;
+            }
+        }
+    }
 
     // 5. 初始化 KV 缓存 (压缩存储)
     if (env.nav) {

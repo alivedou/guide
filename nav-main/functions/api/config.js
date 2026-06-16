@@ -247,9 +247,29 @@ export async function onRequestPost(context) {
 
     // 1.3 核心切片提交保护：分批执行写入操作，每包限制最大 80 条查询（绑定参数绝对低于 D1 的 1000 限制上限）
     const chunkSize = 80;
-    for (let i = 0; i < writeQueries.length; i += chunkSize) {
-        const chunk = writeQueries.slice(i, i + chunkSize);
-        await env.DB.batch(chunk);
+    try {
+        for (let i = 0; i < writeQueries.length; i += chunkSize) {
+            const chunk = writeQueries.slice(i, i + chunkSize);
+            await env.DB.batch(chunk);
+        }
+    } catch (batchErr) {
+        if (batchErr.message.includes('has no column named') || batchErr.message.includes('no such column')) {
+            // 自动修补缺少的列
+            try {
+                await env.DB.prepare("ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'").run();
+            } catch(e) {}
+            try {
+                await env.DB.prepare("ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7").run();
+            } catch(e) {}
+            
+            // 修补后重试
+            for (let i = 0; i < writeQueries.length; i += chunkSize) {
+                const chunk = writeQueries.slice(i, i + chunkSize);
+                await env.DB.batch(chunk);
+            }
+        } else {
+            throw batchErr;
+        }
     }
 
     // 2. 将重塑主键后完全干净、全站独一无二的 categories 和 items 组合成全新 syncedData，写回并同步至 KV
