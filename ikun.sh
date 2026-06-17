@@ -95,7 +95,7 @@ install_nav() {
     read -p "4. [可选] 请输入 Telegram Chat ID (无则回车跳过): " TG_CHAT_ID
 
     # 4. 镜像 Tag
-    STABLE_TAG="v1.0.0" 
+    STABLE_TAG="v1.0.1" 
     echo ""
     read -p "5. 请输入你的 GitHub 镜像 Tag (直接回车默认使用当前稳定版 ${STABLE_TAG}): " IMG_TAG
     # 如果用户直接敲回车，自动采用 STABLE_TAG
