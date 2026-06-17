@@ -233,6 +233,59 @@ const fallbackToText = (img, domain) => {
     }
 };
 
+/**
+ * 兼容性剪贴板复制函数
+ * @param {string} text - 需要复制的代码/文本
+ * @returns {Promise<boolean>} - 是否复制成功
+ * @description 支持在非 HTTPS 安全上下文（如 HTTP/IP VPS 部署环境）中使用传统的 document.execCommand 作为兜底
+ */
+const copyText = async (text) => {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (err) {
+            console.warn('[Copy] navigator.clipboard.writeText failed, falling back to legacy execCommand.', err);
+        }
+    }
+
+    // 备用方案：在非 HTTPS 或非本地测试环境下，使用传统的 document.execCommand('copy')
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    
+    // 微调样式，确保不在屏幕上留下痕迹或触发滚动/定位问题
+    textArea.style.position = 'fixed';
+    textArea.style.top = '0';
+    textArea.style.left = '0';
+    textArea.style.width = '2em';
+    textArea.style.height = '2em';
+    textArea.style.padding = '0';
+    textArea.style.border = 'none';
+    textArea.style.outline = 'none';
+    textArea.style.boxShadow = 'none';
+    textArea.style.background = 'transparent';
+    
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        if (successful) {
+            return true;
+        } else {
+            throw new Error('execCommand returned false');
+        }
+    } catch (err) {
+        if (document.body.contains(textArea)) {
+            document.body.removeChild(textArea);
+        }
+        console.error('[Copy] Legacy execCommand failed:', err);
+        throw new Error('浏览器未授予剪贴板访问权限或不支持自动复制');
+    }
+};
+
 // 导出工具函数（全局挂载）
 window.utils = {
     debounce,
@@ -240,5 +293,6 @@ window.utils = {
     getRandomEmoji,
     FALLBACK_EMOJIS,
     handleIconError,
-    handleIconLoad
+    handleIconLoad,
+    copyText
 };

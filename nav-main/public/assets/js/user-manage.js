@@ -1393,7 +1393,11 @@ window.copyUnusedInvites = async () => {
     
     if (window.SyncUI) {
         await window.SyncUI.perform('CLIPBOARD', async () => {
-            await navigator.clipboard.writeText(unused.join('\n'));
+            if (window.utils && typeof window.utils.copyText === 'function') {
+                await window.utils.copyText(unused.join('\n'));
+            } else {
+                await navigator.clipboard.writeText(unused.join('\n'));
+            }
         });
     }
 };
@@ -1401,7 +1405,11 @@ window.copyUnusedInvites = async () => {
 window.copySingleInvite = async (code) => {
     if (window.SyncUI) {
         await window.SyncUI.perform('CLIPBOARD', async () => {
-            await navigator.clipboard.writeText(code);
+            if (window.utils && typeof window.utils.copyText === 'function') {
+                await window.utils.copyText(code);
+            } else {
+                await navigator.clipboard.writeText(code);
+            }
         });
     }
 };

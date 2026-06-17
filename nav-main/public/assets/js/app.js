@@ -1455,11 +1455,19 @@ const openProfileCenter = async () => {
             const slug = val.toLowerCase().replace(/[^a-z0-9\-]/g, '');
             if (!slug) return showToast("请先设置有效的个性别名", "#e74c3c");
             const link = `${window.location.origin}/?p=${slug}`;
-            navigator.clipboard.writeText(link).then(() => {
-                showToast("分享链接已复制至剪贴板！", "#2ecc71");
-            }).catch(() => {
-                showToast("复制失败，请手动复制预览链接", "#e74c3c");
-            });
+            if (window.utils && typeof window.utils.copyText === 'function') {
+                window.utils.copyText(link).then(() => {
+                    showToast("分享链接已复制至剪贴板！", "#2ecc71");
+                }).catch(() => {
+                    showToast("复制失败，请手动复制预览链接", "#e74c3c");
+                });
+            } else {
+                navigator.clipboard.writeText(link).then(() => {
+                    showToast("分享链接已复制至剪贴板！", "#2ecc71");
+                }).catch(() => {
+                    showToast("复制失败，请手动复制预览链接", "#e74c3c");
+                });
+            }
         };
 
         window.selectProfileAvatar = (el, url) => {
@@ -3991,6 +3999,39 @@ const initGlobalEvents = () => {
         }, { passive: true });
     }
 
+    // 全局支持 Ctrl+V/粘贴 行为唤醒并自动填入搜索框 (配合 Ctrl+V 快捷键盘触发焦点转移)
+    document.addEventListener('paste', (e) => {
+        const active = document.activeElement;
+        const isInput = active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable;
+        if (isInput) return; // 如果已经有输入框在焦点中，由浏览器自行执行默认的输入框粘贴即可
+
+        const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
+        if (activeModal || isPageManagementMode) return;
+
+        const sea = document.getElementById('sea-input');
+        if (sea) {
+            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+            if (pasteData) {
+                e.preventDefault();
+                document.body.classList.add('search-active');
+                sea.value = pasteData;
+                sea.focus();
+                
+                // 唤起禅意模式下展开逻辑
+                if (appData.settings?.zenMode && !isZenTempExpanded) {
+                    isZenTempExpanded = true;
+                    renderNav();
+                }
+
+                // 光标定位至末尾
+                sea.setSelectionRange(pasteData.length, pasteData.length);
+
+                // 重新刷新并促发模糊查询
+                sea.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+    });
+
     // 监听全局键盘事件 (Core Shortcuts and Geometric Navigation)
     document.addEventListener('keydown', (e) => {
         if (!e.key) return;
@@ -4203,6 +4244,23 @@ const initGlobalEvents = () => {
                 sea.focus();
             }
             return;
+        }
+
+        // 9. Ctrl+V / Cmd+V 快捷唤起搜索并自动对准输入框（配合原生 paste 事件完成极其顺畅的粘贴搜索体验）
+        if (!isInput && isCtrl && key === 'v') {
+            const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
+            if (activeModal || isPageManagementMode) return;
+            const sea = document.getElementById('sea-input');
+            if (sea) {
+                document.body.classList.add('search-active');
+                sea.focus();
+                
+                // 唤起禅意模式下展开逻辑
+                if (appData.settings?.zenMode && !isZenTempExpanded) {
+                    isZenTempExpanded = true;
+                    renderNav();
+                }
+            }
         }
     });
 
