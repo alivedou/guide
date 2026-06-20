@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -63,12 +63,12 @@ async function triggerExceptionAlert(err, request, env) {
   // 2. 查询授权接收的管理员邮箱进行派发
   try {
     const receivers = await env.DB.prepare(`
-      SELECT u.email 
-      FROM users u 
-      JOIN user_settings s ON u.id = s.user_id 
+      SELECT u.email
+      FROM users u
+      JOIN user_settings s ON u.id = s.user_id
       WHERE s.is_alert_receiver = 1 AND u.email IS NOT NULL
     `).all();
-    
+
     if (receivers.results && receivers.results.length > 0) {
       for (const r of receivers.results) {
         await sendEmailHelper(r.email, subject, text, env);
@@ -85,19 +85,19 @@ async function triggerExceptionAlert(err, request, env) {
  */
 export async function onRequest(context) {
   const { request, env, next } = context;
-  
+
   try {
     return await handleRequest(context);
   } catch (err) {
-    // 异步执行告警，不阻塞客户端主线程，实现极限非阻塞体验 (Task N.3)
+    // 异步执行告警，不阻塞客户端主线程，实现极限非阻塞体验
     context.waitUntil(triggerExceptionAlert(err, request, env));
-    
-    return new Response(JSON.stringify({ 
-      error: "Internal Server Error", 
-      message: "系统检测到边缘运行期发生未捕获严重异常。事件已安全审计并自动发送紧急告警至管理员。" 
-    }), { 
-      status: 500, 
-      headers: { "Content-Type": "application/json" } 
+
+    return new Response(JSON.stringify({
+      error: "Internal Server Error",
+      message: "系统检测到边缘运行期发生未捕获严重异常。事件已安全审计并自动发送紧急告警至管理员。"
+    }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
     });
   }
 }
@@ -119,7 +119,7 @@ async function handleRequest(context) {
     '/api/announcements',
     '/api/share'
   ];
-  
+
   const isPublic = publicPaths.some(p => path === p);
 
   // 3. 解析 Token
@@ -129,15 +129,15 @@ async function handleRequest(context) {
       const token = authHeader.split(" ")[1];
       const secret = new TextEncoder().encode(env.JWT_SECRET || 'cloudnav-secret-2026');
       const { payload } = await jose.jwtVerify(token, secret);
-      
+
       // 检查用户状态
       const user = await env.DB.prepare('SELECT id, username, role, status, uid, has_invite FROM users WHERE id = ?').bind(payload.id).first();
-      
+
       if (user) {
         if (user.status === 'frozen') {
           return new Response(JSON.stringify({ error: "Forbidden", message: "您的账号已被封禁" }), { status: 403 });
         }
-        
+
         // 注入用户信息
         context.data.user = {
           id: user.id,
@@ -156,7 +156,7 @@ async function handleRequest(context) {
   }
 
   // 4. 强制校验逻辑 (RBAC)
-  
+
   // 管理员接口校验
   if (path.startsWith('/api/admin/')) {
     // 💡 特殊豁免 1：获取全站基本配置（如 SEO 标题/Favicon）需要对所有人公开，以便游客和搜索引擎加载

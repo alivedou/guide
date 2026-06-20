@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -9,12 +9,12 @@
 export async function onRequestGet(context) {
   const { env, data, request } = context;
   const user = data.user;
-  
-  // Task AC.4: 审计日志仅限 Admin 查看
+
+  // 审计日志仅限 Admin 查看
   if (user.role !== 'admin') {
-    return new Response(JSON.stringify({ 
-      error: "Forbidden", 
-      message: "权限不足：只有系统管理员可以查看审计日志" 
+    return new Response(JSON.stringify({
+      error: "Forbidden",
+      message: "权限不足：只有系统管理员可以查看审计日志"
     }), { status: 403 });
   }
 
@@ -26,7 +26,7 @@ export async function onRequestGet(context) {
 
   try {
     let query = `
-      SELECT al.*, u.username as operator_name 
+      SELECT al.*, u.username as operator_name
       FROM audit_logs al
       LEFT JOIN users u ON al.user_id = u.id
       WHERE 1=1
@@ -61,8 +61,8 @@ export async function onRequestGet(context) {
 
     const { results } = await env.DB.prepare(query).bind(...finalParams).all();
 
-    return new Response(JSON.stringify({ 
-      success: true, 
+    return new Response(JSON.stringify({
+      success: true,
       logs: results,
       pagination: { total, page, pageSize }
     }), {

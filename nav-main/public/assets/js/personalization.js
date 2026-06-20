@@ -4,10 +4,10 @@
  * 负责背景毛玻璃度、背景图上传、网站个性化细节样式设置与预览。
  */
 
-// Task 4.2: 视觉实验室控制
+// 视觉实验室控制
 window.openVisualLab = () => {
-    window.lastFocusedElement = document.activeElement; // Task 37.2
-    // Task 9.6: 互斥显示 (使用静默模式刷新，不触发云端同步)
+    window.lastFocusedElement = document.activeElement; 
+    // 互斥显示 (使用静默模式刷新，不触发云端同步)
     if (typeof window.closeAllModals === 'function') {
         window.closeAllModals(true);
     }
@@ -16,10 +16,10 @@ window.openVisualLab = () => {
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
     const confirmBtn = document.getElementById('btn-confirm-edit');
-    
+
     if (!modal || !body) return;
 
-    modal.dataset.modalType = 'visual-lab'; // 🚀 标记为个性化设置 (Task UI.25)
+    modal.dataset.modalType = 'visual-lab'; // 🚀 标记为个性化设置
     title.innerHTML = `视觉实验室 ${window.isDataDirty ? '<span style="font-size:10px; background:#e67e22; color:#fff; padding:2px 6px; border-radius:10px; margin-left:10px; vertical-align:middle; font-weight:normal;">本地预览中</span>' : ''}`;
     const isZen = window.appData.settings?.zenMode === true;
     body.innerHTML = `
@@ -34,14 +34,14 @@ window.openVisualLab = () => {
         <div class="visual-option-group">
             <span class="visual-option-label" style="margin-bottom: 6px;"><i class="ri-image-line"></i> 自定义背景</span>
             <div style="display:flex; gap:8px; width:100%; align-items:center; margin-bottom: 8px;">
-                <input type="text" id="bg-url-input" placeholder="输入网络图片 URL (留空显示 Bing 壁纸)" 
-                       value="${window.appData.settings?.bgUrl === 'local_upload' ? '本地上传图片' : (window.appData.settings?.bgUrl || '')}" 
+                <input type="text" id="bg-url-input" placeholder="输入网络图片 URL (留空显示 Bing 壁纸)"
+                       value="${window.appData.settings?.bgUrl === 'local_upload' ? '本地上传图片' : (window.appData.settings?.bgUrl || '')}"
                        onchange="setVisualSetting('bgUrl', this.value)"
                        style="flex:1; height:38px; font-size:12px; box-sizing:border-box;"
                        ${window.appData.settings?.bgUrl === 'local_upload' ? 'disabled' : ''}>
-                <button class="icon-btn-action" 
+                <button class="icon-btn-action"
                          onclick="setVisualSetting('hideBgMask', !window.appData.settings?.hideBgMask)"
-                         title="开启/关闭背景模糊" 
+                         title="开启/关闭背景模糊"
                          style="width:38px; height:38px; flex-shrink:0; ${!window.appData.settings?.hideBgMask ? 'background: var(--primary); border-color: var(--primary); color: #fff;' : ''}">
                     <i class="ri-contrast-drop-2-line"></i>
                 </button>
@@ -70,7 +70,7 @@ window.openVisualLab = () => {
                         </button>
                     </div>
                 </div>
-                
+
                 <!-- 2. 单视图隔离 -->
                 <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px; ${isZen ? 'opacity: 0.6;' : ''}">
                     <span class="visual-option-label" style="margin: 0; font-size: 13px;"><i class="ri-window-line"></i> 视图展示</span>
@@ -118,7 +118,7 @@ window.openVisualLab = () => {
             <p style="font-size: 11px; opacity: 0.6; margin-top: 4px;">说明: 设定链接跳转行为与常去磁贴显示</p>
         </div>
     `;
-    
+
     modal.style.display = 'flex';
     confirmBtn.style.display = 'block';
     confirmBtn.innerText = window.isDataDirty ? "应用并关闭" : "完成设置";
@@ -126,7 +126,7 @@ window.openVisualLab = () => {
         if (typeof window.closeAllModals === 'function') window.closeAllModals();
     };
 
-    // Task 37.2: 自动聚焦第一个选项
+    // 自动聚焦第一个选项
     setTimeout(() => {
         modal.querySelector('.seg-btn')?.focus();
     }, 50);
@@ -135,7 +135,7 @@ window.openVisualLab = () => {
 window.setVisualSetting = (key, value) => {
     if (!window.appData.settings) window.appData.settings = {};
 
-    // Task 24.3: 禅意模式下的交互拦截与引导
+    // 禅意模式下的交互拦截与引导
     if (window.appData.settings.zenMode && key === 'isolatedView') {
         if (typeof window.showToast === 'function') {
             window.showToast("禅意模式已强制开启隔离视图，退出后可修改常规模态", "#e67e22");
@@ -145,8 +145,8 @@ window.setVisualSetting = (key, value) => {
 
     window.appData.settings[key] = value;
     window.isDataDirty = true; // 标记待同步
-    
-    // 如果修改了影响 DOM 结构的配置，触发重新渲染 (Task 4.17.2)
+
+    // 如果修改了影响 DOM 结构的配置，触发重新渲染
     if (['isolatedView', 'showFrequent', 'link_target'].includes(key)) {
         if (typeof window.renderNav === 'function') window.renderNav();
     }
@@ -164,19 +164,19 @@ window.triggerBgUpload = () => {
         input.accept = 'image/*';
         input.style.display = 'none';
         document.body.appendChild(input);
-        
+
         input.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
-            // 安全限制：使用 IndexedDB 存储本地大文件，轻松支持 10MB 本地图片，零服务器开销 (Task UI.25)
+
+            // 安全限制：使用 IndexedDB 存储本地大文件，轻松支持 10MB 本地图片，零服务器开销
             if (file.size > 10 * 1024 * 1024) {
                 if (typeof window.showToast === 'function') {
                     window.showToast("上传失败：本地图片大小请限制在 10MB 以内", "#e74c3c");
                 }
                 return;
             }
-            
+
             if (typeof window.showLoader === 'function') window.showLoader('正在载入并处理图片...');
             const reader = new FileReader();
             reader.onload = async (event) => {
@@ -223,7 +223,7 @@ window.toggleZenMode = (force, isFromShortcut = false) => {
     const newState = typeof force === 'boolean' ? force : !window.appData.settings.zenMode;
     window.appData.settings.zenMode = newState;
     window.isDataDirty = true; // 标记待同步
-    
+
     // 逻辑流转：进入禅意模式时默认静默，退出时默认展开
     if (newState) {
         window.isZenTempExpanded = false;
@@ -240,7 +240,7 @@ window.toggleZenMode = (force, isFromShortcut = false) => {
             window.showToast(newState ? "切换到禅意模式" : "切换到常规模式", newState ? "#2c3e50" : "#3498db");
         }
     }
-    
+
     // 强制清理搜索状态
     const sea = document.getElementById('sea-input');
     if (sea) sea.value = '';
@@ -248,7 +248,7 @@ window.toggleZenMode = (force, isFromShortcut = false) => {
 
     if (typeof window.renderNav === 'function') window.renderNav();
     if (typeof window.updateStyles === 'function') window.updateStyles();
-    
+
     // 同步视觉实验室 UI
     if (document.getElementById('edit-modal').style.display === 'flex') window.openVisualLab();
 };

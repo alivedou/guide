@@ -22,18 +22,18 @@ const utils_escapeHTML = window.utils ? window.utils.escapeHTML : (str) => {
               .replace(/'/g, '&#39;');
 };
 
-// ==================== 10. Task 4.1: 管理员后台 (Admin Hub) ====================
+// ==================== 10. 管理员后台 (Admin Hub) ====================
 
 window.openAdminHub = async (defaultTab = 'users') => {
-    window.lastFocusedElement = document.activeElement; // Task 37.2
-    // Task 9.6 & O++.1: 切换弹窗启用静默模式
+    window.lastFocusedElement = document.activeElement; 
+    // 切换弹窗启用静默模式
     if (typeof window.closeAllModals === 'function') window.closeAllModals(true);
 
     const modal = document.getElementById('edit-modal');
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
     const confirmBtn = document.getElementById('btn-confirm-edit');
-    
+
     if (!modal || !body) return;
 
     modal.dataset.modalType = 'admin-hub';
@@ -51,7 +51,7 @@ window.openAdminHub = async (defaultTab = 'users') => {
     window.adminSelectedInviteIds.clear();
     window.adminAuditFilters = { page: 1, pageSize: 20, keyword: '', actionType: '' };
     window.adminSelectedAuditIds.clear();
-    
+
     if (typeof window.updateAdminBatchBar === 'function') window.updateAdminBatchBar();
     if (typeof window.updateAnnounceBatchBar === 'function') window.updateAnnounceBatchBar();
     if (typeof window.updateInviteBatchBar === 'function') window.updateInviteBatchBar();
@@ -64,17 +64,17 @@ window.openAdminHub = async (defaultTab = 'users') => {
             fetch(`/api/admin/announcements?page=1&pageSize=20`, { headers: { 'Authorization': window.sysToken } }),
             fetch(`/api/admin/audit-logs?page=1&pageSize=20`, { headers: { 'Authorization': window.sysToken } })
         ]);
-        
+
         const userData = await usersRes.json();
         const inviteData = await inviteRes.json();
         const announceData = await announceRes.json();
         const auditData = await auditRes.json();
 
-        // 同步到内存状态 (Task 15.2 & UM.1 & STD.1)
-        window.adminData = { 
-            users: userData.users || [], 
-            invitations: inviteData.invitations || [], 
-            announcements: announceData.announcements || [], 
+        // 同步到内存状态
+        window.adminData = {
+            users: userData.users || [],
+            invitations: inviteData.invitations || [],
+            announcements: announceData.announcements || [],
             logs: auditData.logs || [],
             pagination: userData.pagination || {}
         };
@@ -87,7 +87,7 @@ window.openAdminHub = async (defaultTab = 'users') => {
                 <button class="hub-tab ${defaultTab === 'audit' ? 'active' : ''}" data-tab="audit" onclick="switchHubTab('audit')">审计日志</button>
             </div>
             <div id="hub-content-users" class="hub-pane ${defaultTab === 'users' ? 'active' : ''}">
-                <!-- Task UM.3: 折叠式搜索/筛选面板 -->
+                <!-- 折叠式搜索/筛选面板 -->
                 <div class="admin-search-panel">
                     <div class="admin-search-header" onclick="toggleAdminSearch()">
                         <span style="font-size: 13px; font-weight: bold;"><i class="ri-search-line"></i> 搜索与筛选面板</span>
@@ -109,7 +109,7 @@ window.openAdminHub = async (defaultTab = 'users') => {
                     </div>
                 </div>
 
-                <!-- 批量操作栏 (Task NT-V2.6) -->
+                <!-- 批量操作栏  -->
                 <div id="admin-user-batch-bar" class="admin-batch-bar">
                     <span id="user-batch-count">已选中 0 名用户</span>
                     <div style="display:flex; gap:10px;">
@@ -148,7 +148,7 @@ window.openAdminHub = async (defaultTab = 'users') => {
                     </div>
                 </div>
 
-                <!-- 批量操作栏 (Task STD.2) -->
+                <!-- 批量操作栏  -->
                 <div id="admin-invite-batch-bar" class="admin-batch-bar">
                     <span id="invite-batch-count">已选中 0 项</span>
                     <div style="display:flex; gap:10px;">
@@ -225,7 +225,7 @@ window.openAdminHub = async (defaultTab = 'users') => {
                     </div>
                 </div>
 
-                <!-- 批量操作栏 (Task AN.3) -->
+                <!-- 批量操作栏  -->
                 <div id="admin-announce-batch-bar" class="admin-batch-bar">
                     <span id="announce-batch-count">已选中 0 项</span>
                     <div style="display:flex; gap:10px;">
@@ -258,7 +258,7 @@ window.openAdminHub = async (defaultTab = 'users') => {
                     </div>
                 </div>
 
-                <!-- 批量控制条 (Task NT-V2.7) -->
+                <!-- 批量控制条  -->
                 <div id="admin-audit-batch-bar" class="admin-batch-bar visible" style="margin-bottom:15px;">
                     <span><i class="ri-history-line"></i> 审计安全日志管理</span>
                     <div style="display:flex; gap:10px;">
@@ -276,7 +276,7 @@ window.openAdminHub = async (defaultTab = 'users') => {
     }
 };
 
-// Task UM.3: 搜索与筛选交互函数
+// 搜索与筛选交互函数
 window.toggleAdminSearch = () => {
     const body = document.getElementById('admin-search-body');
     const arrow = document.getElementById('admin-search-arrow');
@@ -288,7 +288,7 @@ window.toggleAdminSearch = () => {
 const performAdminUserSearch = async () => {
     const container = document.getElementById('admin-users-table-container');
     if (container) container.style.opacity = '0.5';
-    
+
     try {
         const query = new URLSearchParams({
             page: window.adminUserFilters.page,
@@ -325,7 +325,7 @@ window.handleAdminUserFilter = (type, val) => {
     performAdminUserSearch();
 };
 
-// Task AN.3: 公告管理交互逻辑 (复用 UM 模块思路)
+// 公告管理交互逻辑 (复用 UM 模块思路)
 window.toggleAnnounceSearch = () => {
     const body = document.getElementById('announce-search-body');
     const arrow = document.getElementById('announce-search-arrow');
@@ -346,7 +346,7 @@ window.toggleAnnounceEditor = () => {
 const performAdminAnnounceSearch = async () => {
     const container = document.getElementById('admin-announce-table-container');
     if (container) container.style.opacity = '0.5';
-    
+
     try {
         const query = new URLSearchParams({
             page: window.adminAnnounceFilters.page,
@@ -417,7 +417,7 @@ const renderAdminAnnounceTableHTML = (list, pagination) => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:30px; opacity:0.5;">未找到匹配的公告</td></tr>' : 
+                    ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:30px; opacity:0.5;">未找到匹配的公告</td></tr>' :
                       list.map(a => `
                         <tr class="${window.adminSelectedAnnounceIds.has(a.id.toString()) ? 'selected' : ''}">
                             <td class="col-checkbox">
@@ -454,7 +454,7 @@ const renderAdminAnnounceTableHTML = (list, pagination) => {
 
         <div class="admin-pagination">
             <div class="pagination-info">
-                共 <b>${total}</b> 条，每页 
+                共 <b>${total}</b> 条，每页
                 <select style="width:auto; padding:2px 5px; height:24px; font-size:11px;" onchange="handleAdminAnnouncePageSizeChange(this.value)">
                     <option value="20" ${pageSize === 20 ? 'selected' : ''}>20</option>
                     <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
@@ -473,7 +473,7 @@ const renderAdminAnnounceTableHTML = (list, pagination) => {
 window.toggleAdminAnnounceSelect = (id, checked) => {
     if (checked) window.adminSelectedAnnounceIds.add(id.toString());
     else window.adminSelectedAnnounceIds.delete(id.toString());
-    
+
     const container = document.getElementById('admin-announce-table-container');
     if (container) {
         container.innerHTML = renderAdminAnnounceTableHTML(window.adminData.announcements, window.adminData.pagination);
@@ -509,7 +509,7 @@ window.updateAnnounceBatchBar = () => {
 
 window.batchAnnounceAction = async (action) => {
     if (window.adminSelectedAnnounceIds.size === 0) return;
-    
+
     const ids = Array.from(window.adminSelectedAnnounceIds);
     let msg = "";
     let title = "";
@@ -527,7 +527,7 @@ window.batchAnnounceAction = async (action) => {
         msg = `确定要批量归档这 ${ids.length} 条公告吗？`;
         isDanger = false;
     }
-    
+
     if (msg) {
         if (typeof window.requireSystemConfirm === 'function') {
             const ok = await window.requireSystemConfirm(title, msg, isDanger);
@@ -560,7 +560,7 @@ window.batchAnnounceAction = async (action) => {
     }
 };
 
-// Task STD.2: 邀请管理交互逻辑
+// 邀请管理交互逻辑
 window.toggleInviteSearch = () => {
     const body = document.getElementById('invite-search-body');
     const arrow = document.getElementById('invite-search-arrow');
@@ -572,7 +572,7 @@ window.toggleInviteSearch = () => {
 const performAdminInviteSearch = async () => {
     const container = document.getElementById('admin-invite-table-container');
     if (container) container.style.opacity = '0.5';
-    
+
     try {
         const query = new URLSearchParams({
             page: window.adminInviteFilters.page,
@@ -635,7 +635,7 @@ const renderAdminInviteTableHTML = (list, pagination) => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:30px; opacity:0.5;">暂无邀请码</td></tr>' : 
+                    ${list.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:30px; opacity:0.5;">暂无邀请码</td></tr>' :
                       list.map(i => `
                         <tr class="${window.adminSelectedInviteIds.has(i.code) ? 'selected' : ''}">
                             <td class="col-checkbox">
@@ -726,7 +726,7 @@ window.batchInviteAction = async (action) => {
     }
 };
 
-// Task STD.3: 审计日志交互逻辑
+// 审计日志交互逻辑
 window.toggleAuditSearch = () => {
     const body = document.getElementById('audit-search-body');
     const arrow = document.getElementById('audit-search-arrow');
@@ -738,7 +738,7 @@ window.toggleAuditSearch = () => {
 const performAdminAuditSearch = async () => {
     const container = document.getElementById('admin-audit-table-container');
     if (container) container.style.opacity = '0.5';
-    
+
     try {
         const query = new URLSearchParams({
             page: window.adminAuditFilters.page,
@@ -782,10 +782,10 @@ window.handleAdminAuditPageChange = (page) => {
 window.toggleAdminAuditSelect = (id, checked) => {
     if (checked) window.adminSelectedAuditIds.add(id.toString());
     else window.adminSelectedAuditIds.delete(id.toString());
-    
+
     const tr = document.querySelector(`#admin-audit-table-container tr[data-id="${id}"]`);
     if (tr) tr.classList.toggle('selected', checked);
-    
+
     updateAuditBatchBar();
 };
 
@@ -854,7 +854,7 @@ const renderAdminAuditTableHTML = (logs, pagination) => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${logs.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:30px; opacity:0.5;">暂无日志数据</td></tr>' : 
+                    ${logs.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:30px; opacity:0.5;">暂无日志数据</td></tr>' :
                       logs.map(l => {
                         const dateStr = typeof window.formatSystemDate === 'function' ? window.formatSystemDate(l.created_at, false) : l.created_at;
                         const tz = window.sysSiteConfig?.systemTimezone || 'Asia/Shanghai';
@@ -867,7 +867,7 @@ const renderAdminAuditTableHTML = (logs, pagination) => {
                         }
                         const actionInfo = window.AuditActionMap ? (window.AuditActionMap[l.action] || { label: l.action, color: '#3498db' }) : { label: l.action, color: '#3498db' };
                         const isSelected = window.adminSelectedAuditIds.has(l.id.toString());
-                        
+
                         return `
                         <tr class="${isSelected ? 'selected' : ''}" data-id="${l.id}">
                             <td class="col-checkbox">
@@ -935,7 +935,7 @@ const renderAdminUserTableHTML = (users) => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${users.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:30px; opacity:0.5;">未找到匹配的用户</td></tr>' : 
+                    ${users.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:30px; opacity:0.5;">未找到匹配的用户</td></tr>' :
                       users.map(u => `
                         <tr class="${window.adminSelectedUserIds.has(u.id) ? 'selected' : ''}">
                             <td class="col-checkbox">
@@ -972,10 +972,10 @@ const renderAdminUserTableHTML = (users) => {
             </table>
         </div>
 
-        <!-- Task UM.5: 分页控制 -->
+        <!-- 分页控制 -->
         <div class="admin-pagination">
             <div class="pagination-info">
-                共 <b>${total}</b> 条数据，每页 
+                共 <b>${total}</b> 条数据，每页
                 <select style="width:auto; padding:2px 5px; height:24px; font-size:11px;" onchange="handleAdminPageSizeChange(this.value)">
                     <option value="20" ${pageSize === 20 ? 'selected' : ''}>20</option>
                     <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
@@ -985,7 +985,7 @@ const renderAdminUserTableHTML = (users) => {
             <div class="pagination-controls">
                 <button class="page-btn" ${page <= 1 ? 'disabled' : ''} onclick="handleAdminPageChange(1)" title="第一页"><i class="ri-arrow-left-double-line"></i></button>
                 <button class="page-btn" ${page <= 1 ? 'disabled' : ''} onclick="handleAdminPageChange(${page - 1})" title="上一页"><i class="ri-arrow-left-s-line"></i></button>
-                
+
                 <span style="font-size:12px; margin:0 10px;">第 <b>${page}</b> / ${totalPages || 1} 页</span>
 
                 <button class="page-btn" ${page >= totalPages ? 'disabled' : ''} onclick="handleAdminPageChange(${page + 1})" title="下一页"><i class="ri-arrow-right-s-line"></i></button>
@@ -995,11 +995,11 @@ const renderAdminUserTableHTML = (users) => {
     `;
 };
 
-// Task UM.4: 多选与批量操作逻辑
+// 多选与批量操作逻辑
 window.toggleAdminUserSelect = (userId, checked) => {
     if (checked) window.adminSelectedUserIds.add(userId);
     else window.adminSelectedUserIds.delete(userId);
-    
+
     // 局部更新表格行样式而不重绘整个表格（优化性能）
     const container = document.getElementById('admin-users-table-container');
     if (container) {
@@ -1043,7 +1043,7 @@ window.updateAdminBatchBar = () => {
     }
 };
 
-// Task UM.6: CSV 批量导出实现
+// CSV 批量导出实现
 window.exportUsersCSV = () => {
     if (window.adminSelectedUserIds.size === 0) {
         if (typeof window.showToast === 'function') window.showToast("请先选择要导出的用户", "#e67e22");
@@ -1051,7 +1051,7 @@ window.exportUsersCSV = () => {
     }
 
     const selectedUsers = window.adminData.users.filter(u => window.adminSelectedUserIds.has(u.id));
-    
+
     // 1. 构建 CSV 内容
     const headers = ['ID', 'UUID', 'Username', 'Role', 'Status', 'Last Login', 'Created At'];
     const rows = selectedUsers.map(u => [
@@ -1075,18 +1075,18 @@ window.exportUsersCSV = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const timestamp = new Date().toISOString().slice(0,10).replace(/-/g, '');
-    
+
     link.setAttribute("href", url);
     link.setAttribute("download", `CloudNav_Users_Export_${timestamp}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     if (typeof window.showToast === 'function') window.showToast("成功导出 CSV 记录", "#2ecc71");
 };
 
-// Task NT-V2.7: CSV 审计日志导出实现
+// CSV 审计日志导出实现
 window.exportAuditCSV = () => {
     let targetLogs = [];
     if (window.adminSelectedAuditIds.size > 0) {
@@ -1125,14 +1125,14 @@ window.exportAuditCSV = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const timestamp = new Date().toISOString().slice(0,10).replace(/-/g, '');
-    
+
     link.setAttribute("href", url);
     link.setAttribute("download", `CloudNav_Audit_Logs_${timestamp}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     if (typeof window.showToast === 'function') {
         window.showToast(window.adminSelectedAuditIds.size > 0 ? "已成功导出选中日志" : "已成功导出当前页全部筛选日志", "#2ecc71");
     }
@@ -1141,8 +1141,8 @@ window.exportAuditCSV = () => {
 window.switchHubTab = (tab) => {
     document.querySelectorAll('.hub-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     document.querySelectorAll('.hub-pane').forEach(p => p.classList.toggle('active', p.id === `hub-content-${tab}`));
-    
-    // 复位所有批量状态的可见性类 (Task NT-V2.10)
+
+    // 复位所有批量状态的可见性类
     const userBar = document.getElementById('admin-user-batch-bar');
     const announceBar = document.getElementById('admin-announce-batch-bar');
     const inviteBar = document.getElementById('admin-invite-batch-bar');
@@ -1152,7 +1152,7 @@ window.switchHubTab = (tab) => {
     if (announceBar) announceBar.classList.remove('visible');
     if (inviteBar) inviteBar.classList.remove('visible');
     // 审计常驻工具栏无需移除 visible 类
-    
+
     if (tab === 'users') {
         updateAdminBatchBar();
     } else if (tab === 'announcements') {
@@ -1200,7 +1200,7 @@ window.deleteInvite = async (code) => {
 };
 
 window.updateUserAdmin = async (userId, payload) => {
-    // Task UM.8.5: 统一二次验证逻辑
+    // 统一二次验证逻辑
     if (typeof window.requireAdminAuth !== 'function') return;
     const adminPassword = await window.requireAdminAuth("正在更改用户的安全与状态配置");
     if (!adminPassword) return;
@@ -1223,7 +1223,7 @@ window.resetUserPasswordAdmin = async (userId) => {
     if (typeof window.requireNewPasswordAdmin !== 'function' || typeof window.requireAdminAuth !== 'function') return;
     const newPassword = await window.requireNewPasswordAdmin("请指定该用户的新密码：");
     if (!newPassword) return;
-    
+
     const adminPassword = await window.requireAdminAuth("强行改写其它用户登录密码");
     if (!adminPassword) return;
 
@@ -1307,7 +1307,7 @@ window.deleteAnnouncement = async (id) => {
     if (typeof window.requireSystemConfirm !== 'function') return;
     const ok = await window.requireSystemConfirm("删除全站公告", "确定要下架并彻底删除这条公告吗？下发后将全员隐退！", true);
     if (!ok) return;
-    
+
     if (window.SyncUI) {
         await window.SyncUI.perform('ANNOUNCE_DEL', async () => {
             const res = await fetch('/api/admin/announcements', {
@@ -1340,7 +1340,7 @@ window.editAnnouncement = (a) => {
     document.getElementById('announce-content').value = a.content;
     document.getElementById('announce-type').value = a.type;
     document.getElementById('announce-top').checked = a.is_top === 1;
-    
+
     if (a.expire_at) {
         // 将数据库时间格式转换为 datetime-local 接受的格式 (YYYY-MM-DDTHH:MM)
         const date = new Date(a.expire_at);
@@ -1357,7 +1357,7 @@ window.editAnnouncement = (a) => {
     document.getElementById('btn-save-announce').innerText = isDraft ? "保存为草稿" : "确认保存修改";
     document.getElementById('btn-save-announce').classList.add('warning-btn'); // 提示是修改操作
     document.getElementById('btn-cancel-announce').style.display = 'inline-block';
-    
+
     // 平滑滚动到编辑器区域
     const editor = document.querySelector('.admin-announce-editor');
     if (editor) editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1378,10 +1378,10 @@ window.cancelEditAnnounce = () => {
 };
 
 window.copyUnusedInvites = async () => {
-    // Task 15.2: 改为从内存数据读取，彻底解耦 DOM
+    // 改为从内存数据读取，彻底解耦 DOM
     const allInvites = window.adminData.invitations || [];
     const unused = allInvites.filter(i => i.status === 'unused').map(i => i.code);
-        
+
     if (allInvites.length === 0) {
         if (typeof window.showToast === 'function') window.showToast("当前没有任何邀请码", "#e67e22");
         return;
@@ -1390,7 +1390,7 @@ window.copyUnusedInvites = async () => {
         if (typeof window.showToast === 'function') window.showToast("所有邀请码均已被使用", "#e67e22");
         return;
     }
-    
+
     if (window.SyncUI) {
         await window.SyncUI.perform('CLIPBOARD', async () => {
             if (window.utils && typeof window.utils.copyText === 'function') {

@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -76,8 +76,8 @@ export async function onRequestGet(context) {
 
   const kvKey = userId === "guest" ? "config" : `user_config:${userId}`;
 
-  // Task UQ.2: 强制禁用浏览器及 CDN 缓存，确保配额实时同步
-  const headers = { 
+  // 强制禁用浏览器及 CDN 缓存，确保配额实时同步
+  const headers = {
     "Content-Type": "application/json;charset=UTF-8",
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
     "Pragma": "no-cache",
@@ -87,7 +87,7 @@ export async function onRequestGet(context) {
   try {
     let dataStr = await env.nav.get(kvKey);
     let dataObj;
-    
+
     if (dataStr) {
       dataObj = JSON.parse(dataStr);
     } else {
@@ -120,11 +120,11 @@ export async function onRequestGet(context) {
 export async function onRequestPost(context) {
   const { request, env, data } = context;
   const authUser = data.user;
-  
+
   if (!authUser.id) {
-    return new Response(JSON.stringify({ 
-      error: "Unauthorized", 
-      code: "ERR_UNAUTHORIZED" 
+    return new Response(JSON.stringify({
+      error: "Unauthorized",
+      code: "ERR_UNAUTHORIZED"
     }), { status: 401 });
   }
 
@@ -135,12 +135,12 @@ export async function onRequestPost(context) {
   try {
     const newData = await request.json();
     const { categories, items, settings } = newData;
-    
+
     // 动态资源配额校验
     if (categories && categories.length > quota.maxCategories) {
-      return new Response(JSON.stringify({ 
-        error: `分类数量已达到上限 (${quota.maxCategories})`, 
-        code: "ERR_QUOTA_EXCEEDED" 
+      return new Response(JSON.stringify({
+        error: `分类数量已达到上限 (${quota.maxCategories})`,
+        code: "ERR_QUOTA_EXCEEDED"
       }), { status: 403 });
     }
 
@@ -151,15 +151,15 @@ export async function onRequestPost(context) {
         const cId = item.catId || item.cat_id;
         catCounts[cId] = (catCounts[cId] || 0) + 1;
         if (catCounts[cId] > quota.maxItemsPerCategory) {
-          return new Response(JSON.stringify({ 
-            error: `单个分类下的书签不能超过 ${quota.maxItemsPerCategory} 个`, 
-            code: "ERR_QUOTA_EXCEEDED" 
+          return new Response(JSON.stringify({
+            error: `单个分类下的书签不能超过 ${quota.maxItemsPerCategory} 个`,
+            code: "ERR_QUOTA_EXCEEDED"
           }), { status: 403 });
         }
       }
     }
 
-    // 1. D1 事务持久化 (Task 6.3 & Task NT-V2.20)
+    // 1. D1 事务持久化)
     // 1.1 先行执行全量清空 (DELETE)，确保多租户数据干净剔除
     const deleteQueries = [
       env.DB.prepare('DELETE FROM categories WHERE user_id = ?').bind(userId),
@@ -167,7 +167,7 @@ export async function onRequestPost(context) {
     ];
     await env.DB.batch(deleteQueries);
 
-    // 1.2 动态封装所有写入操作 (INSERT & UPDATE)与多用户主键安全重塑 (Task NT-V2.22)
+    // 1.2 动态封装所有写入操作 (INSERT & UPDATE)与多用户主键安全重塑
     const writeQueries = [];
     const catIdMap = new Map();
     const finalCategories = [];
@@ -191,12 +191,12 @@ export async function onRequestPost(context) {
 
         writeQueries.push(env.DB.prepare('INSERT INTO categories (id, user_id, name, icon, sort_order, is_video, hidden) VALUES (?, ?, ?, ?, ?, ?, ?)')
           .bind(
-            newId, 
-            userId, 
-            newCat.name, 
-            newCat.icon, 
-            idx, 
-            newCat._isVideo ? 1 : 0, 
+            newId,
+            userId,
+            newCat.name,
+            newCat.icon,
+            idx,
+            newCat._isVideo ? 1 : 0,
             newCat.hidden ? 1 : 0
           ));
       });
@@ -206,7 +206,7 @@ export async function onRequestPost(context) {
       items.forEach((item, idx) => {
         let oldCatId = item.catId || item.cat_id;
         let newCatId = catIdMap.get(oldCatId);
-        
+
         if (!newCatId) {
             const fallbackNewId = Array.from(catIdMap.values())[0] || null;
             newCatId = fallbackNewId;
@@ -222,18 +222,18 @@ export async function onRequestPost(context) {
         };
         finalItems.push(newItem);
 
-        // Task 4.4: 强制所有权绑定，防止跨用户注入数据
+        // 强制所有权绑定，防止跨用户注入数据
         writeQueries.push(env.DB.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .bind(
-            newItemId, 
-            userId, 
-            newCatId, 
-            item.title || '未命名书签', 
-            item.url || '', 
-            item.desc !== undefined ? item.desc : null, 
-            item.icon !== undefined ? item.icon : null, 
-            item.bg_color || '', 
-            idx, 
+            newItemId,
+            userId,
+            newCatId,
+            item.title || '未命名书签',
+            item.url || '',
+            item.desc !== undefined ? item.desc : null,
+            item.icon !== undefined ? item.icon : null,
+            item.bg_color || '',
+            idx,
             item.hidden ? 1 : 0
           ));
       });
@@ -276,7 +276,7 @@ export async function onRequestPost(context) {
                     await env.DB.prepare(query).run();
                 } catch(e) {}
             }
-            
+
             // 修补后重试
             for (let i = 0; i < writeQueries.length; i += chunkSize) {
                 const chunk = writeQueries.slice(i, i + chunkSize);
@@ -295,7 +295,7 @@ export async function onRequestPost(context) {
         lastUpdated: formatCNTime(new Date())
     };
     await env.nav.put(kvKey, JSON.stringify(syncedData));
-    
+
     return new Response(JSON.stringify({ success: true, categories: finalCategories, items: finalItems }), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
     return new Response(JSON.stringify({ error: "POST_ERROR", message: err.toString() }), { status: 500 });
@@ -305,18 +305,18 @@ export async function onRequestPost(context) {
 export async function onRequestDelete(context) {
   const { request, env, data } = context;
   const authUser = data.user;
-  
+
   if (!authUser.id) {
-    return new Response(JSON.stringify({ 
-      error: "Unauthorized", 
-      code: "ERR_UNAUTHORIZED" 
+    return new Response(JSON.stringify({
+      error: "Unauthorized",
+      code: "ERR_UNAUTHORIZED"
     }), { status: 401 });
   }
 
   const userId = authUser.id;
   const kvKey = `user_config:${userId}`;
   try {
-    // 1. 阶梯式模板加载逻辑 (Task 6.1.1)
+    // 1. 阶梯式模板加载逻辑
     let onboardingData = null;
     try {
       const templateStr = await env.nav.get("system:onboarding_template");
@@ -327,12 +327,12 @@ export async function onRequestDelete(context) {
       console.log('[Reset] Using defaultData fallback');
       onboardingData = defaultData;
     }
-    
+
     if (!onboardingData || !onboardingData.categories) {
       console.warn('[Reset] CRITICAL: Using MINIMAL_SAFE_DATA');
       onboardingData = MINIMAL_SAFE_DATA;
     }
-    
+
     // 2. D1 事务级重置
     const queries = [
       env.DB.prepare('DELETE FROM categories WHERE user_id = ?').bind(userId),
@@ -344,7 +344,7 @@ export async function onRequestDelete(context) {
       const newCatId = crypto.randomUUID();
       queries.push(env.DB.prepare('INSERT INTO categories (id, user_id, name, icon, hidden) VALUES (?, ?, ?, ?, ?)')
         .bind(newCatId, userId, cat.name, cat.icon, cat.hidden ? 1 : 0));
-      
+
       const catItems = (onboardingData.items || []).filter(i => (i.catId || i.cat_id) === cat.id);
       for (const item of catItems) {
         const newItemId = crypto.randomUUID();
@@ -385,7 +385,7 @@ export async function onRequestDelete(context) {
     // 3. 同步 KV 缓存
     const resetData = { ...onboardingData, lastUpdated: formatCNTime(new Date()) };
     await env.nav.put(kvKey, JSON.stringify(resetData));
-    
+
     return new Response(JSON.stringify({ success: true, message: "已重置为默认配置" }), {
       headers: { "Content-Type": "application/json" }
     });

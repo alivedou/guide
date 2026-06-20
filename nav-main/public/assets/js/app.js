@@ -1,12 +1,12 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
  * @disclaimer 免责声明：本软件及相关代码仅用于学术研究与个人学习，作者不对因使用本软件产生的任何直接或间接损失承担责任。
  */
 
-// Task SYNC.GUARD.2: 获取核心数据指纹（仅包含分类和网址内容）
+// 获取核心数据指纹（仅包含分类和网址内容）
 const getCoreDataFingerprint = (data) => {
     if (!data) return '';
     const cleanSettings = { ...data.settings };
@@ -27,51 +27,51 @@ const MINIMAL_SAFE_DATA = {
     items: []
 };
 
-let appData = { 
-    settings: { zenMode: false, isolatedView: false }, 
+let appData = {
+    settings: { zenMode: false, isolatedView: false },
     categories: [
         { id: 'temp_init', name: '加载中...', icon: '⌛' }
-    ], 
-    items: [] 
+    ],
+    items: []
 };
 let activeCatId = 'temp_init';
 let sysToken = localStorage.getItem('nav_token') || '';
-let currentUser = JSON.parse(localStorage.getItem('nav_current_user') || 'null'); // Task 39.4
-let isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_user'); // Task NT-V2.17: 根据持久化凭证智能对齐管理员权限状态
+let currentUser = JSON.parse(localStorage.getItem('nav_current_user') || 'null'); 
+let isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_user'); // 根据持久化凭证智能对齐管理员权限状态
 let isZenTempExpanded = true;
 let isActuallyZen = false;
 let isRendering = false; // 渲染防抖锁
-let lastSyncFingerprint = ''; // Task SYNC.GUARD.2: 数据指纹，用于过滤无效同步
-let isPageManagementMode = false; // 页面管理模式开关 (Task 3.3)
-let zenMoveAccumulator = 0; // 禅意模式位移累加器 (Task 11.1)
+let lastSyncFingerprint = ''; // 数据指纹，用于过滤无效同步
+let isPageManagementMode = false; // 页面管理模式开关
+let zenMoveAccumulator = 0; // 禅意模式位移累加器
 let lastMouseX = 0;
 let lastMouseY = 0;
-let isSidebarPinned = localStorage.getItem('nav_sidebar_pinned') !== 'false'; // 默认开启图钉 (Task 4.5.3)
+let isSidebarPinned = localStorage.getItem('nav_sidebar_pinned') !== 'false'; // 默认开启图钉
 let selectedIds = new Set(); // 已选中的 ID 集合
 let sortableInstances = []; // Sortable 实例存储
-let syncTimer = null; // 同步防抖计时器 (Task 2.5.4)
+let syncTimer = null; // 同步防抖计时器
 let syncRetryCount = 0; // 重试计数
-let touchStartY = 0; // 触摸起点 (Task 2.5.1)
+let touchStartY = 0; // 触摸起点
 let currentSearchIndex = -1;
 let historyIndex = -1;
 let searchHistory = JSON.parse(localStorage.getItem('search_history') || '[]');
 // themeMode state is now managed globally by theme-mode.js
 let simpleMode = localStorage.getItem('nav_simple_mode') === 'true';
 let currentEnginePrefix = localStorage.getItem('nav_search_prefix') || 'https://cn.bing.com/search?q=';
-let isDataDirty = false; // Task O+.1: 全局数据变更标记
-let lastSyncActionTime = 0; // Task 11.1: 云端同步冷却计时器
-let currentEditingAnnounceId = null; // Task 34.2: 正在编辑的公告 ID
-let lastFocusedElement = null; // Task 37.2: 记录弹窗前的焦点元素
-let adminUserFilters = { page: 1, pageSize: 20, keyword: '', status: '' }; // Task UM.3: 管理员用户筛选
-let adminSelectedUserIds = new Set(); // Task UM.4: 选中的用户 ID
-let adminAnnounceFilters = { page: 1, pageSize: 20, keyword: '', status: '', type: '' }; // Task AN.3: 公告筛选
-let adminSelectedAnnounceIds = new Set(); // Task AN.3: 选中的公告 ID
-let adminInviteFilters = { page: 1, pageSize: 20, keyword: '', status: '' }; // Task STD.2: 邀请码筛选
-let adminSelectedInviteIds = new Set(); // Task STD.2: 选中的邀请码
-let adminSelectedAuditIds = new Set(); // Task NT-V2.10: 选中的审计日志
-let adminAuditFilters = { page: 1, pageSize: 20, keyword: '', actionType: '' }; // Task STD.3: 审计日志筛选
+let isDataDirty = false; // 全局数据变更标记
+let lastSyncActionTime = 0; // 云端同步冷却计时器
+let currentEditingAnnounceId = null; // 正在编辑的公告 ID
+let lastFocusedElement = null; // 记录弹窗前的焦点元素
+let adminUserFilters = { page: 1, pageSize: 20, keyword: '', status: '' }; // 管理员用户筛选
+let adminSelectedUserIds = new Set(); // 选中的用户 ID
+let adminAnnounceFilters = { page: 1, pageSize: 20, keyword: '', status: '', type: '' }; // 公告筛选
+let adminSelectedAnnounceIds = new Set(); // 选中的公告 ID
+let adminInviteFilters = { page: 1, pageSize: 20, keyword: '', status: '' }; // 邀请码筛选
+let adminSelectedInviteIds = new Set(); // 选中的邀请码
+let adminSelectedAuditIds = new Set(); // 选中的审计日志
+let adminAuditFilters = { page: 1, pageSize: 20, keyword: '', actionType: '' }; // 审计日志筛选
 let adminData = { users: [], invitations: [], announcements: [], logs: [], pagination: {} }; // 管理员全站数据缓存
-let navLocalBgImage = null; // 本地缓存的高清 Base64 壁纸全局缓存，支持 10MB (Task UI.25)
+let navLocalBgImage = null; // 本地缓存的高清 Base64 壁纸全局缓存，支持 10MB
 
 // 全局状态和变量对齐网关，安全贯通各子模块
 Object.defineProperty(window, 'appData', {
@@ -360,7 +360,7 @@ const initLocalBgImage = async () => {
     }
 };
 
-// Task AL.1: 审计日志动作语义化映射
+// 审计日志动作语义化映射
 const AuditActionMap = {
     'LOGIN': { label: '安全登录', color: '#2ecc71' },
     'CREATE_USER': { label: '创建用户', color: '#3498db' },
@@ -377,7 +377,7 @@ const AuditActionMap = {
     'DELETE_INVITATION': { label: '作废邀请码', color: '#95a5a6' }
 };
 
-// ==================== Task 22.1: 全局语义化同步反馈引擎 ====================
+// = 全局语义化同步反馈引擎 ====================
 window.SyncUI = {
     // 1. 话术矩阵 (根据操作类型分流)
     messages: {
@@ -422,7 +422,7 @@ window.SyncUI = {
         let msg = this.messages[actionKey] || { loading: '正在处理中...', success: '操作已成功完成！' };
         // 如果是函数则执行获取对象 (用于区分角色话术)
         if (typeof msg === 'function') msg = msg();
-        
+
         showLoader(msg.loading);
         try {
             const result = await task();
@@ -430,7 +430,7 @@ window.SyncUI = {
             return result;
         } catch (e) {
             console.error(`[SyncUI] Action ${actionKey} failed:`, e);
-            // Task EXIT.1: 区分普通错误与引导性警告
+            // 区分普通错误与引导性警告
             const toastColor = e.isWarning ? "#e67e22" : "#e74c3c";
             showToast(e.message || "操作失败", toastColor);
             // 如果是警告，我们可能不想让调用者认为任务彻底失败了，但在目前的 Promise 链中 throw 是必要的
@@ -451,14 +451,14 @@ document.addEventListener('DOMContentLoaded', () => {
     initAuthUI();
     initGlobalEvents();
 
-    // Task 2: PWA 离线感知与状态自愈
+    // PWA 离线感知与状态自愈
     window.updateNetworkStatus = (event) => {
         const dot = document.getElementById('network-status');
         if (!dot) return;
         if (navigator.onLine) {
             dot.className = 'network-status-dot online';
             dot.title = '网络状态：云端在线同步中';
-            
+
             const isOnlineEvent = event && event.type === 'online';
             const intervalDays = window.appData?.settings?.syncInterval || 0;
             if (sysToken && isDataDirty && !isPageManagementMode && isOnlineEvent && intervalDays > 0) {
@@ -469,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             dot.className = 'network-status-dot offline';
             dot.title = '网络状态：本地离线暂存中';
-            
+
             const isOfflineEvent = event && event.type === 'offline';
             if (isOfflineEvent) {
                 showToast("网络连接已断开，您当前处于离线模式。修改将暂存本地！", "#e67e22");
@@ -480,7 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('offline', window.updateNetworkStatus);
     window.updateNetworkStatus();
 
-    // Task 3: 键盘快捷键帮助指南
+    // 键盘快捷键帮助指南
     window.toggleKeyboardHelp = (show) => {
         const modal = document.getElementById('keyboard-help-modal');
         if (!modal) return;
@@ -500,11 +500,11 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // 2. 初始视觉校准 & 本地大壁纸预载 (IndexedDB 异步) (Task UI.25)
+    // 2. 初始视觉校准 & 本地大壁纸预载 (IndexedDB 异步)
     initLocalBgImage().then(() => {
         updateStyles();
-        
-        // 3. 异步获取 Bing 壁纸 (Task 12.1)
+
+        // 3. 异步获取 Bing 壁纸
         if (!appData.settings?.bgUrl) {
             getBingWallpaper().then(() => updateStyles());
         }
@@ -513,17 +513,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // 4. 异步获取云端配置与公告
     initSiteConfig();
     init(); // 核心数据加载 (内部会触发 initAnnouncements)
-    
+
     checkSWUpdate();
-    
-    // Task 6.6: 初始化公告更新监听
+
+    // 初始化公告更新监听
     initAnnouncementsWatcher();
 
-    // Task 9.4: 启动自动备份调度检查 (延迟 10 秒执行，避开启动高峰)
+    // 启动自动备份调度检查 (延迟 10 秒执行，避开启动高峰)
     setTimeout(checkAutoSyncSchedule, 10000);
 });
 
-// Task 6.6: 公告更新监听引擎
+// 公告更新监听引擎
 const initAnnouncementsWatcher = () => {
     // 1. 页面可见性变化检测 (切回标签页时触发)
     document.addEventListener('visibilitychange', () => {
@@ -543,7 +543,7 @@ const checkAnnouncementsUpdate = async () => {
         });
         if (!res.ok) return;
         const { lastUpdate } = await res.json();
-        
+
         const localVersion = localStorage.getItem('nav_announcements_version');
         if (lastUpdate && lastUpdate !== localVersion) {
             console.log('[Notice] New version detected, refreshing...');
@@ -553,7 +553,7 @@ const checkAnnouncementsUpdate = async () => {
     } catch (e) { console.warn('[Notice] Update check failed'); }
 };
 
-// Task 4.2: PWA 更新感知
+// PWA 更新感知
 const checkSWUpdate = async () => {
     if ('serviceWorker' in navigator) {
         const reg = await navigator.serviceWorker.getRegistration();
@@ -573,7 +573,7 @@ const checkSWUpdate = async () => {
 // ==================== 2. 辅助工具 ====================
 window.sysSiteConfig = null; // 全局系统配置缓存
 
-// Task 6.32: 统一 SQLite/D1 无时区 UTC 时间安全解析网关 (解决北京时区差 8 小时 Bug)
+// 统一 SQLite/D1 无时区 UTC 时间安全解析网关 (解决北京时区差 8 小时 Bug)
 window.parseUtcDate = (dateInput) => {
     if (!dateInput) return new Date();
     if (typeof dateInput === 'string') {
@@ -613,7 +613,7 @@ window.formatSystemDate = (dateInput, includeTime = false) => {
     }
 };
 
-// Task 4.1 & 21.2: 全站 SEO 与标题下发 (静默处理鉴权失败)
+// 全站 SEO 与标题下发 (静默处理鉴权失败)
 const initSiteConfig = async () => {
     window.initSiteConfig = initSiteConfig;
     try {
@@ -621,7 +621,7 @@ const initSiteConfig = async () => {
         const res = await fetch('/api/admin/site-config', {
             headers: sysToken ? { 'Authorization': sysToken } : {}
         });
-        
+
         if (res.status === 403 || res.status === 401) {
             // 权限不足时不报 error，仅作为普通 warn 或忽略
             console.log('[Config] Site config is protected, using defaults.');
@@ -634,7 +634,7 @@ const initSiteConfig = async () => {
             document.title = config.siteTitle || "CloudNav 导航";
             const favicon = document.querySelector('link[rel="icon"]') || document.querySelector('link[rel="apple-touch-icon"]');
             if (favicon && config.faviconUrl) favicon.href = config.faviconUrl;
-            
+
             // SEO Meta 注入
             if (config.seoDescription) {
                 let descMeta = document.querySelector('meta[name="description"]');
@@ -659,19 +659,19 @@ const initSiteConfig = async () => {
     } catch (e) { console.warn('[Config] Failed to load site config'); }
 };
 
-// Task 4.2: 公告系统
+// 公告系统
 let cachedAnnouncements = []; // 缓存公告列表用于状态同步
 
 const refreshNoticeBadge = () => {
     try {
         if (!Array.isArray(cachedAnnouncements)) return;
-        
+
         let unreadCount = 0;
         if (!sysToken) {
-            // 游客状态下小红点一直保留，去不掉 (只要存在发布的公告就一直显示) (Task NT.3)
+            // 游客状态下小红点一直保留，去不掉 (只要存在发布的公告就一直显示)
             unreadCount = cachedAnnouncements.length;
         } else {
-            // 登录状态下根据后端 D1 和本地已读情况来取消红点 (Task NT.3)
+            // 登录状态下根据后端 D1 和本地已读情况来取消红点
             unreadCount = cachedAnnouncements.filter(notice => {
                 try {
                     if (notice.is_read !== undefined && notice.is_read) return false;
@@ -679,7 +679,7 @@ const refreshNoticeBadge = () => {
                 } catch (e) { return true; }
             }).length;
         }
-        
+
         // 1. 侧边栏红点
         const noticeBtn = document.getElementById('btn-notice-center');
         if (noticeBtn) {
@@ -719,10 +719,10 @@ const initAnnouncements = async () => {
         });
         if (!res.ok) return;
         const { announcements, lastUpdate } = await res.json();
-        
+
         cachedAnnouncements = announcements || [];
-        
-        // Task 6.6: 记录本次加载的版本号
+
+        // 记录本次加载的版本号
         if (lastUpdate) {
             localStorage.setItem('nav_announcements_version', lastUpdate);
         }
@@ -732,11 +732,11 @@ const initAnnouncements = async () => {
         if (!announcements || announcements.length === 0) return;
 
         if (!sysToken) {
-            // 游客状态：只展示最新的置顶重要公告（如果没有置顶的，则展示最新一条重要公告），且无法去掉 (Task NT.3)
+            // 游客状态：只展示最新的置顶重要公告（如果没有置顶的，则展示最新一条重要公告），且无法去掉
             const importantNotices = announcements.filter(notice => notice.type === 'important');
             const pinned = importantNotices.filter(notice => notice.is_top === 1 || notice.is_top === true || notice.is_top === "1");
             const targetNotice = pinned.length > 0 ? pinned[0] : (importantNotices.length > 0 ? importantNotices[0] : null);
-            
+
             if (targetNotice) {
                 renderImportantNoticeForGuest(targetNotice);
             }
@@ -760,7 +760,7 @@ const initAnnouncements = async () => {
 const renderImportantNoticeForGuest = (notice) => {
     // 移除已有横幅防止重复堆叠
     document.querySelectorAll('.important-banner').forEach(el => el.remove());
-    
+
     const banner = document.createElement('div');
     banner.className = 'important-banner guest-banner';
     banner.setAttribute('role', 'alert');
@@ -790,17 +790,17 @@ const renderImportantNotice = (notice) => {
     document.body.prepend(banner);
 };
 
-// Task 33.3: 封装核心联动函数
+// 封装核心联动函数
 const viewNoticeDetail = (id) => {
     const banner = document.querySelector('.important-banner');
-    if (banner && sysToken) { // 仅登录状态可移除横幅 (Task NT.3)
+    if (banner && sysToken) { // 仅登录状态可移除横幅
         banner.remove();
     }
-    
+
     // 标记为已读并刷新红点
     localStorage.setItem(`read_notice_${id}`, 'true');
     refreshNoticeBadge();
-    
+
     // 打开公告中心并精确定位
     if (typeof window.openNoticeCenter === 'function') {
         window.openNoticeCenter(id);
@@ -840,7 +840,7 @@ const getFrequentItemsData = () => {
         const now = Date.now();
         const sevenDaysAgo = now - 7 * 24 * 3600 * 1000;
         const counts = {};
-        
+
         Object.keys(h).forEach(id => {
             if (!Array.isArray(h[id])) return;
             const valid = h[id].filter(ts => ts > sevenDaysAgo);
@@ -858,18 +858,18 @@ const recordClick = (id) => {
     if (!h[id]) h[id] = [];
     h[id].push(now);
     h[id] = h[id].filter(ts => ts > sevenDaysAgo);
-    
+
     localStorage.setItem('nav_clicks_history', JSON.stringify(h));
-    
-    // 触发防抖同步 (Task 2.5.4)
+
+    // 触发防抖同步
     clearTimeout(syncTimer);
     syncTimer = setTimeout(syncClicksToCloud, 5000); // 停止操作 5 秒后上报
 };
 
-// 云端同步点击数据 (Task 2.5.4 - 增强版)
+// 云端同步点击数据 - 增强版)
 const syncClicksToCloud = async () => {
-    if (!sysToken || isAdmin) return; 
-    
+    if (!sysToken || isAdmin) return;
+
     const clicks = localStorage.getItem('nav_clicks_history');
     if (!clicks) return;
 
@@ -878,15 +878,15 @@ const syncClicksToCloud = async () => {
     try {
         const res = await fetch('/api/config', {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Authorization': sysToken,
-                'Content-Type': 'application/json' 
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify(payload)
         });
 
         if (res.status === 401) return handleAuthError(); // Token 过期
-        
+
         if (res.status === 403) {
             const err = await res.json();
             if (err.code === 'ERR_QUOTA_EXCEEDED') {
@@ -920,39 +920,39 @@ const handleAuthError = () => {
     init(true); // 回退到游客视图
 };
 
-// Task 7.2: 统一登录弹窗调用逻辑
+// 统一登录弹窗调用逻辑
 const openLoginModal = () => {
-    lastFocusedElement = document.activeElement; // Task 37.2
+    lastFocusedElement = document.activeElement; 
     const overlay = document.getElementById('auth-overlay');
     const tabLogin = document.getElementById('tab-login');
     const editModal = document.getElementById('edit-modal');
-    
+
     if (editModal) editModal.style.display = 'none';
     if (overlay) overlay.style.display = 'flex';
     // 强制切换到登录 Tab
     if (tabLogin) tabLogin.click();
 
-    // Task 37.2: 自动聚焦
+    // 自动聚焦
     setTimeout(() => {
         document.getElementById('auth-username')?.focus();
     }, 100);
 };
 
 const updateStyles = () => {
-    // 1. 处理密度 (Task 4.2)
+    // 1. 处理密度
     const density = appData.settings?.density || 'standard';
     document.body.classList.remove('density-compact', 'density-standard', 'density-comfortable');
     document.body.classList.add(`density-${density}`);
 
-    // 2. 处理侧边栏风格 - 锁定经典毛玻璃 (Task 9.2)
+    // 2. 处理侧边栏风格 - 锁定经典毛玻璃
     document.body.classList.remove('sidebar-style-colorful');
     document.body.classList.add('sidebar-style-classic');
 
-    // 3. 处理视图模态 (Task 24.2: 逻辑解耦与优先级判定)
+    // 3. 处理视图模态 (逻辑解耦与优先级判定)
     const isZen = appData.settings?.zenMode === true && !isPageManagementMode;
     // 优先级判定：禅意模式强制开启隔离 (Primary) > 常规模式的用户设置 (Secondary)
-    const isEffectivelyIsolated = isZen || appData.settings?.isolatedView === true; 
-    
+    const isEffectivelyIsolated = isZen || appData.settings?.isolatedView === true;
+
     document.body.classList.toggle('view-isolated', isEffectivelyIsolated);
     document.body.classList.toggle('zen-active', isZen);
 
@@ -968,25 +968,25 @@ const updateStyles = () => {
         document.documentElement.style.setProperty('--card-h', w + 'px');
     }
 
-    // 5. 处理禅意静默态逻辑 (Task 4.6.1) - 存在打开的弹窗时，强制禁用静默态以保留背景和操作面板 (Task NT.4)
-    const isModalOpen = (document.getElementById('edit-modal')?.style.display === 'flex') || 
+    // 5. 处理禅意静默态逻辑  - 存在打开的弹窗时，强制禁用静默态以保留背景和操作面板
+    const isModalOpen = (document.getElementById('edit-modal')?.style.display === 'flex') ||
                          (document.getElementById('monaco-modal')?.style.display === 'block') ||
                          (document.getElementById('auth-overlay')?.style.display === 'block');
-                         
+
     if (isZen && !isZenTempExpanded && !isModalOpen) {
         document.body.classList.add('zen-silent');
     } else {
         document.body.classList.remove('zen-silent');
     }
 
-    // Task 6.13: 容错调用公告刷新，确保不阻塞主样式更新
+    // 容错调用公告刷新，确保不阻塞主样式更新
     try {
         if (typeof refreshNoticeBadge === 'function') refreshNoticeBadge();
     } catch (e) { console.warn('[Notice] UI sync failed'); }
 
-    // Task 12.1 & 12.3 & 16.2 & 18.3 & 19.2: 背景阶梯式对齐与类型标记
+    // 背景阶梯式对齐与类型标记
     let bg = appData.settings?.bgUrl;
-    
+
     // 💡 针对公开分享页的特殊处理：若原作者使用了“本地上传图片”作为壁纸，
     // 由于该图片只保存在原作者本地浏览器的 IndexedDB 中，访客访问时绝对拿不到。
     // 为了防止页面背景空白或显示破碎，我们强行将其重置为空，以便访客自动加载必应每日壁纸！
@@ -998,7 +998,7 @@ const updateStyles = () => {
         console.log('[Style] Applying user custom background:', bg);
         document.body.dataset.bgType = 'custom';
         if (bg === 'local_upload') {
-            // 🚀 读取本地缓存的高清 Base64 格式壁纸 (Task UI.25)
+            // 🚀 读取本地缓存的高清 Base64 格式壁纸
             const localBg = navLocalBgImage || localStorage.getItem('nav_local_bg_image');
             if (localBg) {
                 document.body.style.background = `url("${localBg}") center/cover fixed`;
@@ -1035,24 +1035,24 @@ const updateStyles = () => {
         }
     }
 
-    // 处理背景遮罩 (Task 12.3)
+    // 处理背景遮罩
     document.body.classList.toggle('no-bg-mask', appData.settings?.hideBgMask === true);
 
-    // Task 6.3: 同步响应式侧边栏状态
+    // 同步响应式侧边栏状态
     if (window.autoAdjustSidebar) window.autoAdjustSidebar();
 };
 
-// Task 6.8: 公告中心交互逻辑
+// 公告中心交互逻辑
 window.openNoticeCenter = async (targetId = null) => {
-    lastFocusedElement = document.activeElement; // Task 37.2
-    // Task 9.6: 互斥显示
+    lastFocusedElement = document.activeElement; 
+    // 互斥显示
     closeAllModals();
 
     const modal = document.getElementById('edit-modal');
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
     const confirmBtn = document.getElementById('btn-confirm-edit');
-    
+
     if (!modal || !body) return;
 
     modal.dataset.modalType = 'notice-center';
@@ -1090,17 +1090,17 @@ window.openNoticeCenter = async (targetId = null) => {
                     <label class="toggle-hide-read" ${isGuest ? 'style="opacity:0.5; cursor:not-allowed; font-size:11px;" title="登录后可同步阅读状态"' : 'style="font-size:11px; cursor:pointer;"'}>
                         <input type="checkbox" ${hideRead ? 'checked' : ''} ${isGuest ? 'disabled' : 'onchange="toggleHideRead(this.checked)"'}> 隐藏已读
                     </label>
-                    ${isGuest 
+                    ${isGuest
                         ? `<button class="batch-btn" onclick="openLoginModal()"><i class="ri-user-shared-line"></i> 登录同步</button>`
                         : (unreadCount > 0 ? `<button class="batch-btn" onclick="markAllNoticesRead()"><i class="ri-checkbox-multiple-line"></i> 全部标记已读</button>` : '')
                     }
                 </div>
             </div>
-            
+
             <div class="form-group" style="margin-bottom:15px;">
                 <input type="text" id="notice-search-kw" placeholder="输入关键字模糊检索公告..." style="width:100%;" oninput="handleNoticeCenterSearch(this.value)">
             </div>
-            
+
             <div style="font-size: 12px; opacity: 0.5; margin-bottom:10px;">共 ${announcements.length} 条公告</div>
             <div class="notice-list-container">
                 ${announcements.map(a => {
@@ -1108,7 +1108,7 @@ window.openNoticeCenter = async (targetId = null) => {
                     // 如果是目标 ID，则强制显示（即使开启了隐藏已读）
                     const forceShow = targetId && targetId == a.id;
                     return `
-                        <div class="notice-list-item ${a.is_top ? 'is-top' : ''} ${isRead ? 'is-read' : 'is-unread'} ${hideRead && isRead && !forceShow ? 'hide-read' : ''}" 
+                        <div class="notice-list-item ${a.is_top ? 'is-top' : ''} ${isRead ? 'is-read' : 'is-unread'} ${hideRead && isRead && !forceShow ? 'hide-read' : ''}"
                              id="notice-item-${a.id}" data-id="${a.id}" onclick="toggleNotice(this, '${a.id}')">
                             <div class="notice-item-header">
                                 <span class="notice-item-title">
@@ -1144,17 +1144,17 @@ window.openNoticeCenter = async (targetId = null) => {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        
+
         if (data && Array.isArray(data.announcements)) {
             cachedAnnouncements = data.announcements;
             renderList(cachedAnnouncements);
 
-            // Task 37.2: 自动聚焦第一个项
+            // 自动聚焦第一个项
             setTimeout(() => {
                 modal.querySelector('.notice-list-item')?.focus();
             }, 50);
-            
-            // Task 37.2: 自动聚焦第一个 Tab
+
+            // 自动聚焦第一个 Tab
             setTimeout(() => {
                 modal.querySelector('.hub-tab')?.focus();
             }, 50);
@@ -1190,7 +1190,7 @@ window.handleNoticeCenterSearch = (kw) => {
 
 window.toggleNotice = async (el, id) => {
     const isExpanded = el.classList.contains('is-expanded');
-    
+
     // 折叠其他已展开的 (Accordion 模式)
     document.querySelectorAll('.notice-list-item.is-expanded').forEach(item => {
         if (item !== el) item.classList.remove('is-expanded');
@@ -1198,22 +1198,22 @@ window.toggleNotice = async (el, id) => {
 
     el.classList.toggle('is-expanded');
 
-    // 如果是第一次展开且未读，标记为已读 (Task 7.3: 游客也可在本地标记已读)
+    // 如果是第一次展开且未读，标记为已读 (游客也可在本地标记已读)
     const isUnread = el.classList.contains('is-unread');
     if (!isExpanded && isUnread) {
         el.classList.remove('is-unread');
         el.classList.add('is-read');
         const badge = el.querySelector('.badge-new');
         if (badge) badge.remove();
-        
+
         // 记录到本地，消除红点
         localStorage.setItem(`read_notice_${id}`, 'true');
         const notice = cachedAnnouncements.find(a => a.id == id);
         if (notice) notice.is_read = 1;
 
-        // Task 7.4: 立即刷新全局 Badge
+        // 立即刷新全局 Badge
         refreshNoticeBadge();
-        
+
         if (sysToken) {
             try {
                 await fetch('/api/announcements', {
@@ -1230,23 +1230,23 @@ window.toggleHideRead = (checked) => {
     localStorage.setItem('nav_hide_read_announcements', checked);
     const items = document.querySelectorAll('.notice-list-item.is-read');
     items.forEach(item => item.classList.toggle('hide-read', checked));
-    
-    // Task 6.31: 切换隐藏状态后同步刷新 Badge 状态 (仅针对已读项被过滤的情况)
+
+    // 切换隐藏状态后同步刷新 Badge 状态 (仅针对已读项被过滤的情况)
     refreshNoticeBadge();
 };
 
 window.markAllNoticesRead = async () => {
     if (!cachedAnnouncements.length) return;
-    
+
     const unreadIds = cachedAnnouncements.filter(a => !(a.is_read || localStorage.getItem(`read_notice_${a.id}`))).map(a => a.id);
     if (unreadIds.length === 0) return;
 
     unreadIds.forEach(id => localStorage.setItem(`read_notice_${id}`, 'true'));
     cachedAnnouncements.forEach(a => { if (unreadIds.includes(a.id)) a.is_read = 1; });
-    
+
     showToast("已全部标记为已读");
     refreshNoticeBadge();
-    
+
     if (sysToken) {
         try {
             await fetch('/api/announcements', {
@@ -1256,22 +1256,22 @@ window.markAllNoticesRead = async () => {
             });
         } catch (e) { console.warn('[Notice] Sync bulk read failed'); }
     }
-    
+
     openNoticeCenter(); // 刷新列表状态
 };
 
 window.updateStyles = updateStyles;
 
-// Task 12.1 & 16.3 & 20.3: Bing 壁纸获取与缓存优化 (先用旧图，异步更同步)
+// Bing 壁纸获取与缓存优化 (先用旧图，异步更同步)
 const getBingWallpaper = async () => {
     const cache = localStorage.getItem('nav_bing_cache');
     const now = Date.now();
     let oldUrl = null;
-    
+
     if (cache) {
         try {
             const parsed = JSON.parse(cache);
-            // Task 18.2: 增加安全性校验，如果缓存的路径不是绝对路径（http开头），则视为无效缓存
+            // 增加安全性校验，如果缓存的路径不是绝对路径（http开头），则视为无效缓存
             if (parsed.url && parsed.url.startsWith('http')) {
                 oldUrl = parsed.url;
                 if (now - parsed.timestamp < 43200000) { // 12h 内视为新鲜
@@ -1280,31 +1280,31 @@ const getBingWallpaper = async () => {
             } else {
                 localStorage.removeItem('nav_bing_cache');
             }
-        } catch (e) { 
-            localStorage.removeItem('nav_bing_cache'); 
+        } catch (e) {
+            localStorage.removeItem('nav_bing_cache');
         }
     }
 
     // 异步拉取逻辑
     const fetchNew = async () => {
         try {
-            // Task 21.3: 增加随机参数防止浏览器缓存 304 导致的数据不更新
+            // 增加随机参数防止浏览器缓存 304 导致的数据不更新
             const res = await fetch(`/api/bing?t=${Date.now()}`);
             if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-            
-            // Task 21.3: 校验响应类型，防止拿到 HTML 错误页
+
+            // 校验响应类型，防止拿到 HTML 错误页
             const contentType = res.headers.get('content-type');
             if (!contentType || !contentType.includes('application/json')) {
                 throw new Error('Server returned HTML/Text instead of JSON (likely 404 or Proxy Error)');
             }
 
             const data = await res.json();
-            
+
             if (!data.images || !data.images[0]) throw new Error('Invalid Bing response');
-            
+
             const url = data.images[0].url;
             localStorage.setItem('nav_bing_cache', JSON.stringify({ url, timestamp: now }));
-            
+
             // 如果新图和旧图不同，触发 UI 刷新
             if (url !== oldUrl) {
                 updateStyles();
@@ -1326,7 +1326,7 @@ const getBingWallpaper = async () => {
     return await fetchNew();
 };
 
-// Task 4.2: 视觉实验室控制已抽离至独立的 personalization.js 子模块中
+// 视觉实验室控制已抽离至独立的 personalization.js 子模块中
 
 const openProfileCenter = async () => {
     if (!sysToken) return showAuthModal();
@@ -1347,12 +1347,12 @@ const openProfileCenter = async () => {
         const title = document.getElementById('edit-title');
         const body = document.getElementById('edit-form-body');
         const confirmBtn = document.getElementById('btn-confirm-edit');
-        
+
         if (!modal || !body) return;
 
         modal.dataset.modalType = 'user-profile';
         title.innerHTML = `<i class="ri-user-settings-line"></i> 个人资料中心`;
-        
+
         const DEFAULT_AVATARS = [
             'https://api.dicebear.com/7.x/adventurer/svg?seed=Felix',
             'https://api.dicebear.com/7.x/bottts/svg?seed=Aneka',
@@ -1361,7 +1361,7 @@ const openProfileCenter = async () => {
             'https://api.dicebear.com/7.x/identicon/svg?seed=Jack',
             'https://api.dicebear.com/7.x/avataaars/svg?seed=Garfield'
         ];
-        
+
         const storedUser = JSON.parse(localStorage.getItem('nav_current_user') || '{}');
         const userId = storedUser.id || '';
         const currentAvatar = appData.settings?.avatarUrl || localStorage.getItem('nav_user_avatar_' + userId) || DEFAULT_AVATARS[0];
@@ -1370,7 +1370,7 @@ const openProfileCenter = async () => {
         DEFAULT_AVATARS.forEach(url => {
             const isSel = currentAvatar === url;
             avatarSelectorHtml += `
-                <div class="avatar-option-item ${isSel ? 'selected' : ''}" 
+                <div class="avatar-option-item ${isSel ? 'selected' : ''}"
                      data-url="${url}"
                      onclick="window.selectProfileAvatar(this, '${url}')"
                      style="width: 42px; height: 42px; border-radius: 50%; overflow: hidden; cursor: pointer; border: 2px solid ${isSel ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}; background: rgba(255,255,255,0.05); padding: 2px; transition: 0.2s;">
@@ -1399,9 +1399,9 @@ const openProfileCenter = async () => {
                 <label><i class="ri-telegram-line"></i> TG ID</label>
                 <input type="text" id="prof-tg" value="${info.telegramChatId || ''}" placeholder="可选，您的个人 Telegram Chat ID">
             </div>
-            
+
             <hr style="border-color: var(--glass-border); margin: 15px 0;">
-            
+
             <!-- 💡 分享主页设置（与个人中心其它元素样式完美一致） -->
             <div class="form-row">
                 <label><i class="ri-share-line"></i> 分享主页</label>
@@ -1410,7 +1410,7 @@ const openProfileCenter = async () => {
                     <input type="checkbox" id="prof-is-shared" ${info.isShared ? 'checked' : ''} onchange="window.toggleShareSlugInput(this.checked)" style="width: 16px; height: 16px; cursor: pointer;">
                 </div>
             </div>
-            
+
             <div id="share-slug-container" style="display: ${info.isShared ? 'block' : 'none'}; margin-top: 15px;">
                 <!-- 第一行：别名输入与提示说明 -->
                 <div class="form-row" style="margin-bottom: 12px;">
@@ -1519,17 +1519,17 @@ const openProfileCenter = async () => {
 
                 if (saveResult.success) {
                     showToast("个人资料修改成功！", "#27ae60");
-                    
+
                     // 保存头像
                     const selectedAvatar = document.getElementById('prof-avatar-val').value;
                     const storedUser = JSON.parse(localStorage.getItem('nav_current_user') || '{}');
                     localStorage.setItem('nav_user_avatar_' + storedUser.id, selectedAvatar);
-                    
+
                     // 💡 把头像同步保存进 appData.settings，使其能够进行云端备份，实现手机端/跨设备同步！
                     if (!appData.settings) appData.settings = {};
                     appData.settings.avatarUrl = selectedAvatar;
                     isDataDirty = true;
-                    
+
                     // 局部更新本地用户信息
                     storedUser.username = username;
                     localStorage.setItem('nav_current_user', JSON.stringify(storedUser));
@@ -1618,41 +1618,41 @@ const toggleSkeleton = (s) => {
 
 // ==================== 3. 认证逻辑 ====================
 /**
- * 统一调度认证/用户中心弹窗 (Task 39.2)
+ * 统一调度认证/用户中心弹窗
  */
 const showAuthModal = () => {
     const overlay = document.getElementById('auth-overlay');
     const formView = document.getElementById('auth-form-view');
     const userView = document.getElementById('auth-user-view');
-    
+
     if (!overlay || !formView || !userView) return;
 
     if (sysToken) {
         // 已登录：展示用户信息视图
         formView.style.display = 'none';
         userView.style.display = 'block';
-        
-        // Task 5.3: 优先从全局状态同步最新信息
+
+        // 优先从全局状态同步最新信息
         const info = currentUser || JSON.parse(localStorage.getItem('nav_current_user') || '{}');
         const nameEl = document.getElementById('auth-current-user-name');
         const roleEl = document.getElementById('auth-user-role-label');
-        
+
         if (nameEl) {
-            // Task 7.1: 标准化 ID 格式为 id: xxxx
+            // 标准化 ID 格式为 id: xxxx
             const uidStr = info.uid ? ` <small style="font-weight: normal; opacity: 0.6; font-family: monospace;">(id: ${info.uid})</small>` : '';
             nameEl.innerHTML = (info.username || appData.username || '未知用户') + uidStr;
         }
         if (roleEl) {
             const roleKey = info.role || appData.role || 'guest';
-            const roles = { 
-                'admin': '系统总管理员', 
-                'super_user': '高级协管员', 
+            const roles = {
+                'admin': '系统总管理员',
+                'super_user': '高级协管员',
                 'user': '注册会员',
-                'guest': '访客' 
+                'guest': '访客'
             };
             roleEl.innerText = roles[roleKey] || '注册会员';
-            
-            // 权限颜色映射 (Task 5.3)
+
+            // 权限颜色映射
             if (roleKey === 'admin') {
                 roleEl.style.color = '#f1c40f'; // 金色
                 roleEl.style.fontWeight = 'bold';
@@ -1664,7 +1664,7 @@ const showAuthModal = () => {
                 roleEl.style.fontWeight = 'normal';
             }
         }
-        
+
         overlay.style.display = 'flex';
         // 自动聚焦退出按钮
         setTimeout(() => document.getElementById('btn-logout-fast')?.focus(), 100);
@@ -1735,7 +1735,7 @@ const doLogin = async () => {
         sysToken = 'Bearer ' + data.token;
         localStorage.setItem('nav_token', sysToken);
 
-        // Task 5.1: 立即持久化完整的用户信息
+        // 立即持久化完整的用户信息
         currentUser = {
             id: data.user.id,
             uid: data.user.uid,
@@ -1774,7 +1774,7 @@ const doRegister = async () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: u, password: p, inviteCode: i })
         });
-        
+
         const data = await res.json();
         if (!res.ok || !data.success) {
             throw new Error(data.error || "注册失败");
@@ -1791,7 +1791,7 @@ const doRegister = async () => {
 
 const doLogout = async () => {
     localStorage.removeItem('nav_token');
-    localStorage.removeItem('nav_current_user'); // Task 39.4
+    localStorage.removeItem('nav_current_user'); 
     sysToken = '';
     currentUser = null;
     isAdmin = false;
@@ -1804,11 +1804,11 @@ const doLogout = async () => {
 const doResetConfig = async () => {
     const ok = await window.requireSystemConfirm("恢复出厂配置", "确定要恢复默认配置吗？这将全量覆盖、清空您当前所有的自定义分类、网址和偏好设置！该操作不可逆，确定恢复吗？", true);
     if (!ok) return;
-    
+
     showLoader('正在恢复默认配置...');
     try {
         if (!sysToken) {
-            // Task 20.5.3: 游客态重置逻辑
+            // 游客态重置逻辑
             const res = await fetch('/api/config');
             if (res.ok) {
                 appData = await res.json();
@@ -1823,12 +1823,12 @@ const doResetConfig = async () => {
 
         const res = await fetch('/api/config', {
             method: 'DELETE',
-            headers: { 
+            headers: {
                 'Authorization': sysToken,
                 'Content-Type': 'application/json'
             }
         });
-        
+
         if (!res.ok) {
             const errorText = await res.text();
             console.error('Reset Error:', res.status, errorText);
@@ -1840,21 +1840,21 @@ const doResetConfig = async () => {
         if (data.success) {
             // 💡 彻底清洗本地缓存，阻断 Stale-First 拦截，迫使 init() 强制拉取并装载云端重置后的初始配置
             localStorage.removeItem('nav_app_data');
-            
-            // Task 10: 清除 SW 图标缓存
+
+            // 清除 SW 图标缓存
             if (navigator.serviceWorker && navigator.serviceWorker.controller) {
                 navigator.serviceWorker.controller.postMessage({ action: 'clearIconCache' });
             }
-            
+
             showToast("已成功恢复默认配置");
-            
+
             // 彻底清洗内存状态
             activeCatId = '';
-            isZenTempExpanded = true; 
-            
+            isZenTempExpanded = true;
+
             // 重新初始化数据并强制渲染
             await init(true);
-            
+
             // 强制延迟滚动，确保 DOM 渲染完成
             setTimeout(() => {
                 const target = document.getElementById('grid-container');
@@ -1883,7 +1883,7 @@ const initAuthUI = () => {
 
     if (!tabLogin || !tabRegister || !btnSubmit) return;
 
-    // Task 8.4: 绑定右上角关闭按钮
+    // 绑定右上角关闭按钮
     if (btnCloseAuth) {
         btnCloseAuth.onclick = () => closeAllModals();
     }
@@ -1902,8 +1902,8 @@ const initAuthUI = () => {
         const inviteEl = document.getElementById('auth-invite-code');
         if (tip) tip.innerText = '还没有账号？点击上方“注册”开始';
         if (inviteEl) inviteEl.style.display = 'none'; // 登录模式隐藏邀请码
-        
-        // Task 16.4: 切换模式时清空表单，防止状态污染
+
+        // 切换模式时清空表单，防止状态污染
         ['auth-username', 'auth-password', 'auth-invite-code'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
@@ -1920,8 +1920,8 @@ const initAuthUI = () => {
         const inviteEl = document.getElementById('auth-invite-code');
         if (tip) tip.innerText = '已有账号？点击上方“登录”返回';
         if (inviteEl) inviteEl.style.display = 'block'; // 注册模式显示邀请码
-        
-        // Task 16.4: 切换模式时清混表单
+
+        // 切换模式时清混表单
         ['auth-username', 'auth-password', 'auth-invite-code'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
@@ -1945,7 +1945,7 @@ const initAuthUI = () => {
         }
     });
 
-    // Task 39.3: 用户中心交互逻辑
+    // 用户中心交互逻辑
     const btnLogoutFast = document.getElementById('btn-logout-fast');
     const btnSwitchAuth = document.getElementById('btn-switch-auth');
     const formView = document.getElementById('auth-form-view');
@@ -1970,13 +1970,13 @@ const initAuthUI = () => {
         };
     }
 
-    // 点击遮罩关闭 (Task 1.1 优化)
+    // 点击遮罩关闭 优化)
     authOverlay.addEventListener('click', (e) => {
         if (e.target === authOverlay) {
             closeAllModals();
         }
     });
-    // Task O.3 & O++.1: 统一通过 closeAllModals 处理，由其决定是否静默或同步
+    // 统一通过 closeAllModals 处理，由其决定是否静默或同步
     document.getElementById('btn-close-edit').onclick = () => closeAllModals();
     document.getElementById('btn-confirm-edit').onclick = saveItem;
 };
@@ -1997,7 +1997,7 @@ const init = async (forceRender = false) => {
     if (cached) {
         try {
             appData = JSON.parse(cached);
-            // Task NT-V2.17: 缓存秒开加载时重新对齐 isAdmin 状态，确保本地缓存权限逻辑无缝连接
+            // 缓存秒开加载时重新对齐 isAdmin 状态，确保本地缓存权限逻辑无缝连接
             isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_user');
             hasLoadedCache = true;
             toggleSkeleton(false); // 立即关闭骨架屏
@@ -2013,7 +2013,7 @@ const init = async (forceRender = false) => {
         }
     }
 
-    // 游客态且本地已成功拉起并渲染缓存，直接结束，防止刷新被默认模板覆盖 (Task UI.21)
+    // 游客态且本地已成功拉起并渲染缓存，直接结束，防止刷新被默认模板覆盖
     if (!sysToken && hasLoadedCache) {
         initAnnouncements();
         return;
@@ -2021,16 +2021,16 @@ const init = async (forceRender = false) => {
 
     // 2. 【异步后台校验阶段】发起非阻塞网络请求，确保云端最新的修改可以被拉取
     const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Fetch timeout')), 4000));
-    
+
     try {
         console.log('[Init] Background revalidating config from cloud...');
         const fetchPromise = fetch('/api/config', {
             headers: sysToken ? { 'Authorization': sysToken } : {}
         });
-        
+
         const res = await Promise.race([fetchPromise, timeoutPromise]);
-        
-        // Task 19.2: 解析隔离 - 检查响应头是否为 JSON
+
+        // 解析隔离 - 检查响应头是否为 JSON
         const contentType = res.headers.get('content-type');
         if (contentType && !contentType.includes('application/json')) {
             const errorText = await res.text();
@@ -2038,7 +2038,7 @@ const init = async (forceRender = false) => {
             throw new Error('Server returned invalid data format');
         }
 
-        // Task 18.3: 处理凭证失效 (401)
+        // 处理凭证失效 (401)
         if (res.status === 401) {
             console.warn('[Init] Token stale or database reset, cleaning up...');
             handleAuthError(); // 自动清理失效信息
@@ -2060,19 +2060,19 @@ const init = async (forceRender = false) => {
         } else if (res.ok) {
             const cloudData = await res.json();
             console.log('[Init] Cloud config received:', cloudData);
-            
+
                 // 3. 【冷启动与多端同步判定】
                 const localFingerprint = getCoreDataFingerprint(appData || {});
                 const cloudFingerprint = getCoreDataFingerprint(cloudData || {});
-                
+
                 // 判定：当前是否切换了账号（手机端新登录），或者本地缓存其实是未登录的访客默认数据，或者本地依然处于最初加载的占位状态
                 const isUserChanged = currentUser && cloudData.user && (cloudData.user !== appData.user);
                 const isLocalDefault = !appData.user || appData.user === 'guest' || (appData.categories && appData.categories.length === 1 && appData.categories[0].id === 'temp_init');
 
                 if (!hasLoadedCache || isUserChanged || isLocalDefault) {
                     console.log('[Init] Force overwriting local cache with cloud data due to user change or cold start.');
-                    
-                    // Task 19.3: 渲染兜底
+
+                    // 渲染兜底
                     if (!cloudData.categories || !cloudData.items) {
                         appData = { ...MINIMAL_SAFE_DATA, ...cloudData };
                         if (!appData.categories || appData.categories.length === 0) appData.categories = MINIMAL_SAFE_DATA.categories;
@@ -2080,10 +2080,10 @@ const init = async (forceRender = false) => {
                     } else {
                         appData = cloudData;
                     }
-                    
+
                     isAdmin = appData.isAdmin;
                     localStorage.setItem('nav_app_data', JSON.stringify(appData));
-                    
+
                     // 执行后台无感重渲染
                     renderNav();
                     renderTools();
@@ -2092,7 +2092,7 @@ const init = async (forceRender = false) => {
                 } else {
                     console.log('[Init] Local cache exists. Prevented cloud data from auto-overwriting local changes.');
                     lastSyncFingerprint = localFingerprint;
-                    
+
                     // 即使不覆盖书签内容，但必须即时将云端最新权威的用户配额与系统身份无感合入本地
                     if (cloudData.quota) {
                         appData.quota = cloudData.quota;
@@ -2115,32 +2115,32 @@ const init = async (forceRender = false) => {
                 } else if (sysToken) {
                     localStorage.removeItem('nav_last_cloud_sync');
                 }
-            
+
             // 同步最新的用户信息 (包含 UID)
             if (cloudData.username && cloudData.role) {
-                currentUser = { 
-                    id: cloudData.user || cloudData.id, 
+                currentUser = {
+                    id: cloudData.user || cloudData.id,
                     uid: cloudData.uid,
-                    username: cloudData.username, 
-                    role: cloudData.role 
+                    username: cloudData.username,
+                    role: cloudData.role
                 };
                 localStorage.setItem('nav_current_user', JSON.stringify(currentUser));
-                
-                // Task 5.4: 如果当前弹窗是打开的，强制同步更新弹窗内的信息
+
+                // 如果当前弹窗是打开的，强制同步更新弹窗内的信息
                 const userView = document.getElementById('auth-user-view');
                 if (userView && userView.style.display === 'block') {
-                    showAuthModal(); 
+                    showAuthModal();
                 }
             }
-            
-            // 恢复云端点击数据 (Task 2.5.4)
+
+            // 恢复云端点击数据
             if (cloudData.clicks_history) {
                 localStorage.setItem('nav_clicks_history', JSON.stringify(cloudData.clicks_history));
             }
         } else {
             throw new Error(`Server returned ${res.status}`);
         }
-    } catch (e) { 
+    } catch (e) {
         console.warn('[Init] Load or revalidation failed, keeping cache/default:', e.message);
         // 如果本地无缓存，且网络拉取也挂了，启用默认安全数据防止白屏
         if (!hasLoadedCache) {
@@ -2152,28 +2152,28 @@ const init = async (forceRender = false) => {
             showToast("网络连接超时，已启用预置安全数据", "#e67e22");
         }
     } finally {
-        // Task 18.4: 无论发生什么，强制关闭骨架屏并渲染
+        // 无论发生什么，强制关闭骨架屏并渲染
         toggleSkeleton(false);
 
         try {
             renderNav();
             renderTools();
-            
-            // Task 20.2: 强制背景校验闭环
+
+            // 强制背景校验闭环
             if (!appData.settings?.bgUrl) {
                 getBingWallpaper(); // 异步触发
             }
 
             updateStyles();
 
-            // Task 38.3: 同步云端搜索引擎设置
+            // 同步云端搜索引擎设置
             if (appData.settings?.searchEngine) {
                 if (typeof window.setSearchEngine === 'function') {
                     window.setSearchEngine(appData.settings.searchEngine, true);
                 }
             }
 
-            // Task 6.3: 在工具栏渲染完成后再初始化公告
+            // 在工具栏渲染完成后再初始化公告
             initAnnouncements();
         } catch (renderError) {
             console.error('[Init] Render crashed:', renderError);
@@ -2186,7 +2186,7 @@ const init = async (forceRender = false) => {
 const buildCardHtml = (i) => {
     const target = appData.settings?.link_target || '_blank';
     const rel = target === '_blank' ? 'rel="noopener noreferrer"' : '';
-    
+
     let iconUrl = i.icon;
     // 如果没有配置图标（如默认空或 `""` 等情况），基于原站域名动态计算出最优初始网络 Favicon 路径
     if (!iconUrl && i.url && i.url.startsWith('http')) {
@@ -2197,7 +2197,7 @@ const buildCardHtml = (i) => {
             }
         } catch(e) {}
     }
-    // 智能防追踪过滤与 404 红字清零优化：如果卡片图标是指向容易爆 404 的源，自动动态升级为 DDG 的 200-OK 极速不报错源 (Task NT-V2.24)
+    // 智能防追踪过滤与 404 红字清零优化：如果卡片图标是指向容易爆 404 的源，自动动态升级为 DDG 的 200-OK 极速不报错源
     if (iconUrl && iconUrl.startsWith('http') && !iconUrl.includes('images.unsplash.com') && !iconUrl.includes('api.iconify.design')) {
         try {
             let domain = '';
@@ -2212,8 +2212,8 @@ const buildCardHtml = (i) => {
         } catch(e) {}
     }
 
-    const icon = iconUrl && iconUrl.startsWith('http') 
-        ? `<img src="${iconUrl}" loading="lazy" data-retry-index="0" data-title="${escapeHTML(i.title)}" onload="utils.handleIconLoad(this, '${i.url}')" onerror="utils.handleIconError(this, '${i.url}')">` 
+    const icon = iconUrl && iconUrl.startsWith('http')
+        ? `<img src="${iconUrl}" loading="lazy" data-retry-index="0" data-title="${escapeHTML(i.title)}" onload="utils.handleIconLoad(this, '${i.url}')" onerror="utils.handleIconError(this, '${i.url}')">`
         : `<span class="emoji-icon">${i.icon || '🔗'}</span>`;
     return `<a href="${i.url}" target="${target}" ${rel}><div class="icon-wrapper">${icon}</div><h3>${i.title}</h3></a>`;
 };
@@ -2221,11 +2221,11 @@ const buildCardHtml = (i) => {
 const buildVideoCardHtml = (item) => {
     const isBili = item.url.includes('bilibili.com');
     const isYt = item.url.includes('youtube.com') || item.url.includes('youtu.be');
-    
+
     let coverUrl = item.icon || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop&q=60';
     let badgeClass = '';
     let badgeText = '';
-    
+
     if (isBili) {
         badgeClass = 'bilibili';
         badgeText = 'Bilibili';
@@ -2266,7 +2266,7 @@ const playVideoInline = (item) => {
     const title = document.getElementById('video-title');
     const desc = document.getElementById('video-desc');
     const link = document.getElementById('video-link');
-    
+
     if (!modal || !iframe) return;
 
     let embedUrl = item.url;
@@ -2342,8 +2342,8 @@ const renderNav = () => {
 
         sidebarNav.innerHTML = '';
         container.innerHTML = '';
-        
-        // 清空并隐藏禅意视界容器 (Task 5.6)
+
+        // 清空并隐藏禅意视界容器
         const zenHorizon = document.getElementById('zen-horizon');
         const zenMenu = document.getElementById('zen-nav-menu');
         const zenFreq = document.getElementById('zen-frequent-sites');
@@ -2355,16 +2355,16 @@ const renderNav = () => {
             cats.unshift({ id: 'VIRTUAL_FREQ', name: '常去网站', icon: '⭐' });
         }
 
-        // 导航视界定义：自动校正过期的或无效 of activeCatId (Task 2.1 深度自愈)
+        // 导航视界定义：自动校正过期的或无效 of activeCatId 深度自愈)
         const isValidActiveCat = cats.some(c => c.id === activeCatId);
         if (cats.length > 0 && (!activeCatId || !isValidActiveCat)) {
             activeCatId = cats[0].id;
         }
 
-        // 渲染禅意模式下的横向菜单 (Task 5.7)
+        // 渲染禅意模式下的横向菜单
         const isZen = appData.settings?.zenMode === true;
         if (isZen && zenMenu) {
-            // 如果开启了常去网站，且有数据，在菜单上方渲染一个精简的常去图标栏 (Task 5.6)
+            // 如果开启了常去网站，且有数据，在菜单上方渲染一个精简的常去图标栏
             if (appData.settings?.showFrequent !== false && freqIds.length > 0 && zenFreq) {
                 const freqItems = appData.items.filter(i => freqIds.includes(i.id)).slice(0, 10);
                 zenFreq.innerHTML = `<div class="zen-freq-title">常去网站</div><div class="zen-freq-list"></div>`;
@@ -2373,8 +2373,8 @@ const renderNav = () => {
                     const icon = document.createElement('div');
                     icon.className = 'zen-freq-item';
                     icon.style.animationDelay = `${idx * 0.05}s`; // T8: Stagger
-                    icon.innerHTML = item.icon?.startsWith('http') 
-                        ? `<img src="${item.icon}" title="${item.title}">` 
+                    icon.innerHTML = item.icon?.startsWith('http')
+                        ? `<img src="${item.icon}" title="${item.title}">`
                         : `<span class="emoji-icon" title="${item.title}">${item.icon || '🔗'}</span>`;
                     icon.onclick = () => {
                         recordClick(item.id);
@@ -2388,13 +2388,13 @@ const renderNav = () => {
             cats.forEach((cat, idx) => {
                 const menuItem = document.createElement('div');
                 menuItem.className = `zen-menu-item ${activeCatId === cat.id ? 'active' : ''}`;
-                menuItem.tabIndex = 0; // Task 30.2: 启用键盘焦点
+                menuItem.tabIndex = 0; // 启用键盘焦点
                 menuItem.style.animationDelay = `${(idx * 0.05) + 0.2}s`; // T8: Stagger
-                const catIconHtml = cat.icon?.startsWith('http') 
-                    ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">` 
+                const catIconHtml = cat.icon?.startsWith('http')
+                    ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">`
                     : `<span style="font-size: 16px; line-height: 1; display: block;">${cat.icon || '📂'}</span>`;
                 menuItem.innerHTML = `<span class="menu-icon" style="width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle; margin-right: 6px;">${catIconHtml}</span><span class="menu-label">${cat.name}</span>`;
-                
+
                 // 处理键盘激活
                 menuItem.onkeydown = (e) => {
                     if (e.key === 'Enter') menuItem.click();
@@ -2402,7 +2402,7 @@ const renderNav = () => {
                 menuItem.onclick = () => {
                     if (activeCatId === cat.id) return;
                     activeCatId = cat.id;
-                    
+
                     // 切换动画与重新渲染
                     container.style.opacity = '0';
                     container.style.transform = 'translateY(10px)';
@@ -2422,30 +2422,30 @@ const renderNav = () => {
         cats.forEach(cat => {
             const navItem = document.createElement('div');
             navItem.className = `sidebar-nav-item ${activeCatId === cat.id ? 'active' : ''} ${cat.hidden ? 'is-hidden-cat' : ''}`;
-            navItem.dataset.id = cat.id; // Task CAT.1: 增加 ID 绑定
-            navItem.tabIndex = 0; // Task 30.2: 启用键盘焦点
-            
+            navItem.dataset.id = cat.id; // 增加 ID 绑定
+            navItem.tabIndex = 0; // 启用键盘焦点
+
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
-                navItem.classList.add('sortable-cat'); // Task CAT.1: 标记可排序
+                navItem.classList.add('sortable-cat'); // 标记可排序
             }
 
-            // 计算书签数量 (Task 4.5.2)
+            // 计算书签数量
             const itemCount = appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id)).length;
-            const countHtml = (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') 
-                ? `<span class="nav-count">${itemCount}</span>` 
+            const countHtml = (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ')
+                ? `<span class="nav-count">${itemCount}</span>`
                 : '';
 
-            // 基础内容 (Task CAT.1: 增加拖拽手柄)
-            const dragHandleHtml = (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') 
+            // 基础内容 (增加拖拽手柄)
+            const dragHandleHtml = (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ')
                 ? `<span class="drag-handle" style="margin-right: 6px; cursor: move; opacity: 0.5;"><i class="ri-drag-move-2-line"></i></span>`
                 : '';
 
-            const catIconHtml = cat.icon?.startsWith('http') 
-                ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">` 
+            const catIconHtml = cat.icon?.startsWith('http')
+                ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">`
                 : `<span style="font-size: 15px; line-height: 1; display: block;">${cat.icon || '📂'}</span>`;
             let navHtml = `${dragHandleHtml}<span class="nav-icon" title="" style="width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle; margin-right: 8px;">${catIconHtml}</span><span class="nav-label">${cat.name}${countHtml}</span>`;
-            
-            // Task 4.3: 增加管理快捷按钮
+
+            // 增加管理快捷按钮
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
                 navHtml += `
                     <div class="nav-actions">
@@ -2464,10 +2464,10 @@ const renderNav = () => {
                     </div>
                 `;
             }
-            
+
             navItem.innerHTML = navHtml;
-            
-            // Task 33.2: 补全键盘激活逻辑
+
+            // 补全键盘激活逻辑
             navItem.onkeydown = (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
@@ -2477,16 +2477,16 @@ const renderNav = () => {
 
             navItem.onclick = () => {
                 if (activeCatId === cat.id) return;
-                
+
                 activeCatId = cat.id;
-                // Task 11.2: 确定是否需要切换隔离视图
+                // 确定是否需要切换隔离视图
                 const isIsolated = (appData.settings?.zenMode || appData.settings?.isolatedView) && !isPageManagementMode;
-                
-                if (isIsolated) { 
-                    isZenTempExpanded = true; 
+
+                if (isIsolated) {
+                    isZenTempExpanded = true;
                     document.body.classList.remove('zen-silent'); // 点击切换时必然唤醒
-                    
-                    // 增加切换时的淡出效果 (Task 5.3)
+
+                    // 增加切换时的淡出效果
                     const container = document.getElementById('grid-container');
                     if (container) {
                         container.style.opacity = '0';
@@ -2501,8 +2501,8 @@ const renderNav = () => {
                         renderNav();
                     }
                 }
-                else { 
-                    document.getElementById('section-' + cat.id)?.scrollIntoView({ behavior: 'smooth' }); 
+                else {
+                    document.getElementById('section-' + cat.id)?.scrollIntoView({ behavior: 'smooth' });
                     // 非隔离模式下也更新 active 状态（视觉同步）
                     document.querySelectorAll('.sidebar-nav-item').forEach(el => el.classList.remove('active'));
                     navItem.classList.add('active');
@@ -2510,27 +2510,27 @@ const renderNav = () => {
             };
             sidebarFragment.appendChild(navItem);
 
-            // 视图隔离核心逻辑 (Task 11.2 深度对齐)
+            // 视图隔离核心逻辑 深度对齐)
             // 1. 禅意模式开启时：强制执行单一视图原则，无视 isolatedView 设置
             // 2. 常规模式开启时：遵循用户的手动 isolatedView 设置 (默认为 false/长廊)
             // 3. 页面管理模式：强制全分类展示以支持拖拽
             const isIsolatedView = !isPageManagementMode && (appData.settings?.zenMode || appData.settings?.isolatedView);
-            
+
             if (isIsolatedView && cat.id !== activeCatId) return;
 
             const section = document.createElement('div');
             section.className = 'category-section';
             section.id = 'section-' + cat.id;
-            const sectionIconHtml = cat.icon?.startsWith('http') 
-                ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">` 
+            const sectionIconHtml = cat.icon?.startsWith('http')
+                ? `<img src="${cat.icon}" class="cat-icon-img" style="width: 100%; height: 100%; object-fit: contain;">`
                 : `<span style="font-size: 20px; line-height: 1; display: block;">${cat.icon || '📂'}</span>`;
-            
+
             // 🔒 限制当前分类名展示：最多 1 个图标加 5 个字，溢出自动截断
             const truncatedCatName = cat.name.length > 5 ? cat.name.substring(0, 5) + '...' : cat.name;
             const canEditCat = isPageManagementMode && cat.id !== 'VIRTUAL_FREQ';
-            
+
             section.innerHTML = `
-                <div class="category-section-title ${canEditCat ? 'manage-clickable-cat' : ''}" 
+                <div class="category-section-title ${canEditCat ? 'manage-clickable-cat' : ''}"
                      style="display: flex; align-items: center; gap: 8px; ${canEditCat ? 'cursor: pointer; user-select: none;' : ''}"
                      ${canEditCat ? `onclick="window.openCategoryEditModal('${cat.id}')" title="点击编辑分类名称及图标"` : ''}>
                     <span style="width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; vertical-align: middle;">${sectionIconHtml}</span>
@@ -2541,29 +2541,29 @@ const renderNav = () => {
 
             const grid = document.createElement('div');
             grid.className = cat._isVideo ? 'video-grid' : 'nav-grid';
-            
+
             // 健壮的过滤逻辑：同时支持 catId 和 cat_id (容错设计)，且“常去网站”分类对隐藏属性进行强校验
-            const items = (cat.id === 'VIRTUAL_FREQ') 
-                ? appData.items.filter(i => freqIds.includes(i.id) && (isPageManagementMode || isAdmin || !i.hidden)) 
+            const items = (cat.id === 'VIRTUAL_FREQ')
+                ? appData.items.filter(i => freqIds.includes(i.id) && (isPageManagementMode || isAdmin || !i.hidden))
                 : appData.items.filter(i => (i.catId === cat.id || i.cat_id === cat.id) && (isPageManagementMode || isAdmin || !i.hidden));
-                
+
             items.forEach((item, idx) => {
                 const card = document.createElement('div');
-                card.className = cat._isVideo 
-                    ? `video-card ${item.hidden ? 'hidden-item' : ''}` 
+                card.className = cat._isVideo
+                    ? `video-card ${item.hidden ? 'hidden-item' : ''}`
                     : `card ${item.hidden ? 'hidden-item' : ''}`;
-                // 为磁贴增加 Tab 索引与唯一 ID，方便键盘流转 (Task 2.5.3)
+                // 为磁贴增加 Tab 索引与唯一 ID，方便键盘流转
                 card.setAttribute('tabindex', '0');
                 card.setAttribute('data-id', item.id);
-                // 注入描述作为 Tooltip (Task 4.9.2)
+                // 注入描述作为 Tooltip
                 if (item.desc) {
                     card.setAttribute('data-tooltip', item.desc);
                 }
                 card.style.animationDelay = `${idx * 0.03}s`;
-                
+
                 let html = cat._isVideo ? buildVideoCardHtml(item) : buildCardHtml(item);
-                
-                // 编辑入口 (Task 3.2: 页面管理模式下对所有人开放，常规模式下仅限管理员)
+
+                // 编辑入口 (页面管理模式下对所有人开放，常规模式下仅限管理员)
                 if (isPageManagementMode || isAdmin) {
                     html += `<div class="card-admin-btns">
                         ${isPageManagementMode ? `<button class="card-hide-toggle-btn" onclick="event.stopPropagation(); toggleItemHidden('${item.id}')" title="${item.hidden ? '设为公开显示' : '设为对外隐藏'}"><i class="${item.hidden ? 'ri-eye-off-line' : 'ri-eye-line'}"></i></button>` : ''}
@@ -2576,10 +2576,10 @@ const renderNav = () => {
                 if (item.hidden && isAdmin && !isPageManagementMode) {
                     html += `<div class="card-hidden-badge" title="该网址已对外隐藏"><i class="ri-eye-off-line"></i></div>`;
                 }
-                
+
                 card.innerHTML = html;
-                
-                // 处理点击逻辑 (Task 25.2: 增强点击响应稳定性)
+
+                // 处理点击逻辑 (增强点击响应稳定性)
                 card.onclick = (e) => {
                     if (isPageManagementMode) {
                         e.preventDefault();
@@ -2605,7 +2605,7 @@ const renderNav = () => {
                         }
                     }
                 };
-                
+
                 // 键盘激活支持
                 card.onkeydown = (e) => {
                     if (e.key === 'Enter') {
@@ -2626,11 +2626,11 @@ const renderNav = () => {
                         }
                     }
                 };
-                
+
                 grid.appendChild(card);
             });
 
-            // Task 4.4: 磁贴末尾的新增入口 (仅管理模式)
+            // 磁贴末尾的新增入口 (仅管理模式)
             if (isPageManagementMode && cat.id !== 'VIRTUAL_FREQ') {
                 const addCard = document.createElement('div');
                 const catItemCount = items.length;
@@ -2638,7 +2638,7 @@ const renderNav = () => {
                 const isCatFull = catItemCount >= quota.maxItemsPerCategory;
 
                 addCard.className = `card add-new-card ${isCatFull ? 'disabled' : ''}`;
-                addCard.tabIndex = 0; // Task 30.2: 启用键盘焦点
+                addCard.tabIndex = 0; // 启用键盘焦点
                 addCard.innerHTML = `
                     <div class="icon-wrapper"><i class="ri-add-line"></i></div>
                     <h3>${isCatFull ? '已满' : '新增书签'}</h3>
@@ -2649,7 +2649,7 @@ const renderNav = () => {
                     activeCatId = cat.id;
                     openEditModal('');
                 };
-                
+
                 // 键盘支持
                 addCard.onkeydown = (e) => {
                     if (e.key === 'Enter') addCard.click();
@@ -2663,7 +2663,7 @@ const renderNav = () => {
         sidebarNav.appendChild(sidebarFragment);
         container.appendChild(containerFragment);
 
-        // Task 4.4: 侧边栏新增分类入口 (仅管理模式)
+        // 侧边栏新增分类入口 (仅管理模式)
         if (isPageManagementMode) {
             const addCatBtn = document.createElement('div');
             const catCount = appData.categories.length;
@@ -2685,18 +2685,18 @@ const renderNav = () => {
             }
         }
 
-        // 统一禅意模式状态管理 (Task 4.6.1)
+        // 统一禅意模式状态管理
         isActuallyZen = appData.settings?.zenMode && !isZenTempExpanded;
         if (isActuallyZen && !document.body.classList.contains('zen-silent-woken')) {
             document.body.classList.add('zen-silent');
         } else {
             document.body.classList.remove('zen-silent');
         }
-        
+
         const zenBtn = document.getElementById('zen-expand-btn');
         if (zenBtn) zenBtn.style.display = (appData.settings?.zenMode && !isZenTempExpanded) ? 'flex' : 'none';
 
-        // Zen Mode 下强制侧边栏行为 (Task 2.1)
+        // Zen Mode 下强制侧边栏行为
         if (appData.settings?.zenMode) {
             const sidebar = document.getElementById('sidebar');
             if (sidebar && !sidebar.classList.contains('open')) {
@@ -2704,7 +2704,7 @@ const renderNav = () => {
             }
         }
 
-        // Task 1.1: UX Bridge - 游客引导
+        // UX Bridge - 游客引导
         if (!sysToken && appData.settings?.zenMode && !isZenTempExpanded) {
             let bridge = document.getElementById('guest-login-bridge');
             if (!bridge) {
@@ -2761,9 +2761,9 @@ const renderTools = () => {
 
     const themeIconMap = { 'auto': 'ri-computer-line', 'light': 'ri-sun-line', 'dark': 'ri-moon-line' };
     const themeNameMap = { 'auto': '跟随系统', 'light': '明亮模式', 'dark': '暗黑模式' };
-    
+
     // 1. 渲染用户信息区域
-    const info = sysToken 
+    const info = sysToken
         ? (currentUser || JSON.parse(localStorage.getItem('nav_current_user') || '{}'))
         : { username: '访客模式', role: 'guest', uid: null };
 
@@ -2795,7 +2795,7 @@ const renderTools = () => {
         `;
     } else {
         const userDisplayName = info.username || appData.username || '已登录用户';
-        
+
         let badgeText = 'USER';
         let badgeColor = 'rgba(255, 255, 255, 0.08)';
         let badgeTextCol = 'var(--text-dim)';
@@ -2817,10 +2817,10 @@ const renderTools = () => {
         const userAvatar = appData.settings?.avatarUrl || localStorage.getItem('nav_user_avatar_' + info.id) || DEFAULT_AVATARS[0];
         const avatarHtml = `<img src="${userAvatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
 
-        const displayUid = info.uid 
-            ? `<span class="user-uid" style="background: ${badgeColor}; color: ${badgeTextCol}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; opacity: 1; display: inline-block; width: max-content; font-family: monospace;" title="身份: ${badgeText} | 完整内部 ID: ${info.id}">ID: ${info.uid}</span>` 
+        const displayUid = info.uid
+            ? `<span class="user-uid" style="background: ${badgeColor}; color: ${badgeTextCol}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; opacity: 1; display: inline-block; width: max-content; font-family: monospace;" title="身份: ${badgeText} | 完整内部 ID: ${info.id}">ID: ${info.uid}</span>`
             : `<span class="user-uid" style="background: ${badgeColor}; color: ${badgeTextCol}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; opacity: 1; display: inline-block; width: max-content; font-family: monospace;">ID: ${info.id?.substring(0, 8) || '---'}</span>`;
-        
+
         userArea.innerHTML = `
             <div class="sidebar-user-card">
                 <div class="sidebar-user-info" onclick="openProfileCenter()" title="修改个人资料">
@@ -2843,17 +2843,17 @@ const renderTools = () => {
     }
 
     // 2. 渲染底部管理工具
-    
-    // 配额状态感知 (Task 20.4)
+
+    // 配额状态感知
     const quota = appData.quota || { maxCategories: 12, maxItemsPerCategory: 25 };
     const isAllFull = appData.categories.length >= quota.maxCategories;
 
-    // 管理员模式视觉高亮切换 (Task 9.2 增强)
+    // 管理员模式视觉高亮切换 增强)
     if (isPageManagementMode) {
         if (adminBanner) {
             adminBanner.style.display = 'flex';
             const isGuest = !sysToken;
-            
+
             adminBanner.innerHTML = `
                 <div style="display:flex; align-items:center; gap:8px;">
                     <i class="ri-tools-fill" style="font-size:18px;"></i>
@@ -2875,7 +2875,7 @@ const renderTools = () => {
         document.body.classList.remove('admin-mode');
     }
 
-    // 角色能力判定 (Task 17.2)
+    // 角色能力判定
     const role = info.role;
     const isLogged = !!sysToken;
     const canManageUsers = (role === 'admin' || role === 'super_user');
@@ -2931,7 +2931,7 @@ const renderTools = () => {
             label: '云端备份',
             tooltip: '云端同步中心',
             onclick: 'openSyncCenter()',
-            show: isLogged // Task 17.2: 仅登录用户可见
+            show: isLogged // 仅登录用户可见
         }
     ];
 
@@ -2939,9 +2939,9 @@ const renderTools = () => {
         <div class="sidebar-admin-container">
             <div class="sidebar-admin-toolbar">
                 ${toolbarButtons.filter(b => b.show).map(b => `
-                    <div class="sidebar-nav-item toolbar-item ${b.active ? 'active' : ''}" 
+                    <div class="sidebar-nav-item toolbar-item ${b.active ? 'active' : ''}"
                          id="${b.id}"
-                         onclick="${b.onclick}" 
+                         onclick="${b.onclick}"
                          tabindex="0"
                          data-tooltip="${b.tooltip}">
                         <span class="nav-icon"><i class="${b.icon}"></i></span>
@@ -2953,7 +2953,7 @@ const renderTools = () => {
             <!-- 页面管理子菜单 (仅在管理模式下显示) -->
             ${isPageManagementMode ? `
             <div class="admin-tools-submenu">
-                <div class="sidebar-nav-item" 
+                <div class="sidebar-nav-item"
                      onclick="openEditModal('')"
                      style="font-size: 13px; padding: 6px 12px;">
                     <span class="nav-icon"><i class="ri-add-circle-line"></i></span>
@@ -2973,7 +2973,7 @@ const renderTools = () => {
                     <span class="nav-label">重置模板</span>
                 </div>
                 <!-- 退出管理增强 -->
-                <div class="sidebar-nav-item exit-manage-btn" onclick="togglePageManagement(false)" 
+                <div class="sidebar-nav-item exit-manage-btn" onclick="togglePageManagement(false)"
                      style="font-size: 13px; padding: 8px 12px; margin-top: 10px; border-top: 1px solid var(--glass-border); color: var(--primary); font-weight: bold;">
                     <span class="nav-icon"><i class="ri-checkbox-circle-line"></i></span>
                     <span class="nav-label">保存并退出</span>
@@ -2989,17 +2989,17 @@ const renderTools = () => {
     }
 };
 
-// Task 10.1: 唤起云端备份中心 (风格对齐视觉实验室)
+// 唤起云端备份中心 (风格对齐视觉实验室)
 // Cloud sync methods (openSyncCenter, pullBackupFromCloud, executePullBackupFromCloud, manualSyncCloud, setSyncMode) are now managed in cloud-sync.js
 
-// Task 12.2 & 13.2 & 14.1: 唤起全站系统参数配置中枢 (Tab 架构重构)
-// Task 12.2 & 13.2 & 14.1: 全站网站与品牌系统参数配置已抽离至 sys-config.js 子模块中
+// 唤起全站系统参数配置中枢 (Tab 架构重构)
+// 全站网站与品牌系统参数配置已抽离至 sys-config.js 子模块中
 
 
-// Task 9.4: 周期性自动备份调度器
+// 周期性自动备份调度器
 const checkAutoSyncSchedule = async () => {
     if (!sysToken) return;
-    
+
     const intervalDays = appData.settings?.syncInterval || 0;
     if (intervalDays <= 0) return;
 
@@ -3016,14 +3016,14 @@ const checkAutoSyncSchedule = async () => {
 
     if (now - lastSync > threshold) {
         console.log(`[Sync] Auto-sync triggered. Interval: ${intervalDays} days. Last sync: ${formatSystemDate(lastSync, false)}`);
-        
+
         showToast(`自动备份中 (周期: ${intervalDays} 天)...`, "#3498db");
         await manualSyncCloud();
     }
 };
 
 // ==================== 6. 其他初始化 ====================
-// Task 29.4: 主题更新与模式控制已抽离至独立的 theme-mode.js 子模块中，并已安全挂载至 window
+// 主题更新与模式控制已抽离至独立的 theme-mode.js 子模块中，并已安全挂载至 window
 
 const toggleSidebar = (force) => {
     const s = document.getElementById('sidebar');
@@ -3034,7 +3034,7 @@ const toggleSidebar = (force) => {
     o.classList.toggle('visible', isOpen);
     document.body.classList.toggle('sidebar-open', isOpen);
 
-    // --- Task 15.4: 侧边栏打开时，同步锁定禅意模式为唤醒态 ---
+    // - 侧边栏打开时，同步锁定禅意模式为唤醒态 ---
     if (isOpen && appData.settings?.zenMode) {
         isZenTempExpanded = true;
         document.body.classList.remove('zen-silent');
@@ -3054,11 +3054,11 @@ const initSidebar = () => {
     if (o) o.onclick = () => toggleSidebar(false);
     if (noticeBtn) noticeBtn.onclick = () => typeof openNoticeCenter === 'function' && openNoticeCenter();
 
-    // --- Task 6.3: JS 状态控制与“图钉”逻辑兼容 ---
+    // - JS 状态控制与“图钉”逻辑兼容 ---
     window.autoAdjustSidebar = () => {
         const width = window.innerWidth;
         const isZen = appData.settings?.zenMode === true;
-        
+
         // 禅意模式下强制不折叠（因为侧边栏通常是隐藏的）
         if (isZen) {
             document.body.classList.remove('sidebar-folded');
@@ -3075,7 +3075,7 @@ const initSidebar = () => {
             // Desktop 端：根据图钉状态决定
             document.body.classList.toggle('sidebar-folded', !isSidebarPinned);
         }
-        
+
         // 更新图钉按钮图标状态
         if (pinBtn) {
             const icon = pinBtn.querySelector('i');
@@ -3085,14 +3085,14 @@ const initSidebar = () => {
         }
     };
 
-    // 监听窗口缩放 (Task 6.3)
+    // 监听窗口缩放
     let resizeTimer;
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(window.autoAdjustSidebar, 100);
     });
 
-    // Task 4.6.4: 移动端边缘滑动抽屉 (Swipe Engine)
+    // 移动端边缘滑动抽屉 (Swipe Engine)
     let touchStartX = 0;
     let touchStartTime = 0;
 
@@ -3118,7 +3118,7 @@ const initSidebar = () => {
                 toggleSidebar(true);
             }
         }
-        
+
         // 可选：向左滑动关闭侧边栏 (任意位置触发)
         if (diffX < -60 && diffTime < 300) {
             const s = document.getElementById('sidebar');
@@ -3128,7 +3128,7 @@ const initSidebar = () => {
         }
     }, { passive: true });
 
-    // 图钉初始化 (Task 4.5.3)
+    // 图钉初始化
     document.body.classList.toggle('sidebar-pinned', isSidebarPinned);
     window.autoAdjustSidebar();
 
@@ -3137,13 +3137,13 @@ const initSidebar = () => {
             isSidebarPinned = !isSidebarPinned;
             document.body.classList.toggle('sidebar-pinned', isSidebarPinned);
             localStorage.setItem('nav_sidebar_pinned', isSidebarPinned);
-            
+
             // 重新校准布局
             window.autoAdjustSidebar();
-            
+
             // 如果取消固定且是移动端，自动关闭侧边栏
             if (!isSidebarPinned && window.innerWidth <= 768) toggleSidebar(false);
-            
+
             showToast(isSidebarPinned ? "侧边栏已固定" : "侧边栏已设为自动折叠");
         };
     }
@@ -3153,18 +3153,18 @@ const initZenMode = () => {
     const btn = document.getElementById('zen-expand-btn');
     if (btn) btn.onclick = () => wakeUpNavigation();
 
-    // Task 5.4: 智能唤醒引擎
+    // 智能唤醒引擎
     let moveDistance = 0;
     let moveTimer = null;
-    
+
     window.resetZenSleepTimer = () => {
         if (window.zenSleepTimer) clearTimeout(window.zenSleepTimer);
         if (appData.settings?.zenMode && isZenTempExpanded) {
             window.zenSleepTimer = setTimeout(() => {
-                const isModalOpen = (document.getElementById('edit-modal')?.style.display === 'flex') || 
+                const isModalOpen = (document.getElementById('edit-modal')?.style.display === 'flex') ||
                                      (document.getElementById('monaco-modal')?.style.display === 'block') ||
                                      (document.getElementById('auth-overlay')?.style.display === 'block');
-                // 如果搜索框没有焦点，且没有处于管理模式，且没有任何模态弹窗打开，才自动沉睡 (Task NT.4)
+                // 如果搜索框没有焦点，且没有处于管理模式，且没有任何模态弹窗打开，才自动沉睡
                 if (document.activeElement?.id !== 'sea-input' && !isPageManagementMode && !isModalOpen) {
                     isZenTempExpanded = false;
                     updateStyles();
@@ -3216,17 +3216,17 @@ const initZenMode = () => {
 
 const wakeUpNavigation = () => {
     if (!document.body.classList.contains('zen-silent')) return;
-    
+
     isZenTempExpanded = true;
     updateStyles(); // 应用 zen-silent-woken 逻辑前先更新状态
     document.body.classList.remove('zen-silent');
     document.body.classList.add('zen-silent-woken');
-    
+
     renderNav();
-    
+
     // 唤醒后重置计时器
     if (window.resetZenSleepTimer) window.resetZenSleepTimer();
-    
+
     // 自动聚焦搜索框
     setTimeout(() => {
         document.getElementById('sea-input')?.focus();
@@ -3241,7 +3241,7 @@ const initSearch = () => {
     const engineList = document.getElementById('engine-list');
     if (!sea || !dropdown || !resultsList) return;
 
-    // Task 38.2: 初始化搜索引擎切换逻辑
+    // 初始化搜索引擎切换逻辑
     const initEngineSwitcher = () => {
         if (!engineTrigger || !engineList) return;
 
@@ -3270,7 +3270,7 @@ const initSearch = () => {
             engineTrigger.innerHTML = logo;
             document.querySelectorAll('.engine-item').forEach(el => el.classList.toggle('active', el === item));
             engineList.classList.remove('show');
-            
+
             if (sysToken && appData.settings) {
                 appData.settings.searchEngine = engine;
                 if (!silent) isDataDirty = true;
@@ -3307,7 +3307,7 @@ const initSearch = () => {
         if (e.key === 'Enter') {
             const val = sea.value.trim();
             if (val) {
-                // Task 4.6.2: 搜索历史持久化
+                // 搜索历史持久化
                 searchHistory = [val, ...searchHistory.filter(h => h !== val)].slice(0, 20);
                 localStorage.setItem('search_history', JSON.stringify(searchHistory));
                 historyIndex = -1;
@@ -3324,8 +3324,8 @@ const initSearch = () => {
         // 键盘上下选择
         if (['ArrowDown', 'ArrowUp'].includes(e.key)) {
             const items = Array.from(resultsList.querySelectorAll('.local-result-item'));
-            
-            // Task 4.6.2: 空输入态下的历史回溯
+
+            // 空输入态下的历史回溯
             if (items.length === 0 || !sea.value.trim()) {
                 if (searchHistory.length > 0) {
                     e.preventDefault();
@@ -3345,25 +3345,25 @@ const initSearch = () => {
             let activeIdx = items.findIndex(i => i.classList.contains('active'));
             if (e.key === 'ArrowDown') activeIdx = (activeIdx + 1) % items.length;
             else activeIdx = (activeIdx - 1 + items.length) % items.length;
-            
+
             items.forEach((item, idx) => item.classList.toggle('active', idx === activeIdx));
         }
     };
 
-    // 搜索态视觉隔离逻辑 (Task 2.5.2 增强)
+    // 搜索态视觉隔离逻辑 增强)
     sea.addEventListener('input', (e) => {
         // 如果不是由脚本触发的（即用户手动输入），则重置历史索引
         if (e.isTrusted) historyIndex = -1;
-        
+
         const val = sea.value.trim().toLowerCase();
         const hasText = val.length > 0;
         document.body.classList.toggle('is-searching', hasText);
-        
+
         if (hasText) {
             // 执行站内模糊搜索 (升级为支持 Title, Desc 之外并列匹配 URL 协议和域名)
-            const matches = appData.items.filter(i => 
-                (i.title.toLowerCase().includes(val) || 
-                 (i.desc && i.desc.toLowerCase().includes(val)) || 
+            const matches = appData.items.filter(i =>
+                (i.title.toLowerCase().includes(val) ||
+                 (i.desc && i.desc.toLowerCase().includes(val)) ||
                  (i.url && i.url.toLowerCase().includes(val))) &&
                 (isAdmin || !i.hidden)
             ).slice(0, 8); // 最多显示 8 个结果
@@ -3393,8 +3393,8 @@ const initSearch = () => {
                             }
                         } catch(e) {}
                     }
-                    const iconTag = iconUrl?.startsWith('http') 
-                        ? `<img src="${iconUrl}" data-retry-index="0" data-title="${escapeHTML(m.title)}" onload="utils.handleIconLoad(this, '${m.url}')" onerror="utils.handleIconError(this, '${m.url}')">` 
+                    const iconTag = iconUrl?.startsWith('http')
+                        ? `<img src="${iconUrl}" data-retry-index="0" data-title="${escapeHTML(m.title)}" onload="utils.handleIconLoad(this, '${m.url}')" onerror="utils.handleIconError(this, '${m.url}')">`
                         : (m.icon || '🔗');
 
                     return `
@@ -3417,7 +3417,7 @@ const initSearch = () => {
         }
     });
 
-    // Zen Mode 唤醒逻辑 (Task 2.1 & 2.5.1)
+    // Zen Mode 唤醒逻辑
     sea.addEventListener('focus', () => {
         document.body.classList.add('search-active');
         if (appData.settings?.zenMode && !isZenTempExpanded) {
@@ -3426,13 +3426,13 @@ const initSearch = () => {
         }
     });
 
-    // Task S.3: 召唤按钮点击逻辑 (Task NT-V2.21)
+    // 召唤按钮点击逻辑
     const summonBtn = document.getElementById('btn-summon-search');
     if (summonBtn) {
         const handleSummon = (e) => {
             e.stopPropagation(); // 🚀 阻止冒泡，防止被下方的全局 document.click 误当作外部点击瞬间秒关！
             document.body.classList.add('search-active');
-            
+
             // 移动端/多端双重聚焦与唤起键盘优化
             sea.focus();
             setTimeout(() => {
@@ -3443,7 +3443,7 @@ const initSearch = () => {
                 sea.value = val;
             }, 50);
         };
-        
+
         summonBtn.onclick = handleSummon;
         summonBtn.ontouchend = (e) => {
             e.preventDefault(); // 阻止默认点击，避免穿透与重复触发
@@ -3492,7 +3492,7 @@ const initSearch = () => {
     });
 };
 
-// Task S.2: 关闭搜索层并重置状态
+// 关闭搜索层并重置状态
 const closeSearch = () => {
     const sea = document.getElementById('sea-input');
     const dropdown = document.getElementById('sea-dropdown');
@@ -3504,7 +3504,7 @@ const closeSearch = () => {
     if (dropdown) dropdown.style.display = 'none';
 };
 
-// Task 9.6 & O.3 & O++.1 & 9.1 & 11.3: 全局模态状态清理函数 (支持静默模式)
+// 全局模态状态清理函数 (支持静默模式)
 const closeAllModals = (silent = false) => {
     const editModal = document.getElementById('edit-modal');
     const modalType = editModal?.dataset.modalType;
@@ -3523,7 +3523,7 @@ const closeAllModals = (silent = false) => {
         editModal.style.display = 'none';
         delete editModal.dataset.modalType; // 清理标记
         const body = document.getElementById('edit-form-body');
-        if (body) body.innerHTML = ''; 
+        if (body) body.innerHTML = '';
     }
 
     // 2. 关闭专家模式弹窗
@@ -3534,7 +3534,7 @@ const closeAllModals = (silent = false) => {
     const authOverlay = document.getElementById('auth-overlay');
     if (authOverlay) authOverlay.style.display = 'none';
 
-    // 4. 关闭视频预览弹窗并清除源 (Task V.4)
+    // 4. 关闭视频预览弹窗并清除源
     const videoModal = document.getElementById('video-modal');
     if (videoModal && getComputedStyle(videoModal).display !== 'none') {
         const iframe = document.getElementById('video-iframe');
@@ -3546,26 +3546,26 @@ const closeAllModals = (silent = false) => {
     const keyboardHelpModal = document.getElementById('keyboard-help-modal');
     if (keyboardHelpModal) keyboardHelpModal.style.display = 'none';
 
-    // Task 37.2: 焦点还原
+    // 焦点还原
     if (!silent && lastFocusedElement) {
         lastFocusedElement.focus();
         lastFocusedElement = null;
     }
 
-    // Task UM.4: 关闭所有弹窗时隐藏管理员批量操作栏
+    // 关闭所有弹窗时隐藏管理员批量操作栏
     const adminBar = document.getElementById('admin-user-batch-bar');
     if (adminBar) adminBar.classList.remove('visible');
 };
 window.closeAllModals = closeAllModals;
 
-// Task EXIT.4: 统一退出暂存逻辑 (针对个人偏好设置与页面管理退出)
+// 统一退出暂存逻辑 (针对个人偏好设置与页面管理退出)
 const handleDataSaveOnExit = async () => {
     if (!isDataDirty) return;
-    
+
     // 默认退出页面管理先保存本地
     localStorage.setItem('nav_app_data', JSON.stringify(appData));
     await new Promise(r => setTimeout(r, 200));
-    
+
     if (!sysToken) {
         isDataDirty = false;
         showToast("访客模式：修改已在本地生效（更换浏览器或清空缓存会导致数据丢失）", "#e67e22");
@@ -3583,7 +3583,7 @@ const handleDataSaveOnExit = async () => {
         const lastSync = parseInt(localStorage.getItem('nav_last_cloud_sync') || '0');
         const now = Date.now();
         const threshold = intervalDays * 24 * 60 * 60 * 1000;
-        
+
         if (now - lastSync > threshold) {
             // 到了备份的周期，在保存本地后，执行自动云端备份
             await SyncUI.perform('BACKUP_AUTO', async () => {
@@ -3595,9 +3595,9 @@ const handleDataSaveOnExit = async () => {
 
                     const res = await fetch('/api/config', {
                         method: 'POST',
-                        headers: { 
+                        headers: {
                             'Authorization': sysToken,
-                            'Content-Type': 'application/json' 
+                            'Content-Type': 'application/json'
                         },
                         body: JSON.stringify(uploadData)
                     });
@@ -3605,7 +3605,7 @@ const handleDataSaveOnExit = async () => {
                     if (res.status === 401) {
                         throw new Error("登录态失效，自动同步失败");
                     }
-                    
+
                     const data = await res.json();
                     if (res.ok && data.success) {
                         isDataDirty = false;
@@ -3631,7 +3631,7 @@ const handleDataSaveOnExit = async () => {
 };
 window.handleDataSaveOnExit = handleDataSaveOnExit;
 
-// ==================== 9. Task 3.3: 页面管理模式 与 分类编辑 (已迁移至 page-manage.js) ====================
+// ==================== 9. 页面管理模式 与 分类编辑 (已迁移至 page-manage.js) ====================
 
 
 const getEmojiPickerHTML = () => `
@@ -3648,10 +3648,10 @@ const getEmojiPickerHTML = () => `
 window.toggleEmojiPicker = () => {
     const container = document.getElementById('emoji-picker-container');
     if (!container) return;
-    
+
     const isVisible = container.style.display === 'flex';
     container.style.display = isVisible ? 'none' : 'flex';
-    
+
     if (!isVisible) {
         initEmojiPicker();
     }
@@ -3660,7 +3660,7 @@ window.toggleEmojiPicker = () => {
 window.initEmojiPicker = (activeCategory = 'officeAndBookmarks', searchQuery = '') => {
     const tabsContainer = document.getElementById('emoji-picker-tabs');
     const gridContainer = document.getElementById('emoji-grid');
-    
+
     if (!tabsContainer || !gridContainer) return;
 
     // 渲染 Tab (搜索时隐藏 Tab 以腾出空间)
@@ -3677,7 +3677,7 @@ window.initEmojiPicker = (activeCategory = 'officeAndBookmarks', searchQuery = '
     } else {
         tabsContainer.style.display = 'flex';
         tabsContainer.innerHTML = Object.entries(categories).map(([key, label]) => `
-            <button class="emoji-tab-btn ${key === activeCategory ? 'active' : ''}" 
+            <button class="emoji-tab-btn ${key === activeCategory ? 'active' : ''}"
                     onclick="event.stopPropagation(); initEmojiPicker('${key}')">${label}</button>
         `).join('');
     }
@@ -3691,14 +3691,14 @@ window.initEmojiPicker = (activeCategory = 'officeAndBookmarks', searchQuery = '
         const cleanQuery = searchQuery.trim();
         const hasDot = cleanQuery.includes('.');
         const isUrlLike = cleanQuery.startsWith('http') || hasDot;
-        
+
         let domain = cleanQuery;
         if (cleanQuery.startsWith('http')) {
             try {
                 domain = new URL(cleanQuery).hostname;
             } catch(e) {}
         }
-        
+
         if (isUrlLike && domain.length > 3) {
             faviconDomain = domain;
             faviconUrl = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
@@ -3717,12 +3717,12 @@ window.initEmojiPicker = (activeCategory = 'officeAndBookmarks', searchQuery = '
         console.error('[Emoji] Render error:', e);
         emojis = ['⚠️', '❓'];
     }
-    
+
     let htmlContent = '';
     if (faviconUrl) {
          htmlContent += `
-             <div class="emoji-item favicon-suggest" 
-                  style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11px; font-weight: bold; background: rgba(57, 157, 255, 0.15); border: 1px dashed var(--primary); padding: 8px; border-radius: 8px; margin-bottom: 10px; cursor: pointer; color: var(--text);" 
+             <div class="emoji-item favicon-suggest"
+                  style="grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 11px; font-weight: bold; background: rgba(57, 157, 255, 0.15); border: 1px dashed var(--primary); padding: 8px; border-radius: 8px; margin-bottom: 10px; cursor: pointer; color: var(--text);"
                   onclick="event.stopPropagation(); selectEmoji('${faviconUrl}')"
                   title="点击将此网络图标作为您的自定义书签图标">
                  <img src="${faviconUrl}" style="width: 16px; height: 16px; border-radius: 4px;" onerror="this.src='https://www.google.com/s2/favicons?domain=${faviconDomain}&sz=64'">
@@ -3752,11 +3752,11 @@ window.searchEmojis = (query) => {
 };
 
 window.selectEmoji = (emoji) => {
-    // 兼容分类图标和网址图标编辑框 (Task 3.2: 增加 edit-icon 支持)
+    // 兼容分类图标和网址图标编辑框 (增加 edit-icon 支持)
     const iconInput = document.getElementById('edit-cat-icon') || document.getElementById('edit-icon');
     if (iconInput) {
         iconInput.value = emoji;
-        // Task CR.3: 如果存在预览框，同步更新预览
+        // 如果存在预览框，同步更新预览
         const previewBox = document.getElementById('cat-icon-preview');
         if (previewBox) previewBox.innerText = emoji;
 
@@ -3772,7 +3772,7 @@ window.selectEmoji = (emoji) => {
 
         // 触发一次 input 事件，确保如果有其他联动逻辑可以感知
         iconInput.dispatchEvent(new Event('input', { bubbles: true }));
-        
+
         // 选中后自动收起面板并显示成功反馈
         const container = document.getElementById('emoji-picker-container');
         if (container) {
@@ -3789,13 +3789,13 @@ window.requireAdminAuth = (message) => {
         const passInput = document.getElementById('auth-modal-password');
         const confirmBtn = document.getElementById('btn-auth-confirm');
         const cancelBtn = document.getElementById('btn-auth-cancel');
-        
+
         if (!modal || !msgEl || !passInput) return resolve(null);
-        
+
         msgEl.innerText = message || "此操作属于敏感安全授权变更，请输入管理员密码进行核验。";
         passInput.value = '';
         modal.style.display = 'flex';
-        
+
         setTimeout(() => passInput.focus(), 150);
 
         const cleanup = (val) => {
@@ -3832,12 +3832,12 @@ window.requireSystemConfirm = (title, message, isDanger = false) => {
         const iconEl = document.getElementById('confirm-modal-icon');
         const okBtn = document.getElementById('btn-confirm-ok');
         const cancelBtn = document.getElementById('btn-confirm-cancel');
-        
+
         if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) return resolve(false);
-        
+
         titleEl.innerText = title || "安全确认";
         msgEl.innerText = message || "确定要执行此操作吗？";
-        
+
         // 危险操作高亮警示
         if (isDanger) {
             if (iconEl) {
@@ -3858,16 +3858,16 @@ window.requireSystemConfirm = (title, message, isDanger = false) => {
             okBtn.style.color = '#fff';
             okBtn.innerText = "确认";
         }
-        
+
         modal.style.display = 'flex';
-        
+
         const cleanup = (val) => {
             modal.style.display = 'none';
             okBtn.onclick = null;
             cancelBtn.onclick = null;
             resolve(val);
         };
-        
+
         okBtn.onclick = () => cleanup(true);
         cancelBtn.onclick = () => cleanup(false);
     });
@@ -3888,14 +3888,14 @@ window.formatMonacoJson = () => {
 let monacoEditor = null;
 
 const openJsonEditor = () => {
-    // Task 9.6 & O++.1: 切换弹窗启用静默模式
+    // 切换弹窗启用静默模式
     closeAllModals(true);
 
     const modal = document.getElementById('edit-modal');
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
     const confirmBtn = document.getElementById('btn-confirm-edit');
-    
+
     if (!modal || !body) return;
 
     title.innerText = "JSON 专家模式 (专家级定制)";
@@ -3933,16 +3933,16 @@ const openJsonEditor = () => {
         try {
             const raw = monacoEditor.getValue();
             const parsed = JSON.parse(raw);
-            
+
             // 简单结构校验
             if (!parsed.categories || !parsed.items) throw new Error("缺少核心字段 (categories/items)");
-            
-            // 智能清洗脏配置 (Task NT-V2.12)
+
+            // 智能清洗脏配置
             if (parsed.settings) {
                 delete parsed.settings.cardWidth;
             }
-            
-            // Task 4.3: 专家模式配额校验
+
+            // 专家模式配额校验
             const quota = appData.quota || { maxCategories: 12, maxItemsPerCategory: 25 };
             if (parsed.categories.length > quota.maxCategories) throw new Error(`分类数量超出上限 (${quota.maxCategories})`);
             for (const cat of parsed.categories) {
@@ -3971,7 +3971,7 @@ const openJsonEditor = () => {
 window.openJsonEditor = openJsonEditor;
 
 const initGlobalEvents = () => {
-    // 快捷导航按钮逻辑 (Task 4.2)
+    // 快捷导航按钮逻辑
     const fabToTop = document.getElementById('scroll-to-top');
     const fabToBottom = document.getElementById('scroll-to-bottom');
     const fabGroup = document.getElementById('quick-nav-group');
@@ -3986,7 +3986,7 @@ const initGlobalEvents = () => {
             const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
             // 滚动超过 300px 显示
             fabGroup.classList.toggle('visible', scrollTop > 300);
-            
+
             // 闲置淡出逻辑
             fabGroup.classList.add('active');
             clearTimeout(fabTimer);
@@ -4016,7 +4016,7 @@ const initGlobalEvents = () => {
                 document.body.classList.add('search-active');
                 sea.value = pasteData;
                 sea.focus();
-                
+
                 // 唤起禅意模式下展开逻辑
                 if (appData.settings?.zenMode && !isZenTempExpanded) {
                     isZenTempExpanded = true;
@@ -4041,7 +4041,7 @@ const initGlobalEvents = () => {
         const isInput = active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable;
 
         // 1. Escape 键一键复位/关闭弹窗与状态
-        if (e.key === 'Escape') { 
+        if (e.key === 'Escape') {
             const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
             if (activeModal) {
                 e.preventDefault();
@@ -4072,7 +4072,7 @@ const initGlobalEvents = () => {
             }
         }
 
-        // 2. 几何方向键聚焦计算 
+        // 2. 几何方向键聚焦计算
         if (!isInput && ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
             e.preventDefault();
             const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
@@ -4082,8 +4082,8 @@ const initGlobalEvents = () => {
                 pool = Array.from(activeModal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'));
             } else {
                 const isZen = appData.settings?.zenMode === true;
-                const selectors = isZen 
-                    ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item, #current-engine-trigger, .engine-item' 
+                const selectors = isZen
+                    ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item, #current-engine-trigger, .engine-item'
                     : '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item, .notice-center-btn, .sidebar-pin-btn, #current-engine-trigger, .engine-item';
                 pool = Array.from(document.querySelectorAll(selectors));
             }
@@ -4115,8 +4115,8 @@ const initGlobalEvents = () => {
                 let isValid = false;
                 let score = 0;
 
-                const hWeight = activeModal ? 1.5 : 2.5; 
-                const vWeight = activeModal ? 1.2 : 2.0; 
+                const hWeight = activeModal ? 1.5 : 2.5;
+                const vWeight = activeModal ? 1.2 : 2.0;
 
                 switch (e.key) {
                     case 'ArrowRight':
@@ -4167,12 +4167,12 @@ const initGlobalEvents = () => {
                 pool = Array.from(activeModal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'));
             } else {
                 const isZen = appData.settings?.zenMode === true;
-                const selectors = isZen 
-                    ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item, #current-engine-trigger, .engine-item' 
+                const selectors = isZen
+                    ? '.card:not(.hidden-item), .zen-menu-item, .zen-freq-item, #current-engine-trigger, .engine-item'
                     : '.card:not(.hidden-item), .sidebar-nav-item:not(.sidebar-nav-label), .zen-menu-item, .zen-freq-item, .notice-center-btn, .sidebar-pin-btn, #current-engine-trigger, .engine-item';
                 pool = Array.from(document.querySelectorAll(selectors));
             }
-            
+
             if (pool.includes(active)) {
                 if (active.tagName === 'DIV' || active.tagName === 'SPAN') {
                     e.preventDefault();
@@ -4188,14 +4188,14 @@ const initGlobalEvents = () => {
             const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
             if (activeModal || isPageManagementMode) return;
             e.preventDefault();
-            
+
             const sidebar = document.getElementById('sidebar');
             const isOpen = sidebar?.classList.contains('open');
-            
+
             if (!isOpen && appData.settings?.zenMode && document.body.classList.contains('zen-silent')) {
                 wakeUpNavigation();
             }
-            
+
             toggleSidebar(!isOpen);
             return;
         }
@@ -4254,7 +4254,7 @@ const initGlobalEvents = () => {
             if (sea) {
                 document.body.classList.add('search-active');
                 sea.focus();
-                
+
                 // 唤起禅意模式下展开逻辑
                 if (appData.settings?.zenMode && !isZenTempExpanded) {
                     isZenTempExpanded = true;
@@ -4292,24 +4292,24 @@ const initSharedPage = async (slug) => {
             throw new Error(errData.message || "加载公开主页失败");
         }
         const data = await res.json();
-        
+
         // 渲染分享主页的数据
         appData = data;
         isAdmin = false; // 分享主页对访客绝对禁止管理员权限
         currentUser = null; // 访客无当前用户
         sysToken = null; // 无 token
-        
+
         // 标记为只读分享状态
-        window.isSharedPageMode = true; 
-        
+        window.isSharedPageMode = true;
+
         toggleSkeleton(false);
         renderNav();
         renderTools();
         updateStyles();
-        
+
         // 渲染病毒式裂变徽章 (Viral Badge)
         renderViralBadge(data.shareOwner);
-        
+
         showToast(`已成功载入 @${data.shareOwner} 的公开主页`, "#2ecc71");
     } catch (e) {
         hideLoader();
@@ -4327,7 +4327,7 @@ const initSharedPage = async (slug) => {
 const renderViralBadge = (ownerName) => {
     // 检查是否已存在
     if (document.getElementById('viral-badge')) return;
-    
+
     const badge = document.createElement('div');
     badge.id = 'viral-badge';
     badge.style.position = 'fixed';
@@ -4347,12 +4347,12 @@ const renderViralBadge = (ownerName) => {
     badge.style.cursor = 'pointer';
     badge.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
     badge.style.transition = '0.3s ease';
-    
+
     badge.innerHTML = `
         <span style="color: #f1c40f;"><i class="ri-flashlight-line"></i></span>
         <span>我也要搭建 @${escapeHTML(ownerName)} 这样的高颜值导航</span>
     `;
-    
+
     badge.onmouseenter = () => {
         badge.style.transform = 'translateY(-2px)';
         badge.style.background = 'rgba(0, 0, 0, 0.6)';
@@ -4361,11 +4361,11 @@ const renderViralBadge = (ownerName) => {
         badge.style.transform = 'translateY(0)';
         badge.style.background = 'rgba(0, 0, 0, 0.4)';
     };
-    
+
     badge.onclick = () => {
         window.location.href = '/';
     };
-    
+
     document.body.appendChild(badge);
 };
 

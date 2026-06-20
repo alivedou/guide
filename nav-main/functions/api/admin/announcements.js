@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -10,7 +10,7 @@
 export async function onRequestGet(context) {
   const { env, request } = context;
   const { searchParams } = new URL(request.url);
-  
+
   const page = parseInt(searchParams.get('page') || '1');
   const pageSize = parseInt(searchParams.get('pageSize') || '20');
   const keyword = searchParams.get('keyword') || '';
@@ -50,9 +50,9 @@ export async function onRequestGet(context) {
     const finalParams = [...params, pageSize, (page - 1) * pageSize];
 
     const { results } = await env.DB.prepare(query).bind(...finalParams).all();
-    
-    return new Response(JSON.stringify({ 
-      success: true, 
+
+    return new Response(JSON.stringify({
+      success: true,
       announcements: results,
       pagination: { total, page, pageSize }
     }), {
@@ -66,14 +66,14 @@ export async function onRequestGet(context) {
 export async function onRequestPost(context) {
   const { request, env, data } = context;
   const admin = data.user;
-  
+
   try {
     const { title, content, type, is_top, expire_at, status } = await request.json();
     await env.DB.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .bind(admin.id, title, content, type, is_top ? 1 : 0, expire_at || null, status || 'published')
       .run();
 
-    // Task 6.6: 更新全局公告版本号 (KV)
+    // 更新全局公告版本号 (KV)
     await env.nav.put('announcements_last_update', Date.now().toString());
 
     // 记录审计日志
@@ -91,7 +91,7 @@ export async function onRequestPost(context) {
 export async function onRequestPatch(context) {
   const { request, env, data } = context;
   const admin = data.user;
-  
+
   try {
     const payload = await request.json();
     const { id } = payload;
@@ -100,7 +100,7 @@ export async function onRequestPatch(context) {
     const targetId = Number(id);
     const updates = [];
     const params = [];
-    
+
     if (payload.title !== undefined) {
         updates.push('title = ?');
         params.push(payload.title);
@@ -141,7 +141,7 @@ export async function onRequestPatch(context) {
         return new Response(JSON.stringify({ error: "Database update failed" }), { status: 500 });
     }
 
-    // Task 6.6: 更新全局公告版本号 (KV)
+    // 更新全局公告版本号 (KV)
     await env.nav.put('announcements_last_update', Date.now().toString());
 
     // 记录审计日志
@@ -161,7 +161,7 @@ export async function onRequestPatch(context) {
 export async function onRequestDelete(context) {
   const { request, env, data } = context;
   const admin = data.user;
-  
+
   // 管理员可删所有，超级用户只能删自己创建的
   try {
     const { id } = await request.json();
@@ -179,7 +179,7 @@ export async function onRequestDelete(context) {
 
     await env.DB.prepare('DELETE FROM announcements WHERE id = ?').bind(targetId).run();
 
-    // Task 6.6: 更新全局公告版本号 (KV)
+    // 更新全局公告版本号 (KV)
     await env.nav.put('announcements_last_update', Date.now().toString());
 
     // 记录审计日志

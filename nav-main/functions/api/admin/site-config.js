@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -28,8 +28,8 @@ export async function onRequestGet(context) {
 export async function onRequestPost(context) {
   const { request, env, data } = context;
   const admin = data.user;
-  
-  // Task 17.4: 严格校验 admin 权限，super_user 不可修改系统参数
+
+  // 严格校验 admin 权限，super_user 不可修改系统参数
   if (admin.role !== 'admin') {
     return new Response(JSON.stringify({ error: "Forbidden", message: "仅系统管理员可修改全站参数" }), { status: 403 });
   }
@@ -37,13 +37,13 @@ export async function onRequestPost(context) {
   try {
     const config = await request.json();
     await env.nav.put("system:site_config", JSON.stringify(config));
-    
+
     // 审计日志
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
       .bind(admin.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config), '[Protected]')
       .run();
 
-    // 即时高危告警 (Task N.5)
+    // 即时高危告警
     if (config.enableAdminInstantAlert) {
       context.waitUntil(dispatchInstantAdminAlert('UPDATE_SITE_CONFIG', JSON.stringify(config), admin, '[Protected]', env));
     }
@@ -67,9 +67,9 @@ async function dispatchInstantAdminAlert(action, details, admin, ip, env) {
   if (env.TELEGRAM_BOT_TOKEN) {
     try {
       const receivers = await env.DB.prepare(`
-        SELECT u.telegram_chat_id 
-        FROM users u 
-        JOIN user_settings s ON u.id = s.user_id 
+        SELECT u.telegram_chat_id
+        FROM users u
+        JOIN user_settings s ON u.id = s.user_id
         WHERE s.is_alert_receiver = 1 AND u.telegram_chat_id IS NOT NULL
       `).all();
 
@@ -110,9 +110,9 @@ async function dispatchInstantAdminAlert(action, details, admin, ip, env) {
   if (env.RESEND_API_KEY) {
     try {
       const receivers = await env.DB.prepare(`
-        SELECT u.email 
-        FROM users u 
-        JOIN user_settings s ON u.id = s.user_id 
+        SELECT u.email
+        FROM users u
+        JOIN user_settings s ON u.id = s.user_id
         WHERE s.is_alert_receiver = 1 AND u.email IS NOT NULL
       `).all();
 

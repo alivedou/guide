@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -24,7 +24,7 @@ const __dirname = path.dirname(__filename);
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'local_d1.db');
 const db = new Database(dbPath);
 
-// Task 19.1: 后端自愈 - 检查核心表是否存在，不存在则自动执行迁移
+// 后端自愈 - 检查核心表是否存在，不存在则自动执行迁移
 const checkTables = () => {
     try {
         const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
@@ -42,7 +42,7 @@ const checkTables = () => {
 };
 checkTables();
 
-// 自动执行所有迁移文件 (Task 5.5.2)
+// 自动执行所有迁移文件
 const migrationsDir = path.join(__dirname, 'migrations');
 if (fs.existsSync(migrationsDir)) {
     const files = fs.readdirSync(migrationsDir).sort();
@@ -62,7 +62,7 @@ if (fs.existsSync(migrationsDir)) {
     });
 }
 
-// ====== Task 5.5.4: 数据库自动热迁移 (修复字段缺失) ======
+// ====== 数据库自动热迁移 (修复字段缺失) ======
 try {
     const tableInfo = db.prepare("PRAGMA table_info(users)").all();
     const columns = tableInfo.map(c => c.name);
@@ -119,7 +119,7 @@ try {
         }
     }
 
-    // Task 22.1 & 23.1: 补齐 user_settings 缺失字段
+    // 补齐 user_settings 缺失字段
     const settingsInfo = db.prepare("PRAGMA table_info(user_settings)").all();
     const settingsCols = settingsInfo.map(c => c.name);
     if (settingsCols.length > 0) {
@@ -156,7 +156,7 @@ try {
                 console.warn('[DB] Share index warning:', indexErr.message);
             }
         }
-        
+
         // 💡 自动数据自愈修复：将本地已经被邀请码绑定的用户的 has_invite 状态强制修正回填为 1，确保本地开发测试时其享有 20 个书签的配额
         try {
             db.exec("UPDATE users SET has_invite = 1 WHERE id IN (SELECT used_by FROM invitation_codes WHERE used_by IS NOT NULL)");
@@ -179,11 +179,11 @@ const EMAIL_FROM = process.env.EMAIL_FROM || 'CloudNav Alerts <alerts@cloudnav.t
 const DEBUG_MODE = process.env.DEBUG_MODE === 'true'; // 调试模式开关
 const secret = new TextEncoder().encode(JWT_SECRET);
 
-// ====== Task 4.3: 登录防爆破模拟 ======
+// ====== 登录防爆破模拟 ======
 const loginAttempts = new Map(); // IP -> { count, lockUntil }
-const registerAttempts = new Map(); // Task 11.4: 注册防爆破 IP -> { count, lockUntil }
+const registerAttempts = new Map(); // 注册防爆破 IP -> { count, lockUntil }
 
-// ====== Task 4.3.1: 资源配额管理 ======
+// ====== 资源配额管理 ======
 const QUOTA_CONFIG = {
     guest: { maxCategories: 6, maxItemsPerCategory: 12 },
     user: { maxCategories: 12, maxItemsPerCategory: 25 },
@@ -241,7 +241,7 @@ const authenticate = async (req, res, next) => {
     }
 };
 
-// ====== 管理员权限拦截器 (Task 5.5.2.1) ======
+// ====== 管理员权限拦截器  ======
 const adminOnly = (req, res, next) => {
     if (req.user.role !== 'admin' && req.user.role !== 'super_user') {
         return res.status(403).json({ error: '权限不足，仅限管理员操作', code: 'FORBIDDEN' });
@@ -249,7 +249,7 @@ const adminOnly = (req, res, next) => {
     next();
 };
 
-// ====== 高危敏感操作即时告警 (Task N.5) ======
+// ====== 高危敏感操作即时告警  ======
 async function dispatchInstantAdminAlert(action, details, adminUserId, ip) {
     try {
         const admin = db.prepare('SELECT id, username FROM users WHERE id = ?').get(adminUserId) || { id: adminUserId, username: 'Unknown' };
@@ -267,9 +267,9 @@ async function dispatchInstantAdminAlert(action, details, adminUserId, ip) {
         if (TELEGRAM_BOT_TOKEN) {
             try {
                 const receivers = db.prepare(`
-                    SELECT u.telegram_chat_id 
-                    FROM users u 
-                    JOIN user_settings s ON u.id = s.user_id 
+                    SELECT u.telegram_chat_id
+                    FROM users u
+                    JOIN user_settings s ON u.id = s.user_id
                     WHERE s.is_alert_receiver = 1 AND u.telegram_chat_id IS NOT NULL AND u.telegram_chat_id != ''
                 `).all();
 
@@ -344,7 +344,7 @@ async function sendEmailHelper(recipient, subject, content) {
 
 app.use(express.json({ limit: '10mb' }));
 
-// Task 21.1 & 13.1 & 19.3: Bing 每日壁纸代理 (提权至 API 第一顺位)
+// Bing 每日壁纸代理 (提权至 API 第一顺位)
 app.get('/api/bing', async (req, res) => {
     const fetchWithTimeout = async (url, options = {}, timeout = 5000) => {
         const controller = new AbortController();
@@ -367,7 +367,7 @@ app.get('/api/bing', async (req, res) => {
             });
             const data = await response.json();
             if (data.images && data.images.length > 0) {
-                // Task 19.3: 后端标准化，补全绝对路径，与 Worker 保持逻辑一致
+                // 后端标准化，补全绝对路径，与 Worker 保持逻辑一致
                 data.images = data.images.map(img => ({
                     ...img,
                     url: img.url.startsWith('http') ? img.url : `https://cn.bing.com${img.url}`,
@@ -387,7 +387,7 @@ app.get('/api/bing', async (req, res) => {
         if (mirrorData.url) {
             console.log('[Bing] Mirror source success');
             return res.json({
-                images: [{ 
+                images: [{
                     url: mirrorData.url,
                     urlbase: mirrorData.url.split('&')[0] // 简单模拟 urlbase
                 }]
@@ -401,7 +401,7 @@ app.get('/api/bing', async (req, res) => {
     }
 });
 
-// ====== Task 3.2: Magic Wand Backend (Metadata Fetcher) ======
+// ====== Magic Wand Backend (Metadata Fetcher) ======
 app.get('/api/proxy/fetch-metadata', authenticate, async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) return res.status(400).json({ error: 'URL is required' });
@@ -414,23 +414,23 @@ app.get('/api/proxy/fetch-metadata', authenticate, async (req, res) => {
         });
 
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        
+
         const html = await response.text();
         const root = parse(html);
-        
+
         // 提取标题
-        let title = root.querySelector('title')?.text || 
-                    root.querySelector('meta[property="og:title"]')?.getAttribute('content') || 
+        let title = root.querySelector('title')?.text ||
+                    root.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
                     '';
-        
+
         // 提取描述
-        let desc = root.querySelector('meta[name="description"]')?.getAttribute('content') || 
-                   root.querySelector('meta[property="og:description"]')?.getAttribute('content') || 
+        let desc = root.querySelector('meta[name="description"]')?.getAttribute('content') ||
+                   root.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
                    '';
-        
+
         // 提取图标
-        let icon = root.querySelector('link[rel~="icon"]')?.getAttribute('href') || 
-                   root.querySelector('link[rel~="apple-touch-icon"]')?.getAttribute('href') || 
+        let icon = root.querySelector('link[rel~="icon"]')?.getAttribute('href') ||
+                   root.querySelector('link[rel~="apple-touch-icon"]')?.getAttribute('href') ||
                    '/favicon.ico';
 
         // 图标地址转换 (相对路径 -> 绝对路径)
@@ -468,7 +468,7 @@ const syncUserToKV = (userId) => {
     const categories = db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY sort_order ASC, name ASC').all(userId);
     const items = db.prepare('SELECT * FROM items WHERE user_id = ? ORDER BY sort_order ASC, title ASC').all(userId);
     const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId);
-    
+
     let existingLastUpdated = null;
     const kvDir = path.join(__dirname, 'local_kv');
     const filePath = path.join(kvDir, `user_${userId}.json`);
@@ -483,14 +483,14 @@ const syncUserToKV = (userId) => {
 
     const userData = {
         categories: categories.map(c => ({
-            ...c, 
-            id: c.id, 
-            _isVideo: !!c.is_video, 
+            ...c,
+            id: c.id,
+            _isVideo: !!c.is_video,
             hidden: !!c.hidden
         })),
         items: items.map(i => ({
-            ...i, 
-            catId: i.cat_id, 
+            ...i,
+            catId: i.cat_id,
             cat_id: i.cat_id, // 双重保险
             hidden: !!i.hidden
         })),
@@ -509,21 +509,21 @@ const syncUserToKV = (userId) => {
         } : defaultData.settings,
         lastUpdated: existingLastUpdated || null
     };
-    
+
     // 强制修正 settings 中的 showFrequent 拼写 (容错)
     if (settings && settings.show_frequent !== undefined) {
         userData.settings.showFrequent = !!settings.show_frequent;
     }
 
     if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
-    
+
     fs.writeFileSync(filePath, JSON.stringify(userData, null, 2));
     console.log(`[KV] Successfully wrote ${categories.length} cats and ${items.length} items to ${filePath}`);
     return userData;
 };
 
 /**
- * Task 6.1: 智能引导系统 (Onboarding)
+ * 智能引导系统 (Onboarding)
  * 动态加载初始化数据模板
  */
 const getOnboardingData = () => {
@@ -532,7 +532,7 @@ const getOnboardingData = () => {
         console.log('[Onboarding] Loading template from defaultData.js');
         return defaultData;
     }
-    
+
     console.warn('[Onboarding] CRITICAL: Using MINIMAL_SAFE_DATA fallback');
     return MINIMAL_SAFE_DATA;
 };
@@ -568,26 +568,26 @@ app.post('/api/auth/register', (req, res) => {
         let finalRole = 'user';
 
         db.transaction(() => {
-            // Task 16.3: 在事务内部计算 UID 和角色，确保并发下的原子性
+            // 在事务内部计算 UID 和角色，确保并发下的原子性
             const stats = db.prepare('SELECT COUNT(*) as count, MAX(uid) as maxUid FROM users').get();
             const isFirstUser = stats.count === 0;
             finalRole = isFirstUser ? 'admin' : 'user';
             const nextUid = isFirstUser ? 10001 : (stats.maxUid || 10000) + 1;
 
-            // Task 16.6: 策略预检（不涉及数据库写入）
+            // 策略预检（不涉及数据库写入）
             if (!isFirstUser) {
                 if (config.requireInvitation && !inviteCode) throw new Error('INVITE_REQUIRED');
                 if (!config.requireInvitation && !config.allowOpenRegistration) throw new Error('REGISTRATION_PAUSED');
             }
 
-            // Task 16.6: 先插入用户，确保满足 invitation_codes 的 used_by 外键约束，并记录是否使用了邀请码 (has_invite)
+            // 先插入用户，确保满足 invitation_codes 的 used_by 外键约束，并记录是否使用了邀请码 (has_invite)
             db.prepare('INSERT INTO users (id, uid, username, password_hash, role, has_invite) VALUES (?, ?, ?, ?, ?, ?)').run(uuid, nextUid, username, passwordHash, finalRole, inviteCode ? 1 : 0);
 
-            // Task 16.2 & 16.6: 事务内原子化校验与消耗邀请码
+            // 事务内原子化校验与消耗邀请码
             if (!isFirstUser && config.requireInvitation) {
                 console.log(`[Auth] Attempting to consume invite: ${inviteCode} for user: ${uuid}`);
                 const result = db.prepare(`UPDATE invitation_codes SET status = 'used', used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ? AND status = 'unused'`).run(uuid, inviteCode);
-                
+
                 if (result.changes === 0) {
                     throw new Error('INVITE_INVALID'); // 抛出异常将导致上方 INSERT 自动回滚
                 }
@@ -610,16 +610,16 @@ app.post('/api/auth/register', (req, res) => {
                 }
             }
         })();
-        
+
         syncUserToKV(uuid);
         res.json({ success: true, role: finalRole });
-    } catch (e) { 
+    } catch (e) {
         console.error('[Auth] Registration error detail:', e);
-        
+
         let errorMessage = '注册失败，请稍后重试';
         let statusCode = 400;
 
-        // Task 16.2: 处理事务内抛出的业务错误
+        // 处理事务内抛出的业务错误
         if (e.message === 'INVITE_REQUIRED') {
             errorMessage = '该站点已开启强制邀请模式，请提供邀请码';
             statusCode = 403;
@@ -643,21 +643,21 @@ app.post('/api/auth/register', (req, res) => {
             errorMessage = '邀请码处理异常';
         }
 
-        res.status(statusCode).json({ 
-            error: errorMessage, 
-            details: process.env.NODE_ENV === 'development' ? e.message : undefined 
-        }); 
+        res.status(statusCode).json({
+            error: errorMessage,
+            details: process.env.NODE_ENV === 'development' ? e.message : undefined
+        });
     }
 });
 
-// ====== Task 4.4: 审计日志管理 API ======
+// ====== 审计日志管理 API ======
 
 app.get('/api/admin/audit-logs', authenticate, adminOnly, (req, res) => {
-    // Task AC.4: 显式校验 Admin 权限
+    // 显式校验 Admin 权限
     if (req.user.role !== 'admin') {
         return res.status(403).json({ error: '权限不足，审计日志仅限系统管理员查看' });
     }
-    
+
     const page = parseInt(req.query.page || '1');
     const pageSize = parseInt(req.query.pageSize || '20');
     const keyword = req.query.keyword || '';
@@ -665,7 +665,7 @@ app.get('/api/admin/audit-logs', authenticate, adminOnly, (req, res) => {
 
     try {
         let query = `
-            SELECT al.*, u.username as operator_name 
+            SELECT al.*, u.username as operator_name
             FROM audit_logs al
             LEFT JOIN users u ON al.user_id = u.id
             WHERE 1=1
@@ -695,9 +695,9 @@ app.get('/api/admin/audit-logs', authenticate, adminOnly, (req, res) => {
 
         query += ' ORDER BY al.created_at DESC LIMIT ? OFFSET ?';
         const logs = db.prepare(query).bind(...params, pageSize, (page - 1) * pageSize).all();
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             logs,
             pagination: { total, page, pageSize }
         });
@@ -714,7 +714,7 @@ app.get('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
 
     try {
         let query = `
-            SELECT ic.*, u2.username as used_by_name 
+            SELECT ic.*, u2.username as used_by_name
             FROM invitation_codes ic
             LEFT JOIN users u2 ON ic.used_by = u2.id
             WHERE 1=1
@@ -744,9 +744,9 @@ app.get('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
 
         query += ' ORDER BY ic.created_at DESC LIMIT ? OFFSET ?';
         const list = db.prepare(query).bind(...params, pageSize, (page - 1) * pageSize).all();
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             invitations: list,
             pagination: { total, page, pageSize }
         });
@@ -758,7 +758,7 @@ app.get('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
 app.post('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
     const { count } = req.body;
     try {
-        // Task 21.5: 针对 super_user 实现总量配额校验
+        // 针对 super_user 实现总量配额校验
         if (req.user.role === 'super_user') {
             const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
             let quota = 10; // 默认值
@@ -774,9 +774,9 @@ app.post('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
             const requestCount = count || 1;
 
             if (currentCount + requestCount > quota) {
-                return res.status(403).json({ 
-                    error: '生成失败：超过邀请码分配额度', 
-                    details: `当前已生成 ${currentCount} 个，剩余额度 ${Math.max(0, quota - currentCount)} 个。请联系管理员调配。` 
+                return res.status(403).json({
+                    error: '生成失败：超过邀请码分配额度',
+                    details: `当前已生成 ${currentCount} 个，剩余额度 ${Math.max(0, quota - currentCount)} 个。请联系管理员调配。`
                 });
             }
         }
@@ -817,7 +817,7 @@ app.post('/api/auth/login', async (req, res) => {
     const ip = crypto.createHash('sha256').update(rawIp).digest('hex');
     console.log(`[Auth] Login attempt for user: ${username}`);
 
-    // 获取动态安全配置 (Task 12.3)
+    // 获取动态安全配置
     const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
     let securityConfig = { maxLoginAttempts: 5, loginLockoutMin: 10 };
     if (fs.existsSync(configPath)) {
@@ -907,7 +907,7 @@ app.post('/api/auth/login', async (req, res) => {
         return recordLoginFailure(ip, res, securityConfig);
     }
 
-    // Task 5.5.2: 检查账号状态 (冻结逻辑)
+    // 检查账号状态 (冻结逻辑)
     if (user.status === 'frozen') {
         console.warn(`[Auth] Account frozen: ${username}`);
         return res.status(403).json({ error: '账号已被冻结，请联系管理员', code: 'ACCOUNT_FROZEN' });
@@ -934,7 +934,7 @@ app.post('/api/auth/login', async (req, res) => {
         })
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
-        .setExpirationTime('7d') // Task 4.3: 设置 7 天过期
+        .setExpirationTime('7d') // 设置 7 天过期
         .sign(secret);
 
     res.json({
@@ -951,13 +951,13 @@ app.post('/api/auth/login', async (req, res) => {
     });
 });
 
-// 辅助函数：记录登录失败 (Task 12.3: 支持动态配置)
+// 辅助函数：记录登录失败 (支持动态配置)
 function recordLoginFailure(ip, res, config) {
     const attempt = loginAttempts.get(ip) || { count: 0, lockUntil: 0 };
     attempt.count++;
     const maxAttempts = config?.maxLoginAttempts || 5;
     const lockoutMs = (config?.loginLockoutMin || 10) * 60 * 1000;
-    
+
     if (attempt.count >= maxAttempts) {
         attempt.lockUntil = Date.now() + lockoutMs;
         console.log(`[Security] IP ${ip} locked for ${config?.loginLockoutMin || 10} mins due to failures`);
@@ -966,14 +966,14 @@ function recordLoginFailure(ip, res, config) {
     return res.status(401).json({ error: '用户名或密码错误' });
 }
 
-// ====== Task 4.1: 管理员管控枢纽 (Admin Hub) ======
+// ====== 管理员管控枢纽 (Admin Hub) ======
 
-// Task 12.4: 获取/更新全站安全配置 (GET 接口公开，方便游客和 SEO 加载)
+// 获取/更新全站安全配置 (GET 接口公开，方便游客和 SEO 加载)
 app.get('/api/admin/site-config', (req, res) => {
     const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
-    let config = { 
+    let config = {
         siteTitle: 'CloudNav 导航',
-        allowOpenRegistration: true, 
+        allowOpenRegistration: true,
         requireInvitation: false,
         security: {
             maxLoginAttempts: 5,
@@ -992,16 +992,16 @@ app.get('/api/admin/site-config', (req, res) => {
 app.post('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
     const newConfig = req.body;
     const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
-    
+
     try {
         let currentConfig = {};
         if (fs.existsSync(configPath)) {
             currentConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
         }
-        
+
         const finalConfig = { ...currentConfig, ...newConfig };
         fs.writeFileSync(configPath, JSON.stringify(finalConfig, null, 2));
-        
+
         console.log('[Admin] Site config updated by:', req.user.username);
         res.json({ success: true, config: finalConfig });
     } catch (e) {
@@ -1037,16 +1037,16 @@ app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
         const totalRow = db.prepare(countQuery).bind(...params).get();
         const total = totalRow ? totalRow.total : 0;
 
-        // 获取管理员总数 (Task AC.1 & DP.2)
+        // 获取管理员总数
         const adminCountRow = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get();
         const adminCount = adminCountRow ? adminCountRow.count : 0;
 
         // 排序与分页
         query += ' ORDER BY u.created_at DESC LIMIT ? OFFSET ?';
         const users = db.prepare(query).bind(...params, pageSize, (page - 1) * pageSize).all();
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             users,
             adminCount,
             pagination: {
@@ -1063,7 +1063,7 @@ app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
 app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
     const { userId, status, role, newPassword, adminPassword, isAlertReceiver, isDigestReceiver } = req.body;
     try {
-        // Task 3.1: 二次身份验证
+        // 二次身份验证
         if (adminPassword) {
             const adminUser = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
             const adminHash = crypto.createHash('sha256').update(adminPassword).digest('hex');
@@ -1074,15 +1074,15 @@ app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
 
         if (isAlertReceiver !== undefined) {
             db.prepare(`
-                INSERT INTO user_settings (user_id, is_alert_receiver) 
-                VALUES (?, ?) 
+                INSERT INTO user_settings (user_id, is_alert_receiver)
+                VALUES (?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET is_alert_receiver = excluded.is_alert_receiver
             `).run(userId, isAlertReceiver ? 1 : 0);
         }
         if (isDigestReceiver !== undefined) {
             db.prepare(`
-                INSERT INTO user_settings (user_id, is_digest_receiver) 
-                VALUES (?, ?) 
+                INSERT INTO user_settings (user_id, is_digest_receiver)
+                VALUES (?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET is_digest_receiver = excluded.is_digest_receiver
             `).run(userId, isDigestReceiver ? 1 : 0);
         }
@@ -1094,9 +1094,9 @@ app.patch('/api/admin/users', authenticate, adminOnly, (req, res) => {
             dispatchInstantAdminAlert('CHANGE_USER_STATUS', `Changed user ${userId} status to ${status}`, req.user.id, '[Protected]');
         }
 
-        // Task 2024.06.10: 重置用户密码 - 临时密码安全增强
+        // 重置用户密码 - 临时密码安全增强
         if (newPassword) {
-            // Task UM.8.2 & Task 3.1: 强制敏感操作进行二次身份验证
+            // 强制敏感操作进行二次身份验证
             if (!adminPassword) {
                 return res.status(400).json({ error: "重置密码属于敏感操作，请输入管理员密码验证" });
             }
@@ -1180,7 +1180,7 @@ app.delete('/api/admin/users', authenticate, adminOnly, (req, res) => {
     }
 });
 
-// ====== 4.4 定时审计日报 API (Task N.3) ======
+// ====== 4.4 定时审计日报 API  ======
 
 app.get('/api/admin/cron-digest', authenticate, async (req, res) => {
     // 1. 安全阻断校验：允许管理员会话直接调用，或者由 Cron Trigger 带密钥 x-cron-secret / ?secret= 触发
@@ -1195,10 +1195,10 @@ app.get('/api/admin/cron-digest', authenticate, async (req, res) => {
     try {
         // 查询 24 小时内增量审计日志 (使用 local SQLite)
         const logs = db.prepare(`
-            SELECT l.id, u.username, l.action, l.details, l.ip, l.created_at 
-            FROM audit_logs l 
-            LEFT JOIN users u ON l.user_id = u.id 
-            WHERE l.created_at >= datetime('now', '-1 day') 
+            SELECT l.id, u.username, l.action, l.details, l.ip, l.created_at
+            FROM audit_logs l
+            LEFT JOIN users u ON l.user_id = u.id
+            WHERE l.created_at >= datetime('now', '-1 day')
             ORDER BY l.created_at DESC
         `).all();
 
@@ -1240,9 +1240,9 @@ app.get('/api/admin/cron-digest', authenticate, async (req, res) => {
 
         // 查询授权接收日报的用户
         const receivers = db.prepare(`
-            SELECT u.username, u.email, u.telegram_chat_id 
-            FROM users u 
-            JOIN user_settings s ON u.id = s.user_id 
+            SELECT u.username, u.email, u.telegram_chat_id
+            FROM users u
+            JOIN user_settings s ON u.id = s.user_id
             WHERE s.is_digest_receiver = 1
         `).all();
 
@@ -1340,16 +1340,16 @@ app.get('/api/admin/cron-digest', authenticate, async (req, res) => {
             reports = await Promise.all(dispatchPromises);
         }
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: `每日审计日报打包成功！已派发至 ${receivers.length} 个授权接收者。`,
             dispatchReports: reports,
-            debug_receivers: receivers.map(r => ({ 
-                username: r.username, 
-                has_email: !!r.email, 
+            debug_receivers: receivers.map(r => ({
+                username: r.username,
+                has_email: !!r.email,
                 email_val: r.email,
-                has_tg_chat_id: !!r.telegram_chat_id, 
-                tg_chat_id_val: r.telegram_chat_id 
+                has_tg_chat_id: !!r.telegram_chat_id,
+                tg_chat_id_val: r.telegram_chat_id
             }))
         });
     } catch (e) {
@@ -1383,35 +1383,35 @@ app.post('/api/admin/site-config', authenticate, adminOnly, (req, res) => {
         const kvDir = path.join(__dirname, 'local_kv');
         if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
         fs.writeFileSync(path.join(kvDir, 'site_config.json'), JSON.stringify(config, null, 2));
-        
+
         db.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
           .run(req.user.id, 'UPDATE_SITE_CONFIG', JSON.stringify(config), '[Protected]');
         dispatchInstantAdminAlert('UPDATE_SITE_CONFIG', JSON.stringify(config), req.user.id, '[Protected]');
-          
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: '保存站点配置失败', details: e.message });
     }
 });
 
-// ====== Task 4.2: 公告系统 (Broadcast) ======
+// ====== 公告系统 (Broadcast) ======
 
 app.get('/api/announcements', authenticate, (req, res) => {
     try {
         const userId = req.user.id || 'guest';
-        
-        // 增强版 SQL：通过 LEFT JOIN 检查用户的已读记录 (Task 6.23)
+
+        // 增强版 SQL：通过 LEFT JOIN 检查用户的已读记录
         const list = db.prepare(`
             SELECT a.id, a.title, a.content, a.type, a.is_top, a.created_at,
                    CASE WHEN r.user_id IS NOT NULL THEN 1 ELSE 0 END as is_read
             FROM announcements a
             LEFT JOIN announcement_read_states r ON a.id = r.announcement_id AND r.user_id = ?
-            WHERE a.status = 'published' 
-            AND (a.expire_at IS NULL OR datetime(replace(a.expire_at, 'T', ' ')) > datetime('now')) 
-            ORDER BY a.is_top DESC, a.created_at DESC 
+            WHERE a.status = 'published'
+            AND (a.expire_at IS NULL OR datetime(replace(a.expire_at, 'T', ' ')) > datetime('now'))
+            ORDER BY a.is_top DESC, a.created_at DESC
             LIMIT 10
         `).all(userId);
-        
+
         const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
         let lastUpdate = '0';
         if (fs.existsSync(configPath)) {
@@ -1419,8 +1419,8 @@ app.get('/api/announcements', authenticate, (req, res) => {
             lastUpdate = config.announcements_last_update || '0';
         }
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             announcements: list,
             lastUpdate: lastUpdate
         });
@@ -1430,7 +1430,7 @@ app.get('/api/announcements', authenticate, (req, res) => {
     }
 });
 
-// Task 6.23: 标记公告已读接口
+// 标记公告已读接口
 app.post('/api/announcements/read', authenticate, (req, res) => {
     const { ids } = req.body; // 兼容单条 [id] 或多条 [id1, id2]
     const userId = req.user.id;
@@ -1463,8 +1463,8 @@ app.post('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
         // 显式指定 status = 'published' 以对齐 D1 结构
         db.prepare('INSERT INTO announcements (creator_id, title, content, type, is_top, expire_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
           .run(req.user.id, title, content, type, is_top ? 1 : 0, expire_at || null, 'published');
-        
-        // Task 6.20: 增强本地 KV 模拟的健壮性
+
+        // 增强本地 KV 模拟的健壮性
         const kvDir = path.join(__dirname, 'local_kv');
         if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
 
@@ -1477,7 +1477,7 @@ app.post('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
         } catch (e) {
             console.warn('[KV] site_config.json 格式损坏，正在重置');
         }
-        
+
         config.announcements_last_update = Date.now().toString();
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
@@ -1510,7 +1510,7 @@ app.patch('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
             return res.status(404).json({ error: "更新失败：未找到对应 ID 的公告", code: "NOT_FOUND" });
         }
 
-        // Task 6.20: 更新本地 KV 中的公告版本号
+        // 更新本地 KV 中的公告版本号
         const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
         if (fs.existsSync(configPath)) {
             const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -1532,7 +1532,7 @@ app.delete('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
     try {
         db.prepare('DELETE FROM announcements WHERE id = ?').run(id);
 
-        // Task 6.20: 更新本地 KV 中的公告版本号
+        // 更新本地 KV 中的公告版本号
         const configPath = path.join(__dirname, 'local_kv', 'site_config.json');
         if (fs.existsSync(configPath)) {
             const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -1549,7 +1549,7 @@ app.delete('/api/admin/announcements', authenticate, adminOnly, (req, res) => {
     }
 });
 
-// ====== 4.4 个人资料 API (Task N.1) ======
+// ====== 4.4 个人资料 API  ======
 
 app.get('/api/user/profile', authenticate, (req, res) => {
     if (req.user.id === 'guest') {
@@ -1558,7 +1558,7 @@ app.get('/api/user/profile', authenticate, (req, res) => {
     try {
         const user = db.prepare('SELECT id, uid, username, email, telegram_chat_id, role FROM users WHERE id = ?').get(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
-        
+
         let settings = db.prepare('SELECT is_shared, share_slug FROM user_settings WHERE user_id = ?').get(req.user.id);
         if (!settings) {
             settings = { is_shared: 0, share_slug: '' };
@@ -1709,15 +1709,15 @@ app.get('/api/share', (req, res) => {
     try {
         const settings = db.prepare('SELECT user_id, is_shared, share_slug FROM user_settings WHERE share_slug = ? AND is_shared = 1').get(slug);
         if (!settings) return res.status(404).json({ error: 'NOT_FOUND', message: '该分享主页未开启或不存在' });
-        
+
         const userId = settings.user_id;
         const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
         if (!fs.existsSync(kvPath)) {
             return res.status(404).json({ error: 'EMPTY_DATA', message: '该用户尚未同步任何导航数据' });
         }
-        
+
         const dataObj = JSON.parse(fs.readFileSync(kvPath, 'utf-8'));
-        
+
         // 严格的安全过滤脱敏，防止隐藏内容与个人隐私泄漏
         dataObj.categories = (dataObj.categories || []).filter(c => !c.hidden);
         dataObj.items = (dataObj.items || []).filter(i => !i.hidden);
@@ -1744,12 +1744,12 @@ app.get('/api/config', authenticate, (req, res) => {
     const userId = req.user.id;
     const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
     let data;
-    
+
     if (userId === 'guest') {
         data = JSON.parse(JSON.stringify(defaultData));
     } else if (fs.existsSync(kvPath)) {
         data = JSON.parse(fs.readFileSync(kvPath, 'utf-8'));
-        // 实时数据归一化：确保字段名始终符合前端预期 (Task 2.1 容错)
+        // 实时数据归一化：确保字段名始终符合前端预期 容错)
         if (data.items) {
             data.items = data.items.map(i => ({
                 ...i,
@@ -1771,10 +1771,10 @@ app.get('/api/config', authenticate, (req, res) => {
         data.categories = data.categories.filter(c => !c.hidden);
         data.items = data.items.filter(i => !i.hidden);
     }
-    
+
     const quota = getQuota(req.user);
-    res.json({ 
-        ...data, 
+    res.json({
+        ...data,
         isAdmin: req.user.role === 'admin' || req.user.role === 'super_user',
         user: userId,
         uid: req.user.uid,
@@ -1790,11 +1790,11 @@ app.post('/api/config', authenticate, (req, res) => {
     const userId = req.user.id;
     const quota = getQuota(req.user);
 
-    // Task 4.3: 资源配额硬核校验
+    // 资源配额硬核校验
     if (categories && categories.length > quota.maxCategories) {
         return res.status(403).json({ error: `分类数量已达到上限 (${quota.maxCategories})`, code: 'ERR_QUOTA_EXCEEDED' });
     }
-    
+
     // 统计每个分类下的书签数量
     if (items) {
         const catCounts = {};
@@ -1820,23 +1820,23 @@ app.post('/api/config', authenticate, (req, res) => {
         if (settings) {
             const linkTarget = settings.link_target || '_blank';
             db.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = ?, bg_url = ?, hide_bg_mask = ?, isolated_view = ?, density = ?, simple_mode = ?, link_target = ?, theme_mode = ?, sync_interval = ? WHERE user_id = ?').run(
-                settings.cardWidth, 
-                settings.zenMode ? 1 : 0, 
-                settings.showFrequent ? 1 : 0, 
-                settings.bgUrl, 
-                settings.hideBgMask ? 1 : 0, 
+                settings.cardWidth,
+                settings.zenMode ? 1 : 0,
+                settings.showFrequent ? 1 : 0,
+                settings.bgUrl,
+                settings.hideBgMask ? 1 : 0,
                 settings.isolatedView ? 1 : 0,
                 settings.density || 'standard',
-                settings.simpleMode ? 1 : 0, 
+                settings.simpleMode ? 1 : 0,
                 linkTarget,
-                settings.themeMode, 
+                settings.themeMode,
                 settings.syncInterval !== undefined ? settings.syncInterval : 7,
                 userId
             );
         }
     })();
-    
-    // 关键加固：在同步到 KV 时保留点击历史 (Task 2.5.4)
+
+    // 关键加固：在同步到 KV 时保留点击历史
     const currentData = syncUserToKV(userId);
     currentData.lastUpdated = formatCNTime(new Date());
     if (clicks_history) {
@@ -1844,7 +1844,7 @@ app.post('/api/config', authenticate, (req, res) => {
     }
     const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
     fs.writeFileSync(kvPath, JSON.stringify(currentData, null, 2));
-    
+
     res.json({ success: true });
 });
 
@@ -1860,19 +1860,19 @@ app.delete('/api/config', authenticate, (req, res) => {
             // 1. 清理该用户的所有旧数据
             db.prepare('DELETE FROM categories WHERE user_id = ?').run(userId);
             db.prepare('DELETE FROM items WHERE user_id = ?').run(userId);
-            
+
             // 2. 重置用户设置到模板状态
             const s = onboardingData.settings || {};
             const linkTarget = s.link_target || '_blank';
             db.prepare('UPDATE user_settings SET card_width = ?, zen_mode = ?, show_frequent = 1, bg_url = NULL, hide_bg_mask = ?, simple_mode = 0, link_target = ?, theme_mode = \'auto\', sync_interval = 7 WHERE user_id = ?').run(
                 s.cardWidth || 125, s.zenMode ? 1 : 0, s.hideBgMask ? 1 : 0, linkTarget, userId
             );
-            
+
             // 3. 重新注入最新的模板
             for (const cat of onboardingData.categories) {
                 const newCatId = crypto.randomUUID();
                 db.prepare('INSERT INTO categories (id, user_id, name, icon, hidden) VALUES (?, ?, ?, ?, ?)').run(newCatId, userId, cat.name, cat.icon, cat.hidden ? 1 : 0);
-                
+
                 const catItems = onboardingData.items.filter(i => (i.catId || i.cat_id) === cat.id);
                 for (const item of catItems) {
                     const newItemId = crypto.randomUUID();
@@ -1881,7 +1881,7 @@ app.delete('/api/config', authenticate, (req, res) => {
             }
         })();
 
-        // 3. 强制物理删除旧缓存文件，确保下一次 GET 请求触发新鲜同步 (Task 2.1 强一致性)
+        // 3. 强制物理删除旧缓存文件，确保下一次 GET 请求触发新鲜同步 强一致性)
         const kvPath = path.join(__dirname, 'local_kv', `user_${userId}.json`);
         if (fs.existsSync(kvPath)) {
             fs.unlinkSync(kvPath);
@@ -1889,7 +1889,7 @@ app.delete('/api/config', authenticate, (req, res) => {
 
         // 4. 立即执行一次同步
         syncUserToKV(userId);
-        
+
         console.log(`[Config] Reset success and cache cleared for user: ${userId}`);
         res.json({ success: true, message: "已恢复默认配置" });
     } catch (e) {

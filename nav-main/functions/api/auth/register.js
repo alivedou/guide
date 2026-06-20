@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -20,7 +20,7 @@ async function sha256(text) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-  
+
   if (!env.DB) {
     return new Response(JSON.stringify({ error: "D1_MISSING", message: "未检测到 D1 数据库绑定" }), { status: 500 });
   }
@@ -60,7 +60,7 @@ export async function onRequestPost(context) {
     if (!isFirstUser) {
       if (config.requireInvitation) {
         if (!inviteCode) return new Response(JSON.stringify({ error: "请提供邀请码" }), { status: 403 });
-        
+
         const invite = await env.DB.prepare('SELECT status FROM invitation_codes WHERE code = ? AND status = "unused"').bind(inviteCode).first();
         if (!invite) return new Response(JSON.stringify({ error: "无效或已被使用的邀请码" }), { status: 403 });
       } else if (!config.allowOpenRegistration) {
@@ -75,7 +75,7 @@ export async function onRequestPost(context) {
     ];
 
     if (!isFirstUser && inviteCode) {
-      // Task 16.5: 修正 SQL 语法，使用单引号表示字符串常量
+      // 修正 SQL 语法，使用单引号表示字符串常量
       queries.push(env.DB.prepare("UPDATE invitation_codes SET status = 'used', used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ?").bind(uuid, inviteCode));
     }
 
@@ -99,7 +99,7 @@ export async function onRequestPost(context) {
       const newCatId = crypto.randomUUID();
       initQueries.push(env.DB.prepare('INSERT INTO categories (id, user_id, name, icon, hidden) VALUES (?, ?, ?, ?, ?)')
         .bind(newCatId, uuid, cat.name, cat.icon, cat.hidden ? 1 : 0));
-      
+
       const catItems = items.filter(i => (i.catId || i.cat_id) === cat.id);
       for (const item of catItems) {
         const newItemId = crypto.randomUUID();
@@ -136,23 +136,23 @@ export async function onRequestPost(context) {
 
     // 5. 初始化 KV 缓存 (压缩存储)
     if (env.nav) {
-      const initialKV = { 
+      const initialKV = {
         categories: categories.map(c => ({ ...c, id: c.id })), // 保持结构一致
         items: items.map(i => ({ ...i, catId: i.catId || i.cat_id })),
-        settings: { 
-          cardWidth: settings.cardWidth || 125, 
-          zenMode: !!settings.zenMode, 
+        settings: {
+          cardWidth: settings.cardWidth || 125,
+          zenMode: !!settings.zenMode,
           link_target: settings.link_target || '_blank',
           syncInterval: settings.syncInterval !== undefined ? settings.syncInterval : 7
         },
-        user: uuid, 
-        isAdmin: (role === 'admin' || role === 'super_user') 
+        user: uuid,
+        isAdmin: (role === 'admin' || role === 'super_user')
       };
       await env.nav.put(`user_config:${uuid}`, JSON.stringify(initialKV));
     }
 
-    return new Response(JSON.stringify({ 
-      success: true, 
+    return new Response(JSON.stringify({
+      success: true,
       message: role === 'admin' ? "首位超级管理员注册成功" : "注册成功",
       role: role
     }), {

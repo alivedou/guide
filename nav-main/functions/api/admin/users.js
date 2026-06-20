@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -16,13 +16,13 @@ async function sha256(text) {
 export async function onRequestGet(context) {
   const { env, data, request } = context;
   const user = data.user;
-  
+
   const { searchParams } = new URL(request.url);
   const page = parseInt(searchParams.get('page') || '1');
   const pageSize = parseInt(searchParams.get('pageSize') || '20');
   const keyword = searchParams.get('keyword') || '';
   const status = searchParams.get('status') || '';
-  
+
   // 权限已经在 _middleware.js 校验过，这里只需处理业务逻辑
   try {
     let query = 'SELECT u.id, u.uid, u.username, u.role, u.status, u.last_login, u.created_at, u.email, u.telegram_chat_id, s.is_alert_receiver, s.is_digest_receiver FROM users u LEFT JOIN user_settings s ON u.id = s.user_id WHERE 1=1';
@@ -46,18 +46,18 @@ export async function onRequestGet(context) {
     const totalRow = await env.DB.prepare(countQuery).bind(...params).first();
     const total = totalRow ? totalRow.total : 0;
 
-    // 获取当前管理员总数 (Task AC.3)
+    // 获取当前管理员总数
     const adminCountRow = await env.DB.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").first();
     const adminCount = adminCountRow ? adminCountRow.count : 0;
 
     // 分页查询
     query += ' ORDER BY u.created_at DESC LIMIT ? OFFSET ?';
     const finalParams = [...params, pageSize, (page - 1) * pageSize];
-    
+
     const users = await env.DB.prepare(query).bind(...finalParams).all();
-    
-    return new Response(JSON.stringify({ 
-      success: true, 
+
+    return new Response(JSON.stringify({
+      success: true,
       users: users.results,
       adminCount,
       pagination: {
@@ -76,12 +76,12 @@ export async function onRequestGet(context) {
 export async function onRequestPatch(context) {
   const { request, env, data } = context;
   const admin = data.user;
-  
+
   try {
     const { userId, status, role, newPassword, adminPassword, isAlertReceiver, isDigestReceiver } = await request.json();
     if (!userId) throw new Error("Missing userId");
 
-    // Task UM.8.2 & Task 3.1: 强制敏感操作进行二次身份验证
+    // 强制敏感操作进行二次身份验证
     if (!adminPassword) {
       return new Response(JSON.stringify({ error: "此操作属于敏感操作，请输入管理员密码验证" }), { status: 400 });
     }
@@ -95,15 +95,15 @@ export async function onRequestPatch(context) {
     // 4. 更新通知授权设置 (采用 SQLite UPSERT 强力防静默越权与无记录静默更新失败问题)
     if (isAlertReceiver !== undefined) {
       await env.DB.prepare(`
-        INSERT INTO user_settings (user_id, is_alert_receiver) 
-        VALUES (?, ?) 
+        INSERT INTO user_settings (user_id, is_alert_receiver)
+        VALUES (?, ?)
         ON CONFLICT(user_id) DO UPDATE SET is_alert_receiver = excluded.is_alert_receiver
       `).bind(userId, isAlertReceiver ? 1 : 0).run();
     }
     if (isDigestReceiver !== undefined) {
       await env.DB.prepare(`
-        INSERT INTO user_settings (user_id, is_digest_receiver) 
-        VALUES (?, ?) 
+        INSERT INTO user_settings (user_id, is_digest_receiver)
+        VALUES (?, ?)
         ON CONFLICT(user_id) DO UPDATE SET is_digest_receiver = excluded.is_digest_receiver
       `).bind(userId, isDigestReceiver ? 1 : 0).run();
     }
@@ -116,7 +116,7 @@ export async function onRequestPatch(context) {
         .run();
     }
 
-    // 2. 重置用户密码 - 临时密码安全增强 (Task 2024.06.10)
+    // 2. 重置用户密码 - 临时密码安全增强
     if (newPassword) {
       const newHash = await sha256(newPassword);
 
@@ -131,7 +131,7 @@ export async function onRequestPatch(context) {
         .run();
     }
 
-    // 3. 更新用户角色 (Task UM.8.1 & Task AC.1)
+    // 3. 更新用户角色 )
     if (role) {
       // Root 身份识别 (约定 ID=1 为 Root)
       const isRoot = (admin.id === '1' || admin.uid === 10001);
@@ -140,12 +140,12 @@ export async function onRequestPatch(context) {
         if (!isRoot) {
           return new Response(JSON.stringify({ error: "权限不足：只有首席管理员可以提拔新的 Admin" }), { status: 403 });
         }
-        
-        // 校验管理员上限 (Task AC.1)
+
+        // 校验管理员上限
         const MAX_ADMIN_COUNT = 5;
         const currentAdmins = await env.DB.prepare('SELECT COUNT(*) as count FROM users WHERE role = ?').bind('admin').first();
         const targetUser = await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(userId).first();
-        
+
         if (currentAdmins.count >= MAX_ADMIN_COUNT && targetUser.role !== 'admin') {
           return new Response(JSON.stringify({ error: `系统安全策略：管理员名额已满 (上限 ${MAX_ADMIN_COUNT} 人)，请先撤销已有管理员` }), { status: 403 });
         }
@@ -159,7 +159,7 @@ export async function onRequestPatch(context) {
       } else {
          return new Response(JSON.stringify({ error: "权限不足" }), { status: 403 });
       }
-      
+
       // 防止降级自己 (如果是 admin)
       if (userId === admin.id && admin.role === 'admin' && role !== 'admin') {
          return new Response(JSON.stringify({ error: "管理员不能降级自己" }), { status: 403 });
@@ -171,7 +171,7 @@ export async function onRequestPatch(context) {
         .run();
     }
 
-    // 高危操作即时告警判定 (Task N.5)
+    // 高危操作即时告警判定
     const configStr = await env.nav.get("system:site_config");
     const config = configStr ? JSON.parse(configStr) : {};
     if (config.enableAdminInstantAlert) {
@@ -200,7 +200,7 @@ export async function onRequestDelete(context) {
     const { userId, adminPassword } = await request.json();
     if (!userId) throw new Error("Missing userId");
 
-    // Task UM.8.2: 强制删除操作进行二次验证
+    // 强制删除操作进行二次验证
     if (!adminPassword) {
       return new Response(JSON.stringify({ error: "删除操作非常危险，请输入管理员密码验证" }), { status: 400 });
     }
@@ -214,7 +214,7 @@ export async function onRequestDelete(context) {
     // 执行 D1 全关联地毯式提前清理，阻断任何外键冲突 (FOREIGN KEY constraint failed) 并彻底销账
     // 1. 彻底删除该用户占用的邀请码，防止随着账号删除而“复活”导致重复注册
     await env.DB.prepare('DELETE FROM invitation_codes WHERE used_by = ?').bind(userId).run();
-    
+
     // 2. 删除该管理员生成的邀请码
     await env.DB.prepare('DELETE FROM invitation_codes WHERE creator_id = ?').bind(userId).run();
 
@@ -230,13 +230,13 @@ export async function onRequestDelete(context) {
 
     // 5. 最终一击：安全删除 users 核心行
     await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
-    
+
     // 记录审计日志
     await env.DB.prepare('INSERT INTO audit_logs (user_id, action, details, ip) VALUES (?, ?, ?, ?)')
       .bind(admin.id, 'DELETE_USER', `Deleted user account ${userId}`, '[Protected]')
       .run();
 
-    // 高危操作即时告警判定 (Task N.5)
+    // 高危操作即时告警判定
     const configStr = await env.nav.get("system:site_config");
     const config = configStr ? JSON.parse(configStr) : {};
     if (config.enableAdminInstantAlert) {
@@ -262,9 +262,9 @@ async function dispatchInstantAdminAlert(action, details, admin, ip, env) {
   if (env.TELEGRAM_BOT_TOKEN) {
     try {
       const receivers = await env.DB.prepare(`
-        SELECT u.telegram_chat_id 
-        FROM users u 
-        JOIN user_settings s ON u.id = s.user_id 
+        SELECT u.telegram_chat_id
+        FROM users u
+        JOIN user_settings s ON u.id = s.user_id
         WHERE s.is_alert_receiver = 1 AND u.telegram_chat_id IS NOT NULL
       `).all();
 
@@ -305,9 +305,9 @@ async function dispatchInstantAdminAlert(action, details, admin, ip, env) {
   if (env.RESEND_API_KEY) {
     try {
       const receivers = await env.DB.prepare(`
-        SELECT u.email 
-        FROM users u 
-        JOIN user_settings s ON u.id = s.user_id 
+        SELECT u.email
+        FROM users u
+        JOIN user_settings s ON u.id = s.user_id
         WHERE s.is_alert_receiver = 1 AND u.email IS NOT NULL
       `).all();
 

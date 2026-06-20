@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -10,14 +10,14 @@
  * ==========================================
  * defaultData.js - 默认初始化数据
  * 包含分类和网站条目的默认配置
- * 
+ *
  * ==========================================
  */
 
 export const defaultData = {
   // 全局设置
-  settings: { 
-    zenMode: false, 
+  settings: {
+    zenMode: false,
     link_target: '_blank',
     hideBgMask: true,
     isolatedView: false,
@@ -68,7 +68,7 @@ export const defaultData = {
 };
 
 /**
- * Task 6.1.1: 工业级底层兜底配置 (Hard-bottom Fallback)
+ * 工业级底层兜底配置 (Hard-bottom Fallback)
  * 当外部模板和内置 defaultData 都损坏时的最终防线
  */
 export const MINIMAL_SAFE_DATA = {

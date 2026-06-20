@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -17,8 +17,8 @@ export async function onRequestGet() {
   try {
     const res = await fetch("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1");
     const data = await res.json();
-    
-    // Task 18.1: 标准化 URL 为绝对路径，防止前端加载失败
+
+    // 标准化 URL 为绝对路径，防止前端加载失败
     if (data.images && data.images.length > 0) {
       data.images = data.images.map(img => ({
         ...img,
@@ -34,7 +34,7 @@ export async function onRequestGet() {
       }
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), { 
+    return new Response(JSON.stringify({ error: e.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" }
     });

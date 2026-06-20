@@ -6,21 +6,21 @@
 
 // ==================== 1. 页面管理模式切换 ====================
 const togglePageManagement = (force) => {
-    // Task 17.3: 允许所有角色进入页面管理模式，移除 isAdmin 硬拦截
-    
-    // Task 10.6.2: 交互锁定逻辑 - 如果当前已是管理模式且尝试通过侧边栏点击（force 未定义），则不执行切换（关闭）
+    // 允许所有角色进入页面管理模式，移除 isAdmin 硬拦截
+
+    // 交互锁定逻辑 - 如果当前已是管理模式且尝试通过侧边栏点击（force 未定义），则不执行切换（关闭）
     // 强制引导用户通过“保存并退出”按钮或 Esc 退出
     if (window.isPageManagementMode && typeof force === 'undefined') {
         return showToast("请点击顶部或下方的“保存并退出”按钮完成管理", "#3498db");
     }
 
-    // Task 9.6: 进入管理模式前清理所有弹窗
+    // 进入管理模式前清理所有弹窗
     closeAllModals();
 
     window.isPageManagementMode = typeof force === 'boolean' ? force : !window.isPageManagementMode;
     document.body.classList.toggle('page-manage-active', window.isPageManagementMode);
-    
-    // Task 11.4: 必须先进行视图渲染，确保 DOM 节点存在
+
+    // 必须先进行视图渲染，确保 DOM 节点存在
     updateStyles(); // 🚀 确保在页面管理切换时，即时解禁/隐退禅意模式并应用标准布局！
     renderTools();
     renderNav();
@@ -32,14 +32,14 @@ const togglePageManagement = (force) => {
         initSortable();
     } else {
         destroySortable();
-        // Task 22.3: 统一接入自动保存与引导逻辑 (Task EXIT.4)
+        // 统一接入自动保存与引导逻辑
         if (typeof window.handleDataSaveOnExit === 'function') {
             window.handleDataSaveOnExit();
         }
-        
+
         window.selectedIds.clear();
         updateBatchBar();
-        // Task 4.8.2: 深度状态重置 (关闭可能打开的专家模式编辑器)
+        // 深度状态重置 (关闭可能打开的专家模式编辑器)
         const monacoModal = document.getElementById('monaco-modal');
         if (monacoModal) monacoModal.style.display = 'none';
     }
@@ -47,12 +47,12 @@ const togglePageManagement = (force) => {
 
 // ==================== 2. 分类可视化设置与编辑 ====================
 const openCategoryEditModal = (catId) => {
-    window.lastFocusedElement = document.activeElement; // Task 37.2
-    // Task 9.6 & O++.1: 切换弹窗启用静默模式
+    window.lastFocusedElement = document.activeElement; 
+    // 切换弹窗启用静默模式
     closeAllModals(true);
 
     const isEdit = !!catId;
-    const cat = isEdit 
+    const cat = isEdit
         ? window.appData.categories.find(c => c.id === catId)
         : { name: '', icon: '📂' };
 
@@ -62,7 +62,7 @@ const openCategoryEditModal = (catId) => {
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
     const confirmBtn = document.getElementById('btn-confirm-edit');
-    
+
     if (!modal || !body) return;
 
     title.innerText = isEdit ? "编辑分类" : "添加新分类";
@@ -94,7 +94,7 @@ const openCategoryEditModal = (catId) => {
                     <button type="button" class="icon-btn-action" id="btn-emoji-recommend" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">搜索</button>
                     <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组 Emoji" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:var(--glass-bg); border:1px solid var(--glass-border); color:var(--text);"><i class="ri-refresh-line"></i></button>
                 </div>
-                
+
                 <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
                     <div style="font-size:11px; color:#aaa; display:flex; align-items:center; gap:4px;"><i class="ri-magic-line"></i> 智能 Emoji 推荐:</div>
                     <div id="emoji-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:60px; overflow-y:auto; padding:2px 0;">
@@ -109,7 +109,7 @@ const openCategoryEditModal = (catId) => {
             </div>
         </div>
     `;
-    
+
     modal.style.display = 'flex';
     confirmBtn.style.display = 'block';
 
@@ -140,7 +140,7 @@ const openCategoryEditModal = (catId) => {
         }
     });
 
-    // Task 37.2: 自动聚焦
+    // 自动聚焦
     setTimeout(() => {
         document.getElementById('edit-cat-name')?.focus();
     }, 50);
@@ -148,9 +148,9 @@ const openCategoryEditModal = (catId) => {
     confirmBtn.onclick = async () => {
         const newName = document.getElementById('edit-cat-name').value.trim();
         const newIcon = document.getElementById('edit-icon').value.trim();
-        
+
         if (!newName) return showToast("名称不能为空", "#e67e22");
-        
+
         if (isEdit) {
             cat.name = newName;
             cat.icon = newIcon || '📂';
@@ -175,7 +175,7 @@ const openCategoryEditModal = (catId) => {
         }
         window.isDataDirty = true;
         localStorage.setItem('nav_app_data', JSON.stringify(window.appData));
-        
+
         modal.style.display = 'none';
         renderNav();
     };
@@ -222,8 +222,8 @@ const toggleCategoryVideoMode = (catId) => {
 
 // ==================== 3. 书签卡片设置与编辑 ====================
 const openEditModal = (id) => {
-    window.lastFocusedElement = document.activeElement; // Task 37.2
-    // Task 9.6 & O++.1: 切换弹窗启用静默模式
+    window.lastFocusedElement = document.activeElement; 
+    // 切换弹窗启用静默模式
     closeAllModals(true);
 
     const item = window.appData.items.find(i => i.id === id) || { id: '', title: '', url: '', icon: '', desc: '', cat_id: window.activeCatId };
@@ -305,7 +305,7 @@ const openEditModal = (id) => {
                     <button type="button" class="icon-btn-action" id="btn-emoji-recommend" style="border: 1px solid var(--primary); color: white; background: var(--primary); width:60px; height:36px; border-radius:8px; font-size:13px; cursor:pointer;">搜索</button>
                     <button type="button" class="icon-btn-action" id="btn-emoji-refresh" title="换一组 Emoji" style="padding:0 12px; height:36px; border-radius:8px; cursor:pointer; background:var(--glass-bg); border:1px solid var(--glass-border); color:var(--text);"><i class="ri-refresh-line"></i></button>
                 </div>
-                
+
                 <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
                     <div style="font-size:11px; color:#aaa; display:flex; align-items:center; gap:4px;"><i class="ri-magic-line"></i> 智能 Emoji 推荐:</div>
                     <div id="emoji-results" style="display:flex; flex-wrap:wrap; gap:6px; max-height:60px; overflow-y:auto; padding:2px 0;">
@@ -349,7 +349,7 @@ const openEditModal = (id) => {
             window.debouncedHandleUrlInput(e.target.value.trim());
         }
     });
-    
+
     // 绑定多源单选框的选择与联动
     ['0', '1', '2', '3'].forEach(num => {
         const opt = document.getElementById('opt-fav' + num);
@@ -410,7 +410,7 @@ const openEditModal = (id) => {
         confirmBtn.onclick = saveItem;
     }
 
-    // Task 37.2: 自动聚焦
+    // 自动聚焦
     setTimeout(() => {
         document.getElementById('edit-url')?.focus();
     }, 50);
@@ -448,13 +448,13 @@ const triggerMagicWand = async () => {
                 const { title, desc, icon } = result.data;
                 const titleInput = document.getElementById('edit-title-input');
                 const descInput = document.getElementById('edit-desc');
-                
+
                 // 自动填入抓取出来的网站标题
                 if (titleInput && title) {
                     titleInput.value = title;
                     titleInput.dispatchEvent(new Event('input'));
                 }
-                
+
                 // 自动填充描述内容
                 if (descInput && desc) {
                     descInput.value = desc;
@@ -486,7 +486,7 @@ const saveItem = async () => {
     const modal = document.getElementById('edit-modal');
     const id = modal.getAttribute('data-editing-id');
     const catId = document.getElementById('edit-cat').value;
-    
+
     const payload = {
         id: id || 'item_' + Date.now(),
         url: document.getElementById('edit-url').value.trim(),
@@ -500,7 +500,7 @@ const saveItem = async () => {
 
     if (!payload.url || !payload.title) return showToast("网址和标题不能为空", "#e67e22");
 
-    // Task 4.3: 前端配额阻断
+    // 前端配额阻断
     const targetCatItems = window.appData.items.filter(i => (i.catId === payload.catId || i.cat_id === payload.catId) && i.id !== id);
     if (targetCatItems.length >= 100) {
         return showToast("目标分类已满 (上限 100 个书签)", "#e74c3c");
@@ -516,7 +516,7 @@ const saveItem = async () => {
 
     window.isDataDirty = true;
     modal.style.display = 'none';
-    
+
     if (window.sysToken) {
         const autoSync = (window.appData.settings?.syncInterval || 0) > 0;
         if (autoSync) {
@@ -534,11 +534,11 @@ const saveItem = async () => {
     }
     renderNav();
 
-    // 登录态即时静默后台同步 (Task BF.3)
+    // 登录态即时静默后台同步
     if (window.sysToken) {
         // 先写入本地 localStorage 以防断电或离线刷新
         localStorage.setItem('nav_app_data', JSON.stringify(window.appData));
-        
+
         // 🚀 修改：在页面管理模式下，单次保存不要立刻进行云端同步，退出的时再统一一并同步，避免网络不佳时频繁阻塞。
         if (!window.isPageManagementMode) {
             const autoSync = (window.appData.settings?.syncInterval || 0) > 0;
@@ -588,7 +588,7 @@ const updateBatchBar = () => {
     const bar = document.getElementById('batch-actions-bar');
     const countEl = document.getElementById('batch-count');
     if (!bar) return;
-    
+
     if (window.isPageManagementMode && window.selectedIds.size > 0) {
         bar.classList.add('visible');
         if (countEl) {
@@ -601,17 +601,17 @@ const updateBatchBar = () => {
 
 const doBatchDelete = async () => {
     if (window.selectedIds.size === 0) return;
-    
+
     const count = window.selectedIds.size;
     const ok = await window.requireSystemConfirm("批量删除确认", `您确定要批量物理删除选中的 ${count} 个书签吗？数据将被永久删除，且不可恢复！`, true);
     if (!ok) return;
 
     window.appData.items = window.appData.items.filter(item => !window.selectedIds.has(item.id));
-    
+
     window.selectedIds.clear();
     window.isDataDirty = true;
     localStorage.setItem('nav_app_data', JSON.stringify(window.appData));
-    
+
     showToast(`批量删除 ${count} 个书签成功并保存至本地`, "#27ae60");
     updateBatchBar();
     renderNav();
@@ -630,7 +630,7 @@ const doBatchToggleHidden = () => {
     window.isDataDirty = true;
     localStorage.setItem('nav_app_data', JSON.stringify(window.appData));
     showToast(hasVisible ? "选中的卡片已批量隐藏并保存本地" : "选中的卡片一并设为公开并保存本地", "#3498db");
-    
+
     window.selectedIds.clear();
     updateBatchBar();
     renderNav();
@@ -645,13 +645,13 @@ const openBatchMoveModal = () => {
     const confirmBtn = document.getElementById('btn-confirm-edit');
     if (!modal || !body || !confirmBtn) return;
 
-    window.lastFocusedElement = document.activeElement; // Task 37.2
+    window.lastFocusedElement = document.activeElement; 
     closeAllModals(true);
 
     title.innerText = `批量移动至目标分类（已选 ${window.selectedIds.size} 项）`;
-    
+
     const validCats = window.appData.categories.filter(c => c.id !== 'VIRTUAL_FREQ');
-    
+
     body.innerHTML = `
         <div class="form-row">
             <label><i class="ri-folders-line"></i> 选择目标分类</label>
@@ -678,7 +678,7 @@ const openBatchMoveModal = () => {
         showToast(`成功将 ${window.selectedIds.size} 个网址卡片移动并保存至本地`, "#27ae60");
         window.selectedIds.clear();
         modal.style.display = 'none';
-        
+
         updateBatchBar();
         renderNav();
     };
@@ -689,7 +689,7 @@ const openBatchMoveModal = () => {
 // ==================== 5. Sortable.js 拖拽排序逻辑 ====================
 const initSortable = () => {
     destroySortable();
-    
+
     const sidebarNav = document.getElementById('sidebar-nav');
     if (sidebarNav && typeof Sortable !== 'undefined') {
         const catSortable = Sortable.create(sidebarNav, {
@@ -700,7 +700,7 @@ const initSortable = () => {
                 // 根据实时 DOM 的排列顺序完全复写分类数据 appData.categories
                 const children = Array.from(sidebarNav.children);
                 const newCategories = [];
-                
+
                 children.forEach(child => {
                     const catId = child.dataset.id;
                     if (catId === 'VIRTUAL_FREQ') return;
@@ -709,7 +709,7 @@ const initSortable = () => {
                         newCategories.push(cat);
                     }
                 });
-                
+
                 window.appData.categories = newCategories;
                 window.isDataDirty = true;
                 localStorage.setItem('nav_app_data', JSON.stringify(window.appData));
@@ -718,7 +718,7 @@ const initSortable = () => {
         });
         window.sortableInstances.push(catSortable);
     }
-    
+
     const grids = document.querySelectorAll('.category-section .nav-grid, .category-section .video-grid');
     if (grids.length > 0 && typeof Sortable !== 'undefined') {
         grids.forEach(grid => {
@@ -726,7 +726,7 @@ const initSortable = () => {
             if (!section) return;
             const targetCatId = section.id.replace('section-', '');
             if (targetCatId === 'VIRTUAL_FREQ') return;
-            
+
             const itemSortable = Sortable.create(grid, {
                 group: 'shared-category-items',
                 animation: 150,
@@ -734,19 +734,19 @@ const initSortable = () => {
                 onEnd: () => {
                     const allGrids = document.querySelectorAll('.category-section .nav-grid, .category-section .video-grid');
                     const orderedIds = [];
-                    
+
                     allGrids.forEach(g => {
                         const s = g.closest('.category-section');
                         if (!s) return;
                         const catId = s.id.replace('section-', '');
                         if (catId === 'VIRTUAL_FREQ') return;
-                        
+
                         const cards = Array.from(g.children);
                         cards.forEach(card => {
                             if (card.classList.contains('add-new-card')) return;
                             const itemId = card.getAttribute('data-id');
                             if (!itemId) return;
-                            
+
                             orderedIds.push(itemId);
                             const item = window.appData.items.find(i => i.id === itemId);
                             if (item) {
@@ -755,14 +755,14 @@ const initSortable = () => {
                             }
                         });
                     });
-                    
+
                     const renderedItemsMap = {};
                     window.appData.items.forEach(item => {
                         if (orderedIds.includes(item.id)) {
                             renderedItemsMap[item.id] = item;
                         }
                     });
-                    
+
                     const reorderedItems = [];
                     orderedIds.forEach(id => {
                         const item = renderedItemsMap[id];
@@ -770,14 +770,14 @@ const initSortable = () => {
                             reorderedItems.push(item);
                         }
                     });
-                    
+
                     const nonRenderedItems = window.appData.items.filter(item => !renderedItemsMap[item.id]);
                     window.appData.items = [...reorderedItems, ...nonRenderedItems];
-                    
+
                     window.isDataDirty = true;
                     localStorage.setItem('nav_app_data', JSON.stringify(window.appData));
                     showToast("卡片排序已本地更改", "#27ae60");
-                    
+
                     renderNav();
                 }
             });
@@ -854,7 +854,7 @@ const parseImportedData = (rawText) => {
         const doc = parser.parseFromString(text, "text/html");
         const categories = [];
         const items = [];
-        
+
         // 查找所有文件夹标题 (H3)
         const h3s = doc.querySelectorAll('h3');
         if (h3s.length > 0) {
@@ -862,13 +862,13 @@ const parseImportedData = (rawText) => {
                 const catName = h3.textContent.trim().slice(0, 10) || `分类 ${catIdx + 1}`;
                 const catId = `imported_cat_${catIdx + 1}_${Date.now()}`;
                 categories.push({ id: catId, name: catName, icon: "🔖", hidden: false });
-                
+
                 // 查找该 H3 同级紧随其后的 <DL> 或 <UL>
                 let sibling = h3.nextElementSibling;
                 while (sibling && sibling.tagName !== 'DL' && sibling.tagName !== 'UL') {
                     sibling = sibling.nextElementSibling;
                 }
-                
+
                 if (sibling) {
                     const links = sibling.querySelectorAll('a');
                     links.forEach((link, itemIdx) => {
@@ -915,7 +915,7 @@ const parseImportedData = (rawText) => {
                 });
             }
         }
-        
+
         if (categories.length > 0) return { categories, items };
         throw new Error("HTML 文件中未解析到有效的 A 标签链接");
     }
@@ -923,7 +923,7 @@ const parseImportedData = (rawText) => {
     // 2. 尝试 JSON 解析（标准、扁平或键值对）
     try {
         const parsed = JSON.parse(text);
-        
+
         // 2.1 标准 CloudNav 格式
         if (parsed.categories && parsed.items) {
             console.log("[Import] Detected standard CloudNav format");
@@ -960,7 +960,7 @@ const parseImportedData = (rawText) => {
             const categories = [];
             const items = [];
             let catIdx = 0;
-            
+
             for (const [catName, list] of Object.entries(parsed)) {
                 const catId = `imported_cat_dict_${catIdx}_${Date.now()}`;
                 categories.push({ id: catId, name: catName, icon: "📁", hidden: false });
@@ -1004,30 +1004,30 @@ const bindImportFileListener = () => {
         input.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
+
             const reader = new FileReader();
             reader.onload = async (event) => {
                 try {
                     const parsedData = parseImportedData(event.target.result);
-                    
+
                     if (!parsedData.categories || !parsedData.items) {
                         throw new Error("无效的书签数据格式");
                     }
-                    
+
                     window.appData.categories = parsedData.categories;
                     window.appData.items = parsedData.items;
                     if (parsedData.settings) {
                         window.appData.settings = { ...window.appData.settings, ...parsedData.settings };
                     }
-                    
+
                     window.isDataDirty = true;
                     // 保存至本地，并延迟到页面管理模式退出时（handleDataSaveOnExit）统一进行云端备份
                     localStorage.setItem('nav_app_data', JSON.stringify(window.appData));
-                    
+
                     renderNav();
                     updateStyles();
                     closeAllModals(true);
-                    
+
                     if (window.sysToken) {
                         const autoSync = (window.appData.settings?.syncInterval || 0) > 0;
                         if (autoSync) {
@@ -1042,7 +1042,7 @@ const bindImportFileListener = () => {
                     console.error(err);
                     showToast(`导入失败: ${err.message}`, "#e74c3c");
                 }
-                
+
                 e.target.value = '';
             };
             reader.readAsText(file);
@@ -1054,17 +1054,17 @@ const doExportJson = () => {
     try {
         const date = new Date();
         const filename = `CloudNav_Config_${date.getMonth() + 1}${date.getDate()}.json`;
-        
-        // 智能清洗脏配置 (Task NT-V2.12)
+
+        // 智能清洗脏配置
         const exportData = JSON.parse(JSON.stringify(window.appData));
         if (exportData.settings) {
             delete exportData.settings.cardWidth;
         }
-        
+
         const dataStr = JSON.stringify(exportData, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        
+
         const link = document.createElement('a');
         link.href = url;
         link.download = filename;
@@ -1072,7 +1072,7 @@ const doExportJson = () => {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        
+
         closeAllModals(true);
         showToast("本地 JSON 配置导出成功");
     } catch (e) {
@@ -1085,7 +1085,7 @@ const doExportHtml = (htmlMode) => {
     try {
         const date = new Date();
         const filename = `CloudNav_Bookmarks_${date.getMonth() + 1}${date.getDate()}.html`;
-        
+
         let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
 <!-- This is an automatically generated file.
      It will be read and written.
@@ -1101,21 +1101,21 @@ const doExportHtml = (htmlMode) => {
             window.appData.categories.forEach(cat => {
                 // 跳过加载中临时分类
                 if (cat.id === 'temp_init') return;
-                
+
                 const catName = utils.escapeHTML(cat.name || '默认分类');
                 html += `    <DT><H3 ADD_DATE="${Math.floor(Date.now()/1000)}" LAST_MODIFIED="${Math.floor(Date.now()/1000)}">${catName}</H3>\n`;
                 html += `    <DL><p>\n`;
-                
+
                 // 筛选出属于此分类的书签
                 const items = window.appData.items.filter(item => (item.catId === cat.id || item.cat_id === cat.id));
                 items.forEach(item => {
                     const url = utils.escapeHTML(item.url || '');
                     if (!url || !url.startsWith('http')) return;
-                    
+
                     let linkText = utils.escapeHTML(item.title || '未命名书签');
                     let commentAttr = '';
                     let descTag = '';
-                    
+
                     if (item.desc) {
                         const cleanDesc = utils.escapeHTML(item.desc);
                         if (htmlMode === 'clean') {
@@ -1127,15 +1127,15 @@ const doExportHtml = (htmlMode) => {
                             linkText = `${linkText} - ${cleanDesc}`;
                         }
                     }
-                    
+
                     let iconAttr = '';
                     if (item.icon && item.icon.startsWith('http')) {
                         iconAttr = ` ICON="${utils.escapeHTML(item.icon)}"`;
                     }
-                    
+
                     html += `        <DT><A HREF="${url}" ADD_DATE="${Math.floor(Date.now()/1000)}"${iconAttr}${commentAttr}>${linkText}</A>${descTag}\n`;
                 });
-                
+
                 html += `    </DL><p>\n`;
             });
         } else {
@@ -1144,11 +1144,11 @@ const doExportHtml = (htmlMode) => {
                 window.appData.items.forEach(item => {
                     const url = utils.escapeHTML(item.url || '');
                     if (!url || !url.startsWith('http')) return;
-                    
+
                     let linkText = utils.escapeHTML(item.title || '未命名书签');
                     let commentAttr = '';
                     let descTag = '';
-                    
+
                     if (item.desc) {
                         const cleanDesc = utils.escapeHTML(item.desc);
                         if (htmlMode === 'clean') {
@@ -1158,7 +1158,7 @@ const doExportHtml = (htmlMode) => {
                             linkText = `${linkText} - ${cleanDesc}`;
                         }
                     }
-                    
+
                     let iconAttr = '';
                     if (item.icon && item.icon.startsWith('http')) {
                         iconAttr = ` ICON="${utils.escapeHTML(item.icon)}"`;
@@ -1167,12 +1167,12 @@ const doExportHtml = (htmlMode) => {
                 });
             }
         }
-        
+
         html += `</DL><p>\n`;
-        
+
         const blob = new Blob([html], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
-        
+
         const link = document.createElement('a');
         link.href = url;
         link.download = filename;
@@ -1180,7 +1180,7 @@ const doExportHtml = (htmlMode) => {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        
+
         closeAllModals(true);
         showToast("HTML书签本地导出成功");
     } catch (e) {
@@ -1200,11 +1200,11 @@ const openImportExportModal = () => {
     const title = document.getElementById('edit-title');
     const body = document.getElementById('edit-form-body');
     const confirmBtn = document.getElementById('btn-confirm-edit');
-    
+
     if (!modal || !body) return;
 
     title.innerHTML = `<i class="ri-database-2-line"></i> 本地导入/导出`;
-    
+
     currentImportExportMode = 'import';
     currentExportFormat = 'json';
 
@@ -1217,7 +1217,7 @@ const openImportExportModal = () => {
                     <button class="tab-btn ${currentImportExportMode === 'export' ? 'active' : ''}" onclick="setImportExportMode('export')">导出数据</button>
                 </div>
             </div>
-            
+
             <div class="visual-option-group" id="export-format-group" style="${currentImportExportMode === 'export' ? 'display: block;' : 'display: none;'}">
                 <span class="visual-option-label"><i class="ri-file-settings-line"></i> 选择数据格式</span>
                 <div class="visual-btn-group">
@@ -1225,15 +1225,15 @@ const openImportExportModal = () => {
                     <button class="tab-btn ${currentExportFormat === 'html' ? 'active' : ''}" onclick="setExportFormat('html')">HTML格式</button>
                 </div>
                 <p style="font-size: 11px; opacity: 0.6; margin-top: 8px; line-height: 1.4;">
-                    ${currentExportFormat === 'json' 
-                        ? '说明: 包含所有配置、分类和网址的完整数据。可再次导入本站100%还原。' 
+                    ${currentExportFormat === 'json'
+                        ? '说明: 包含所有配置、分类和网址的完整数据。可再次导入本站100%还原。'
                         : '说明: 导出为标准 HTML 书签文件，可直接导入到 Edge, Chrome 等浏览器。'}
                 </p>
             </div>
-            
+
             <div class="visual-option-group" id="import-tip-group" style="${currentImportExportMode === 'import' ? 'display: block;' : 'display: none;'}">
                 <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.5;">
-                    <i class="ri-information-line" style="color: var(--primary);"></i> 
+                    <i class="ri-information-line" style="color: var(--primary);"></i>
                     智能导入适配器支持导入标准 HTML 书签、本站导出的 JSON 文件以及 Markdown 列表等。导入后将覆写本地当前所有配置并暂存。
                 </div>
             </div>

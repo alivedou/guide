@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -26,7 +26,7 @@ export async function onRequestPost(context) {
   const lockKey = `login_fail:${hashedIp}`;
 
   try {
-    // 0. 检查熔断状态 (Task 6.4)
+    // 0. 检查熔断状态
     const failData = await env.nav.get(lockKey, { type: "json" });
     if (failData && failData.count >= 5 && Date.now() < failData.lockUntil) {
       const waitMin = Math.ceil((failData.lockUntil - Date.now()) / 60000);
@@ -141,17 +141,17 @@ export async function onRequestPost(context) {
     // 更新最后登录时间
     await env.DB.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').bind(user.id).run();
 
-    // 生成 Token (Task 2.6.1: 迁移至 JWT)
+    // 生成 Token (迁移至 JWT)
     const secret = new TextEncoder().encode(env.JWT_SECRET || 'cloudnav-secret-2026');
-    const token = await new jose.SignJWT({ 
-        id: user.id, 
+    const token = await new jose.SignJWT({
+        id: user.id,
         uid: user.uid,
-        username: user.username, 
-        role: user.role 
+        username: user.username,
+        role: user.role
     })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('7d') // Task 4.3: 设置 7 天有效期
+    .setExpirationTime('7d') // 设置 7 天有效期
     .sign(secret);
 
     return new Response(JSON.stringify({

@@ -21,7 +21,7 @@ const utils_escapeHTML = window.utils ? window.utils.escapeHTML : (str) => {
               .replace(/'/g, '&#39;');
 };
 
-// Task 12.2 & 13.2 & 14.1: 唤起全站系统参数配置中枢 (Tab 架构重构)
+// 唤起全站系统参数配置中枢 (Tab 架构重构)
 window.openSystemConfigHub = async (defaultTab = 'brand') => {
     if (!window.isAdmin) return;
     window.lastFocusedElement = document.activeElement;
@@ -39,7 +39,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
         const title = document.getElementById('edit-title');
         const body = document.getElementById('edit-form-body');
         const confirmBtn = document.getElementById('btn-confirm-edit');
-        
+
         if (!modal || !body) return;
 
         modal.dataset.modalType = 'system-config';
@@ -75,7 +75,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                     </div>
                 </div>
             </div>
-            
+
             <!-- 区块 2: 注册与准入 -->
             <div id="sys-pane-policy" class="hub-pane ${defaultTab === 'policy' ? 'active' : ''}">
                 <div class="admin-config-section">
@@ -133,7 +133,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                             <input type="number" id="sys-reg-lock" value="${sec.registerLockoutHours}">
                         </div>
                     </div>
-                    
+
                     <h4 style="font-size:12px; color:#888; text-transform:uppercase; margin: 15px 0 10px 0;"><i class="ri-notification-3-line"></i> 敏感操作即时告警</h4>
                     <div class="form-group" style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <div>
@@ -145,7 +145,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                             <span class="slider"></span>
                         </label>
                     </div>
-                    
+
                     <h4 style="font-size:12px; color:#888; text-transform:uppercase; margin: 15px 0 10px 0;"><i class="ri-time-line"></i> 系统时区控制</h4>
                     <div class="form-group">
                         <label>系统信息显示时区</label>
@@ -162,7 +162,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                 </div>
             </div>
 
-            <!-- 区块 4: 角色授权 (Task UM.8.4 & Task AC.3) -->
+            <!-- 区块 4: 角色授权) -->
             <div id="sys-pane-roles" class="hub-pane ${defaultTab === 'roles' ? 'active' : ''}">
                 <div class="admin-config-section">
                     <div style="font-size:12px; color:#f1c40f; margin-bottom:12px; background:rgba(241,196,15,0.1); padding:8px; border-radius:6px; line-height:1.4; display:flex; justify-content:space-between; align-items:center;">
@@ -178,7 +178,7 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
                 </div>
             </div>
         `;
-        
+
         modal.style.display = 'flex';
         confirmBtn.style.display = 'block';
         confirmBtn.innerText = "应用全站参数";
@@ -189,10 +189,10 @@ window.openSystemConfigHub = async (defaultTab = 'brand') => {
     }
 };
 
-// Task 14.1: 系统参数 Tab 切换逻辑
+// 系统参数 Tab 切换逻辑
 window.switchSysTab = (tab) => {
     document.querySelectorAll('#edit-modal .hub-tab').forEach(el => {
-        el.classList.toggle('active', 
+        el.classList.toggle('active',
             (tab === 'brand' && el.innerText.includes('品牌')) ||
             (tab === 'policy' && el.innerText.includes('策略')) ||
             (tab === 'security' && (el.innerText.includes('安全') || el.innerText.includes('防护'))) ||
@@ -206,22 +206,22 @@ window.switchSysTab = (tab) => {
     if (target) target.classList.add('active');
 };
 
-// Task UM.8.4: 角色授权搜索逻辑
+// 角色授权搜索逻辑
 window.handleSysRoleSearch = utils_debounce(async (kw) => {
     const resultsDiv = document.getElementById('sys-role-search-results');
     if (!kw.trim()) {
         resultsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#666; font-size:13px;">请输入关键字开始搜索...</div>';
         return;
     }
-    
+
     resultsDiv.innerHTML = '<div style="text-align:center; padding:20px;"><div class="global-spinner" style="width:20px; height:20px; border-width:2px; margin:0 auto;"></div></div>';
-    
+
     try {
         const res = await fetch(`/api/admin/users?keyword=${encodeURIComponent(kw)}&pageSize=50`, {
             headers: { 'Authorization': window.sysToken }
         });
         const data = await res.json();
-        
+
         if (data.users && data.users.length > 0) {
             const isRoot = (window.currentUser?.id === '1' || window.currentUser?.uid === 10001);
             const adminCount = data.adminCount || 0;
@@ -240,7 +240,7 @@ window.handleSysRoleSearch = utils_debounce(async (kw) => {
                             const hasEmail = !!u.email;
                             const hasTg = !!u.telegram_chat_id;
                             const hasChannel = hasEmail || hasTg;
-                            
+
                             let channelText = '';
                             if (hasEmail && hasTg) {
                                 channelText = `<span style="font-size:11px; opacity:0.6; margin-left:6px;">(${utils_escapeHTML(u.email)} | TG:${utils_escapeHTML(u.telegram_chat_id)})</span>`;
@@ -256,23 +256,23 @@ window.handleSysRoleSearch = utils_debounce(async (kw) => {
                                     <td style="padding:10px 5px;">
                                         <b>${utils_escapeHTML(u.username)}</b> ${channelText}<br>
                                         <small style="opacity:0.5">${u.uid}</small>
-                                        
+
                                         <!-- 通知授权开关 -->
                                         <div style="display:flex; gap:12px; margin-top:6px; font-size:11px;">
                                             <label style="display:flex; align-items:center; gap:4px; ${!hasChannel ? 'opacity:0.4; cursor:not-allowed;' : 'cursor:pointer;'}"
                                                    title="${!hasChannel ? '无法勾选：该用户尚未在个人资料中心绑定邮箱或Telegram Chat ID' : '允许或取消向该用户发送紧急系统故障告警'}">
-                                                <input type="checkbox" 
-                                                       ${u.is_alert_receiver ? 'checked' : ''} 
-                                                       ${!hasChannel ? 'disabled' : ''} 
-                                                       onchange="toggleUserNotification('${u.id}', 'alert', this.checked)"> 
+                                                <input type="checkbox"
+                                                       ${u.is_alert_receiver ? 'checked' : ''}
+                                                       ${!hasChannel ? 'disabled' : ''}
+                                                       onchange="toggleUserNotification('${u.id}', 'alert', this.checked)">
                                                 <span>紧急告警</span>
                                             </label>
                                             <label style="display:flex; align-items:center; gap:4px; ${!hasChannel ? 'opacity:0.4; cursor:not-allowed;' : 'cursor:pointer;'}"
                                                    title="${!hasChannel ? '无法勾选：该用户尚未在个人资料中心绑定邮箱或Telegram Chat ID' : '允许或取消向该用户发送每日系统审计日报'}">
-                                                <input type="checkbox" 
-                                                       ${u.is_digest_receiver ? 'checked' : ''} 
-                                                       ${!hasChannel ? 'disabled' : ''} 
-                                                       onchange="toggleUserNotification('${u.id}', 'digest', this.checked)"> 
+                                                <input type="checkbox"
+                                                       ${u.is_digest_receiver ? 'checked' : ''}
+                                                       ${!hasChannel ? 'disabled' : ''}
+                                                       onchange="toggleUserNotification('${u.id}', 'digest', this.checked)">
                                                 <span>审计日报</span>
                                             </label>
                                         </div>
@@ -282,7 +282,7 @@ window.handleSysRoleSearch = utils_debounce(async (kw) => {
                                             <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
                                             <option value="super_user" ${u.role === 'super_user' ? 'selected' : ''}>Super User</option>
                                             ${(isRoot || u.role === 'admin') ? `
-                                                <option value="admin" ${u.role === 'admin' ? 'selected' : ''} 
+                                                <option value="admin" ${u.role === 'admin' ? 'selected' : ''}
                                                     ${(!isRoot || isAdminFull) ? 'disabled' : ''}>
                                                     Admin ${isAdminFull ? '(名额已满)' : ''}
                                                 </option>` : ''}
@@ -387,17 +387,17 @@ window.saveSystemConfig = async () => {
         await window.SyncUI.perform('ADMIN_CONFIG', async () => {
             const res = await fetch('/api/admin/site-config', {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Authorization': window.sysToken,
-                    'Content-Type': 'application/json' 
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(payload)
             });
 
             if (res.ok) {
-                // Task 13.4: 立即重新拉取并应用最新的站点配置 (标题、SEO、Favicon 等)
+                // 立即重新拉取并应用最新的站点配置 (标题、SEO、Favicon 等)
                 if (typeof window.initSiteConfig === 'function') {
-                    window.initSiteConfig(); 
+                    window.initSiteConfig();
                 }
                 if (typeof window.closeAllModals === 'function') {
                     window.closeAllModals();
