@@ -94,13 +94,21 @@ install_nav() {
     read -p "3. [可选] 请输入 Telegram Bot Token (无则回车跳过): " TG_TOKEN
     read -p "4. [可选] 请输入 Telegram Chat ID (无则回车跳过): " TG_CHAT_ID
 
-    # 4. 镜像 Tag
-    STABLE_TAG="v1.0.1" 
+    # 4. 镜像地址（支持 Tag 或完整地址，兼容 fork 仓库）
+    DEFAULT_IMAGE="ghcr.io/alivedou/ikun_nav:latest"
     echo ""
-    read -p "5. 请输入你的 GitHub 镜像 Tag (直接回车默认使用当前稳定版 ${STABLE_TAG}): " IMG_TAG
-    # 如果用户直接敲回车，自动采用 STABLE_TAG
-    IMG_TAG=${IMG_TAG:-$STABLE_TAG}
-    FULL_IMAGE="ghcr.io/alivedou/ikun_nav:${IMG_TAG}"
+    echo -e "5. 请输入镜像 Tag 或完整镜像地址"
+    echo -e "   - 输入 Tag (如 v1.0.1) → 自动补全为 ghcr.io/alivedou/ikun_nav:xxx"
+    echo -e "   - 输入完整地址 (如 ghcr.io/2bdou/ikun_nav:v1.0.0) → 直接使用"
+    read -p "   (直接回车默认使用 ${DEFAULT_IMAGE}): " IMG_INPUT
+
+    if [ -z "$IMG_INPUT" ]; then
+        FULL_IMAGE="$DEFAULT_IMAGE"
+    elif [[ "$IMG_INPUT" == *"/"* ]]; then
+        FULL_IMAGE="$IMG_INPUT"
+    else
+        FULL_IMAGE="ghcr.io/alivedou/ikun_nav:${IMG_INPUT}"
+    fi
 
     # 写入 .env 文件
     cat <<EOF > "$ENV_FILE"
