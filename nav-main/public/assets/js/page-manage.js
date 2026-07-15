@@ -1014,10 +1014,21 @@ const bindImportFileListener = () => {
                         throw new Error("无效的书签数据格式");
                     }
 
-                    window.appData.categories = parsedData.categories;
-                    window.appData.items = parsedData.items;
-                    if (parsedData.settings) {
-                        window.appData.settings = { ...window.appData.settings, ...parsedData.settings };
+                    // 跨用户导入：剥离身份字段并重映射全局唯一 id，避免 UNIQUE 冲突 / 权限污染
+                    let ready = parsedData;
+                    if (window.ImportExportSanitize && typeof window.ImportExportSanitize.prepareImportPayload === 'function') {
+                        ready = window.ImportExportSanitize.prepareImportPayload(parsedData);
+                    }
+
+                    window.appData.categories = ready.categories;
+                    window.appData.items = ready.items;
+                    if (ready.settings) {
+                        window.appData.settings = { ...window.appData.settings, ...ready.settings };
+                    }
+                    // 确保本地缓存不会残留导出文件里的 user/isAdmin/quota
+                    if (window.ImportExportSanitize && typeof window.ImportExportSanitize.stripIdentity === 'function') {
+                        // 不删 appData 上会话身份（由 init 维护），仅保证不会从导入包写回错误 user
+                        delete window.appData.quota; // 配额永远以服务端为准
                     }
 
                     window.isDataDirty = true;
@@ -1055,10 +1066,14 @@ const doExportJson = () => {
         const date = new Date();
         const filename = `CloudNav_Config_${date.getMonth() + 1}${date.getDate()}.json`;
 
-        // 智能清洗脏配置
-        const exportData = JSON.parse(JSON.stringify(window.appData));
-        if (exportData.settings) {
-            delete exportData.settings.cardWidth;
+        // 导出清洗：只含书签+偏好，去掉 user/isAdmin/quota（跨用户导入安全）
+        let exportData;
+        if (window.ImportExportSanitize && typeof window.ImportExportSanitize.sanitizeForExport === 'function') {
+            exportData = window.ImportExportSanitize.sanitizeForExport(window.appData);
+        } else {
+            exportData = JSON.parse(JSON.stringify(window.appData));
+            if (exportData.settings) delete exportData.settings.cardWidth;
+            ['user', 'username', 'uid', 'role', 'isAdmin', 'quota', 'lastUpdated'].forEach((k) => delete exportData[k]);
         }
 
         const dataStr = JSON.stringify(exportData, null, 2);

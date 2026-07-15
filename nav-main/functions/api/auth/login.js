@@ -33,7 +33,22 @@ export async function onRequestPost(context) {
       return new Response(JSON.stringify({ error: `登录尝试过多，请在 ${waitMin} 分钟后再试` }), { status: 429 });
     }
 
-    const { username, password, email } = await request.json();
+    let body = {};
+    try {
+      body = await request.json();
+    } catch (_) {
+      return new Response(JSON.stringify({ error: '请求体无效', code: 'ERR_BAD_JSON' }), { status: 400 });
+    }
+    const { username, password, email } = body || {};
+
+    // 空参/缺字段：返回 400，避免 sha256(undefined) 等未捕获异常
+    if (!username || typeof username !== 'string' || !String(username).trim()) {
+      return new Response(JSON.stringify({ error: '请输入用户名', code: 'ERR_MISSING_USERNAME' }), { status: 400 });
+    }
+    if (password === undefined || password === null || typeof password !== 'string' || password === '') {
+      return new Response(JSON.stringify({ error: '请输入密码', code: 'ERR_MISSING_PASSWORD' }), { status: 400 });
+    }
+
     const passwordHash = await sha256(password);
 
     // 查询用户信息

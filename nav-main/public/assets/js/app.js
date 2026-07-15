@@ -2166,10 +2166,12 @@ const init = async (forceRender = false) => {
 
             updateStyles();
 
-            // 同步云端搜索引擎设置
-            if (appData.settings?.searchEngine) {
-                if (typeof window.setSearchEngine === 'function') {
-                    window.setSearchEngine(appData.settings.searchEngine, true);
+            // 同步云端搜索引擎设置：本地 localStorage 优先，避免刷新后覆盖用户本机选择
+            {
+                const localEngine = localStorage.getItem('nav_search_engine');
+                const engineToUse = localEngine || appData.settings?.searchEngine;
+                if (engineToUse && typeof window.setSearchEngine === 'function') {
+                    window.setSearchEngine(engineToUse, true);
                 }
             }
 
@@ -3296,8 +3298,10 @@ const initSearch = () => {
         // 3. 点击外部关闭
         document.addEventListener('click', () => engineList.classList.remove('show'));
 
-        // 4. 恢复初始状态
-        const savedEngine = (sysToken && appData.settings?.searchEngine) || localStorage.getItem('nav_search_engine') || 'bing';
+        // 4. 恢复初始状态（本地 localStorage 优先于云端，保证本机切换可持久）
+        const savedEngine = localStorage.getItem('nav_search_engine')
+            || (sysToken && appData.settings?.searchEngine)
+            || 'bing';
         window.setSearchEngine(savedEngine, true);
     };
 
@@ -4211,15 +4215,24 @@ const initGlobalEvents = () => {
             return;
         }
 
-        // 6. 快捷输入一键唤醒搜索
+        // 6. 快捷输入一键唤醒搜索（首字符写入搜索框；search-ux.js capture 已处理时跳过）
         if (!isInput && (e.key.length === 1 || key === '/') && !isCtrl && !e.altKey) {
+            if (e.searchUxHandled) return;
             const activeModal = Array.from(document.querySelectorAll('.modal')).find(m => getComputedStyle(m).display !== 'none');
             if (activeModal || isPageManagementMode) return;
             const sea = document.getElementById('sea-input');
             if (sea) {
-                if (key === '/') e.preventDefault();
+                e.preventDefault();
                 document.body.classList.add('search-active');
+                if (key !== '/') {
+                    sea.value = (sea.value || '') + e.key;
+                }
                 sea.focus();
+                try {
+                    const pos = sea.value.length;
+                    sea.setSelectionRange(pos, pos);
+                } catch (_) {}
+                sea.dispatchEvent(new Event('input', { bubbles: true }));
             }
         }
 

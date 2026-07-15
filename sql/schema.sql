@@ -1,26 +1,19 @@
 -- ==========================================
--- 高度自定义高颜值导航网站 - 完整 D1 数据库结构
--- 【运行时权威源】Docker/server 只加载本文件；控制台材料见 sql/
+-- 完整 D1/SQLite 表结构（给人看 / 控制台参考）
 -- ==========================================
--- 数据库初始化方法（任选其一）：
+-- 【维护约定】
+--   运行时权威源：migrations/0000_init.sql
+--   Docker / server.js 只读 migrations/，不会读取本目录。
+--   改表结构时：先改 migrations/0000_init.sql，再同步更新本文件。
 --
--- 方法一（Cloudflare 控制台，推荐用 sql/schema.console.sql）：
---   1. 登录 Cloudflare 控制台 -> 存储和数据库 -> D1
---   2. 选中 cloudnav-db -> Console
---   3. 粘贴 sql/schema.console.sql 全文执行；失败则按条 CREATE 执行
+-- 控制台初始化请优先用：sql/schema.console.sql
+-- 老库补列请用：sql/schema.upgrade.sql
 --
--- 方法二（wrangler CLI）：
+-- wrangler:
 --   npx wrangler d1 migrations apply cloudnav-db --remote
 --   或: npx wrangler d1 execute cloudnav-db --remote --file=./sql/schema.sql
---
--- 老库缺列升级（CREATE IF NOT EXISTS 不会加列）：
---   控制台逐条执行 sql/schema.upgrade.sql（duplicate column 可忽略）
---
--- 超级管理员：初始化后在前端注册第一个账号，系统自动将其设为管理员。
--- 同步 migrations/0000_init.sql 时请保持与本文件表结构一致。
 -- ==========================================
 
--- 1. 用户主表
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,

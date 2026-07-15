@@ -7,6 +7,10 @@
  */
 
 import * as jose from 'jose';
+import { ensureD1Schema } from './_d1_schema_patch.js';
+
+// 每个 Worker isolate 只跑一次 D1 结构补丁，避免每请求 ALTER
+let _d1SchemaPatched = false;
 
 async function sendEmailHelper(recipient, subject, content, env) {
   if (env.RESEND_API_KEY) {
@@ -85,6 +89,18 @@ async function triggerExceptionAlert(err, request, env) {
  */
 export async function onRequest(context) {
   const { request, env, next } = context;
+
+  // 老 D1 库缺列时自动补齐（CREATE IF NOT EXISTS 不会升级已有表）
+  if (env.DB && !_d1SchemaPatched) {
+    _d1SchemaPatched = true;
+    context.waitUntil(
+      ensureD1Schema(env.DB).then((r) => {
+        if (r.errors && r.errors.length) {
+          console.warn('[D1 patch] partial:', r.errors.slice(0, 3).join(' | '));
+        }
+      }).catch((e) => console.warn('[D1 patch] failed:', e && e.message))
+    );
+  }
 
   try {
     return await handleRequest(context);

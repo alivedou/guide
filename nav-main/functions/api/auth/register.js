@@ -113,20 +113,13 @@ export async function onRequestPost(context) {
             await env.DB.batch(initQueries);
         } catch (batchErr) {
             if (batchErr.message.includes('has no column named') || batchErr.message.includes('no such column')) {
-                // 自动修补缺少的列
-                const columnsToPolyfill = [
-                    "ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'",
-                    "ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7",
-                    "ALTER TABLE user_settings ADD COLUMN theme_mode TEXT DEFAULT 'auto'",
-                    "ALTER TABLE user_settings ADD COLUMN simple_mode BOOLEAN DEFAULT 0",
-                    "ALTER TABLE items ADD COLUMN bg_color TEXT",
-                    "ALTER TABLE items ADD COLUMN hidden BOOLEAN DEFAULT 0",
-                    "ALTER TABLE categories ADD COLUMN hidden BOOLEAN DEFAULT 0"
-                ];
-                for (const query of columnsToPolyfill) {
-                    try { await env.DB.prepare(query).run(); } catch(e) {}
+                // 完整 D1 缺列补丁（见 _d1_schema_patch.js），再重试
+                try {
+                  const { ensureD1Schema } = await import('../_d1_schema_patch.js');
+                  await ensureD1Schema(env.DB);
+                } catch (patchErr) {
+                  console.warn('[register] D1 patch failed:', patchErr && patchErr.message);
                 }
-                // 修补后重试
                 await env.DB.batch(initQueries);
             } else {
                 throw batchErr;

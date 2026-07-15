@@ -103,7 +103,7 @@ graph TD
 ---
 ## ☁️ 部署方式一：VPS-Docker 极速部署
 
-具体原理详解在 `deployment-docker.md` 中有具体说明，本脚本只是将复杂的手动操作步骤封装成了菜单样式的交互式命令。
+具体原理详解在 [deployment-docker.md](docs/deployment-docker.md) 中有具体说明，本脚本只是将复杂的手动操作步骤封装成了菜单样式的交互式命令。
 
 您可以选择以下两种极速安装方式中的任意一种：
 
@@ -146,6 +146,11 @@ chmod +x ikun.sh
 | **Cloudflare** | [注册](https://dash.cloudflare.com/sign-up) | [登录](https://dash.cloudflare.com/login) |
 | **GitHub** | [注册](https://github.com/signup) | [登录](https://github.com/login) |
 
+> [!IMPORTANT]
+> **推荐顺序（按这个走，少踩坑）**  
+> ① 建 KV + D1 → ② 初始化 D1 表结构 → ③ 创建 Pages 并设好构建参数 → ④ 绑定 KV/`DB`/环境变量 → ⑤ 重新部署  
+> 旧文档里「先部署再初始化」也能用，但首屏 API 容易报 `no such table`；**先初始化再绑定更稳**。
+
 ### 第一步：创建 Cloudflare KV 空间与 D1 数据库
 1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)。
 2. **创建 KV 空间**：
@@ -155,70 +160,70 @@ chmod +x ikun.sh
    * 菜单：**存储和数据库** -> **D1**。
    * 点击 **“创建数据库”**，选择 **“D1 数据库”**，数据库名称命名为 **cloudnav-db**，点击创建。
 
-### 第二步：部署 Cloudflare Pages 项目
-1. 将本项目 **fork** 到您的 GitHub 仓库。
-   - **项目源码**：[项目地址](https://github.com/alivedou/CF-nav/tree/v4)
-2. 在 Cloudflare 点击 **Workers 和 Pages** -> **创建项目** -> **Pages** 标签页。
-3. 点击 **“连接到 Git”** 并授权选择您的导航项目仓库。
-4. **构建设置** (非常重要)：
-   *   **项目名称**：`mynav` (或自定义)
-   *   **生产分支**：`v4`
-   *   **框架预设**：`None`
-   *   **构建命令**：`npm install`
-   *   **构建输出目录**：**`public`**
-   *   **根目录**：**`nav-main`**
-5. 点击 **“保存并部署”**（首期部署会因为未绑定资源报错，这是正常的，请继续后面的绑定步骤）。
+### 第二步：初始化 D1 数据库表结构（首次必做）
+系统基于多用户 D1（SQLite）运作。**表结构不初始化，注册/登录/同步都会 500。**
 
-### 第三步：绑定 KV、D1 数据库与配置环境变量
-1. 进入 Pages 项目页面，点击 **“设置” (Settings)** -> **“函数” (Functions)**。
-2. **KV 命名空间绑定** (需同时添加 Production 和 Preview)：
-   *   **变量名称**：**`nav`**
-   *   **KV 命名空间**：选择第一步创建的 KV 空间。
-3. **D1 数据库绑定** (需同时添加 Production 和 Preview)：
-   *   **变量名称**：**`DB`** (必须大写)
-   *   **D1 数据库**：选择第一步创建的 `cloudnav-db` 数据库。
-   
-4. **配置环境变量**：
-   * 在 Pages 项目页面，点击 **设置 (Settings)** -> **环境变量** 下点击 **“添加变量”** (需同时添加 Production 和 Preview)：
-   - **必需项**：
-     *    **`JWT_SECRET`**：一长串安全随机字符串 (用于 JWT Token 的加解密签名)。
-   - **可选项**（用于多人使用时管理网站用）：
-     *    **`TELEGRAM_BOT_TOKEN`**：用于日常管理异常通知 (可选项：用于管理员定时日报和异常项目的通知)。
-     *    **`TELEGRAM_CHAT_ID`**：填群ID（可选项：若要向多用户私信群发，系统会自动联表读取各用户个人资料自己绑定的 TG_ID；这里的 CHAT_ID 仅用于系统对公共频道或管理大群的广播）。
-     *    **`CRON_SECRET`**：一长串安全随机字符串 (可选项：用于管理员定时日报的安全拦截，个人使用的就不需要日报了,主要是管理注册异常用户的操作通知)。
-    
--     **PS:** 如需要使用日报功能，请完成 **系统异常告警与审计通知配置及测试指南下** 的第3个步骤操作。
+#### 💡 方案 A：网页控制台（小白推荐）
+1. 打开 **[sql/schema.console.sql](sql/schema.console.sql)**（专为控制台准备，少注释；也可用 [schema.sql](sql/schema.sql)）。
+2. Cloudflare：**存储和数据库** → **D1** → **`cloudnav-db`** → **控制台 (Console)**。
+3. 粘贴 SQL 后点 **执行**。若整段失败：按「一条 CREATE / 一条 INDEX」分次执行。
+4. 成功后应能在「表」列表看到：`users`、`user_settings`、`categories`、`items`、`announcements`、`announcement_read_states`、`invitation_codes`、`audit_logs`。
 
-5. **点击保存。**
+> [!WARNING]
+> **老库升级坑**：`CREATE TABLE IF NOT EXISTS` **不会**给已有表加新列。  
+> 若你很早以前就建过库、后来代码加了字段，请再执行 **[schema.upgrade.sql](sql/schema.upgrade.sql)**（逐条执行即可；提示 `duplicate column` 表示该列已有，可忽略）。  
+> 新版本边缘函数也会在首次请求时自动尝试补列，但**仍建议控制台跑一遍 upgrade 更稳**。
 
-### 第四步：初始化 D1 数据库表结构 (D1 数据库初始化，首次部署必须要做，后续更新基本上不用动)
-系统基于多用户 D1 关系型 SQLite 运作，在首次运行前必须进行 D1 数据库的表结构初始化。我们为您提供了 **网页端一键导入（小白推荐）** 和 **本地命令行执行（开发者推荐）** 两种方式：
+#### 💻 方案 B：Wrangler 命令行
+```bash
+npm install
+npx wrangler login
+# 需在 wrangler 配置中写好 cloudnav-db 的 database_id（见 wrangler.toml.example）
+npx wrangler d1 migrations apply cloudnav-db --remote
+```
 
-#### 💡 方案 A：网页端控制台一键初始化 (小白极力推荐 🌟)
-完全不需要在本地安装任何开发环境、不写任何代码，全部在网页上点点鼠标即可完成！
-1. 复制本项目根目录下的 [schema.sql](schema.sql) 文件中的全部 SQL 代码。
-   * *(您可以直接在 GitHub 网页上打开并复制该文件)*。
-2. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)，在左侧菜单点击 **“存储和数据库” (Storage & Databases)** -> **“D1”**。
-3. 点击您在第一步中创建的 **`cloudnav-db`** 数据库。
-4. 切换到顶部的 **“控制台” (Console)** 选项卡。
-5. 将刚刚复制的 SQL 代码分步粘贴到控制台的输入框内。
-6. 点击 **“执行” (Execute / Run)** 按钮。
-7. 看到下方提示执行成功，数据库表就全部创建好了！🎉
+### 第三步：部署 Cloudflare Pages 项目
+1. 将本项目 **fork** 到您的 GitHub（分支使用 **`v4`**）。
+2. Cloudflare：**Workers 和 Pages** → **创建** → **Pages** → **连接到 Git**。
+3. **构建设置（非常重要，写错会 404 / 函数不生效）**：
 
-#### 💻 方案 B：本地命令行执行迁移 (开发者推荐 🛠️)
-如果您已经拉取了代码并在本地进行开发，可以使用 Wrangler 命令行进行数据库迁移：
-1. 本地安装依赖：在您的本地工程目录下运行 `npm install`。
-2. 登录 Cloudflare 授权：运行 `npx wrangler login`，根据浏览器弹窗提示完成网页登录授权。
-3. 执行远程迁移：在本地终端执行下方命令，将 `migrations` 下的所有 SQL 结构依次导入云端 D1 数据库中：
-   ```bash
-   npx wrangler d1 migrations apply cloudnav-db --remote
-   ```
-4. 看到控制台输出一系列 `.sql` 脚本迁移成功即可。
+| 项 | 必须填 |
+| :--- | :--- |
+| 生产分支 | **`v4`** |
+| 框架预设 | **None** |
+| **根目录 (Root directory)** | **`nav-main`** |
+| 构建命令 | `npm install` |
+| **构建输出目录** | **`public`**（相对根目录，即 `nav-main/public`） |
+
+4. 点 **保存并部署**。若尚未绑定 KV/D1，函数可能报错，先做第四步再 **Redeploy**。
+
+> **说明**：根目录必须是 `nav-main`，这样 `functions/` 与 `public/` 才会被 Pages 正确识别；`nav-main/wrangler.toml` 内已开启 `nodejs_compat`（鉴权依赖 jose）。
+
+### 第四步：绑定 KV、D1 与环境变量（Production + Preview 都要加）
+1. Pages 项目 → **设置** → **绑定 / 函数**（界面文案可能为 Bindings / Functions）。
+2. **KV 命名空间绑定**：
+   * 变量名：**`nav`**（小写，必须一致）
+   * 命名空间：第一步创建的 KV
+3. **D1 数据库绑定**：
+   * 变量名：**`DB`**（大写，必须一致）
+   * 数据库：`cloudnav-db`
+4. **环境变量**（设置 → 变量）：
+   - **必需**：`JWT_SECRET` = 一长串随机字符串（登录签名；不配会登录异常）
+   - **可选**：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`、`CRON_SECRET`（日报/告警用）
+5. 保存后务必做第五步重新部署，绑定才会进线上 Worker。
 
 ### 第五步：重新部署生效
-1. 前往 Pages 项目的 **“部署” (Deployments)** 页面。
-2. 点击最近一期部署右侧的 `...` 按钮，选择 **“重新部署” (Redeploy)**！
-3. 部署完成后，您的多用户高颜值个人导航站即可完美、安全地运行！🚀
+1. **部署 (Deployments)** → 最近一次 → **重新部署 (Redeploy)**。
+2. 打开站点，先 **注册第一个账号**（自动成为管理员）。
+3. 若仍报错：浏览器 F12 → Network 看 `/api/*` 返回；常见原因见下表。
+
+| 现象 | 原因 | 处理 |
+| :--- | :--- | :--- |
+| `no such table: users` | D1 未初始化或绑错库 | 重做第二步；检查绑定名是否为 `DB` |
+| `no such column: xxx` | 老表缺列 | 执行 `sql/schema.upgrade.sql` 或等边缘补丁后再试 |
+| 登录 500 / JWT 相关 | 未配 `JWT_SECRET` | 第四步补齐后 Redeploy |
+| 静态页有、API 全挂 | 根目录不是 `nav-main` 或未绑 KV | 检查构建根目录与 `nav` 绑定 |
+| 首期部署失败 | 未绑资源 | 正常；绑完 Redeploy |
 
 ---
 
@@ -256,21 +261,18 @@ npm install
 ## 📂 项目结构预览
 
 ```text
-├── README.md               # 项目部署手册
-├── .env.example            # 环境变量配置样本
-├── server.js               # 本地 Web/Express API KV 模拟后端
-├── kv_mock.json            # 本地保存的 JSON 数据仓库
-└── nav-main/               # 部署云端的主体核心子目录
-    ├── functions/          # Cloudflare Pages Serverless 核心逻辑
-    │   └── api/
-    │       ├── config.js   # 动态鉴权、防泄露、必应壁纸注入逻辑
-    │       └── defaultData.js # 默认初始网站和设置库
-    └── public/             # 纯前端界面资产
-        ├── assets/
-        │   ├── css/style.css # 高定制样式引擎
-        │   └── js/app.js     # 业务主逻辑
-        └── index.html      # 静态主页面
+├── README.md / AGENTS.md   # 用户手册 / 维护约定
+├── package.json / server.js / Dockerfile / ikun.sh
+├── migrations/             # 运行时 DB 权威迁移（进 Docker）
+├── sql/                    # 控制台/升级用 SQL（不进 Docker）
+├── docs/                   # 长文档与测试报告
+├── nav-main/               # CF Pages 根（public + functions）
+│   ├── public/             # 静态前端
+│   └── functions/api/      # Pages Functions
+└── .env.example / wrangler.toml*
 ```
+
+更细的目录说明见 [AGENTS.md](AGENTS.md)、[docs/README.md](docs/README.md)、[sql/README.md](sql/README.md)。
 
 ---
 

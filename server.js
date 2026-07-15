@@ -812,9 +812,20 @@ app.delete('/api/admin/invitations', authenticate, adminOnly, (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-    const { username, password, email } = req.body;
+    try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const { username, password, email } = body;
     const rawIp = req.ip || "unknown";
     const ip = crypto.createHash('sha256').update(rawIp).digest('hex');
+
+    // 空参/缺字段：返回 400，禁止落入 crypto.update(undefined) 拖垮进程
+    if (!username || typeof username !== 'string' || !String(username).trim()) {
+        return res.status(400).json({ error: '请输入用户名', code: 'ERR_MISSING_USERNAME' });
+    }
+    if (password === undefined || password === null || typeof password !== 'string' || password === '') {
+        return res.status(400).json({ error: '请输入密码', code: 'ERR_MISSING_PASSWORD' });
+    }
+
     console.log(`[Auth] Login attempt for user: ${username}`);
 
     // 获取动态安全配置
@@ -949,6 +960,12 @@ app.post('/api/auth/login', async (req, res) => {
         isTempPasswordLogin,
         requiresPasswordChange: shouldChangePassword
     });
+    } catch (e) {
+        console.error('[Auth] Login handler error:', e && e.message);
+        if (!res.headersSent) {
+            res.status(500).json({ error: '登录失败，请稍后重试', code: 'ERR_LOGIN_INTERNAL' });
+        }
+    }
 });
 
 // 辅助函数：记录登录失败 (支持动态配置)
@@ -1807,15 +1824,49 @@ app.post('/api/config', authenticate, (req, res) => {
         }
     }
 
+    try {
+    // categories.id / items.id 为全局主键；必须重映射，否则跨用户导入/默认模板同 id 会 UNIQUE 冲突
+    // （与 CF Functions config.js 行为对齐）
+    const catIdMap = new Map();
+    const safeCategories = Array.isArray(categories) ? categories : [];
+    const safeItems = Array.isArray(items) ? items : [];
+
     db.transaction(() => {
         db.prepare('DELETE FROM categories WHERE user_id = ?').run(userId);
         db.prepare('DELETE FROM items WHERE user_id = ?').run(userId);
-        categories.forEach((cat, idx) => {
-            db.prepare('INSERT INTO categories (id, user_id, name, icon, sort_order, is_video, hidden) VALUES (?, ?, ?, ?, ?, ?, ?)').run(cat.id, userId, cat.name, cat.icon, idx, cat._isVideo ? 1 : 0, cat.hidden ? 1 : 0);
+        safeCategories.forEach((cat, idx) => {
+            const oldId = cat.id || `temp_cat_${idx}`;
+            const newId = crypto.randomUUID();
+            catIdMap.set(oldId, newId);
+            db.prepare('INSERT INTO categories (id, user_id, name, icon, sort_order, is_video, hidden) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+                newId,
+                userId,
+                cat.name || '未命名分类',
+                cat.icon !== undefined ? cat.icon : '📌',
+                idx,
+                cat._isVideo ? 1 : 0,
+                cat.hidden ? 1 : 0
+            );
         });
-        items.forEach((item, idx) => {
-            const targetCatId = item.catId || item.cat_id;
-            db.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(item.id, userId, targetCatId, item.title, item.url, item.desc, item.icon, item.bg_color, idx, item.hidden ? 1 : 0);
+        safeItems.forEach((item, idx) => {
+            const oldCatId = item.catId || item.cat_id;
+            let targetCatId = catIdMap.get(oldCatId);
+            if (!targetCatId) {
+                targetCatId = catIdMap.values().next().value || null;
+            }
+            const newItemId = crypto.randomUUID();
+            db.prepare('INSERT INTO items (id, user_id, cat_id, title, url, desc, icon, bg_color, sort_order, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+                newItemId,
+                userId,
+                targetCatId,
+                item.title || '未命名书签',
+                item.url || '',
+                item.desc !== undefined ? item.desc : null,
+                item.icon !== undefined ? item.icon : null,
+                item.bg_color || '',
+                idx,
+                item.hidden ? 1 : 0
+            );
         });
         if (settings) {
             const linkTarget = settings.link_target || '_blank';
@@ -1846,6 +1897,19 @@ app.post('/api/config', authenticate, (req, res) => {
     fs.writeFileSync(kvPath, JSON.stringify(currentData, null, 2));
 
     res.json({ success: true });
+    } catch (e) {
+        console.error('[Config] POST /api/config failed:', e && e.message);
+        if (e && e.message && e.message.includes('UNIQUE')) {
+            return res.status(409).json({
+                error: '数据 ID 冲突，请重新导出后再导入，或刷新页面后重试同步',
+                code: 'ERR_ID_CONFLICT'
+            });
+        }
+        return res.status(500).json({
+            error: e.message || '保存配置失败',
+            code: 'ERR_CONFIG_SAVE'
+        });
+    }
 });
 
 app.delete('/api/config', authenticate, (req, res) => {

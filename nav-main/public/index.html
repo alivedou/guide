@@ -104,7 +104,7 @@
                             </div>
                         </div>
                     </div>
-                    <input type="text" id="sea-input" placeholder="输入关键词搜索本站，回车进行云端跳转..." autocomplete="off">
+                    <input type="text" id="sea-input" placeholder="输入关键词搜索本站，回车进行云端跳转..." autocomplete="off" autofocus>
                     <button id="sea-clear-btn" class="sea-clear-btn" title="清空"><i class="ri-close-line"></i></button>
                 </div>
                 <div class="search-dropdown" id="sea-dropdown" style="display: none;">
@@ -394,7 +394,10 @@
     <script src="/assets/js/cloud-sync.js"></script>
     <script src="/assets/js/sys-config.js"></script>
     <script src="/assets/js/user-manage.js"></script>
+    <script src="/assets/js/import-export-sanitize.js"></script>
     <script src="/assets/js/page-manage.js"></script>
     <script src="/assets/js/app.js"></script>
+    <!-- 搜索体验增量补丁：引擎本地持久化 / 首字符保留 / best-effort 聚焦 -->
+    <script src="/assets/js/search-ux.js"></script>
 </body>
 </html>
