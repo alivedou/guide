@@ -87,7 +87,6 @@ test.describe('P5 mobile bookmark cards', () => {
     await waitForApp(page);
     const cards = page.locator('.nav-grid').first().locator('.card:not(.add-new-card)');
     await expect(cards.first()).toBeVisible({ timeout: 15_000 });
-    await expect(cards).toHaveCount(await cards.count());
     expect(await cards.count()).toBeGreaterThanOrEqual(3);
 
     const row = await cards.evaluateAll((els) => {
