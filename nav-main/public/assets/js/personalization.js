@@ -23,13 +23,16 @@ window.openVisualLab = () => {
     title.innerHTML = `视觉实验室 ${window.isDataDirty ? '<span style="font-size:10px; background:#e67e22; color:#fff; padding:2px 6px; border-radius:10px; margin-left:10px; vertical-align:middle; font-weight:normal;">本地预览中</span>' : ''}`;
     const isZen = window.appData.settings?.zenMode === true;
     body.innerHTML = `
-        <div class="visual-option-group" style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px; margin-bottom: 12px;">
-            <span class="visual-option-label" style="margin: 0; font-size: 13px;"><i class="ri-keyboard-line"></i> 布局密度</span>
-            <div class="segmented-control" style="width: 220px; flex-shrink: 0;">
-                <button class="seg-btn ${window.appData.settings?.density === 'compact' ? 'active' : ''}" onclick="setVisualSetting('density', 'compact')">紧凑</button>
-                <button class="seg-btn ${(!window.appData.settings?.density || window.appData.settings?.density === 'standard') ? 'active' : ''}" onclick="setVisualSetting('density', 'standard')">平衡</button>
-                <button class="seg-btn ${window.appData.settings?.density === 'comfortable' ? 'active' : ''}" onclick="setVisualSetting('density', 'comfortable')">透气</button>
+        <div class="visual-option-group" style="display: flex; flex-direction: column; width: 100%; gap: 8px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px;">
+                <span class="visual-option-label" style="margin: 0; font-size: 13px;"><i class="ri-keyboard-line"></i> 布局密度</span>
+                <div class="segmented-control" style="width: 220px; flex-shrink: 0;">
+                    <button class="seg-btn ${window.appData.settings?.density === 'compact' ? 'active' : ''}" onclick="setVisualSetting('density', 'compact')">紧凑</button>
+                    <button class="seg-btn ${(!window.appData.settings?.density || window.appData.settings?.density === 'standard') ? 'active' : ''}" onclick="setVisualSetting('density', 'standard')">平衡</button>
+                    <button class="seg-btn ${window.appData.settings?.density === 'comfortable' ? 'active' : ''}" onclick="setVisualSetting('density', 'comfortable')">透气</button>
+                </div>
             </div>
+            <p class="visual-lab-phone-hint">手机端地址卡片已锁定为完整显示，布局密度仅电脑端生效。</p>
         </div>
         <div class="visual-option-group">
             <span class="visual-option-label" style="margin-bottom: 6px;"><i class="ri-image-line"></i> 自定义背景</span>

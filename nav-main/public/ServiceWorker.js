@@ -14,7 +14,7 @@
  */
 
 // 缓存版本号
-const CACHE_NAME = 'nav-core-v11';
+const CACHE_NAME = 'nav-core-v12';
 const ICON_CACHE_NAME = 'nav-icons-v2'; // cache version
 const MAX_ICON_CACHE_ITEMS = 150; // 图标缓存自限容量
 

@@ -35,3 +35,50 @@ test.describe('P5 mobile drawer', () => {
     await expect(page.locator('#sea-input')).toBeVisible();
   });
 });
+
+test.describe('P5 mobile bookmark cards', () => {
+  async function measureFirstCard(page) {
+    const card = page.locator('.nav-grid .card:not(.add-new-card)').first();
+    await expect(card).toBeVisible();
+    return card.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const h3 = el.querySelector('h3');
+      const h3cs = h3 ? getComputedStyle(h3) : null;
+      return {
+        width: box.width,
+        height: box.height,
+        lineClamp: h3cs ? String(h3cs.webkitLineClamp || h3cs.getPropertyValue('-webkit-line-clamp') || '') : '',
+        overflow: h3cs ? h3cs.overflow : '',
+        display: h3cs ? h3cs.display : '',
+      };
+    });
+  }
+
+  test('layout density does not shrink classic cards; titles are unclamped', async ({ page }) => {
+    await waitForApp(page);
+    await expect(page.locator('.nav-grid .card:not(.add-new-card)').first()).toBeVisible({ timeout: 15_000 });
+
+    await page.evaluate(() => {
+      window.appData.settings.density = 'compact';
+      window.updateStyles();
+    });
+    await expect(page.locator('body')).toHaveClass(/density-compact/);
+    const compact = await measureFirstCard(page);
+
+    await page.evaluate(() => {
+      window.appData.settings.density = 'comfortable';
+      window.updateStyles();
+    });
+    await expect(page.locator('body')).toHaveClass(/density-comfortable/);
+    const comfortable = await measureFirstCard(page);
+
+    expect(Math.abs(compact.width - comfortable.width)).toBeLessThan(1);
+    expect(Math.abs(compact.height - comfortable.height)).toBeLessThan(1);
+    expect(compact.width).toBeGreaterThan(120);
+
+    const clamp = String(comfortable.lineClamp).toLowerCase();
+    expect(clamp === 'none' || clamp === '' || clamp === 'unset').toBeTruthy();
+    expect(comfortable.overflow).not.toBe('hidden');
+    expect(comfortable.display).not.toBe('-webkit-box');
+  });
+});

@@ -2,6 +2,14 @@
  * responsive.css — Shared breakpoint layout (tablet/phone grids, overlay drawer).
  * Split from style.css with rule order preserved.
  */
+.visual-lab-phone-hint {
+    display: none;
+    font-size: 11px;
+    opacity: 0.65;
+    margin: 0;
+    line-height: 1.4;
+}
+
 /* ==================== 响应式设计 ==================== */
 @media (min-width: 1025px) {
     body.sidebar-pinned .main-content {
@@ -42,12 +50,7 @@
     }
 }
 
-/* 移动端/小屏手机单行强制 3 列，适合极窄视窗下的最简对称比例 */
-@media (max-width: 540px) {
-    .nav-grid {
-        grid-template-columns: repeat(3, 1fr) !important;
-    }
-}
+/* 手机端列数由下方 max-width: 768px 的经典卡片网格接管，不再强制 3 列。 */
 
 /* 触控反馈优化 */
 .card:active, .sidebar-nav-item:active, .tab-btn:active {
@@ -140,6 +143,88 @@ body.page-manage-active .sidebar-overlay {
 
     body.view-style-2 .nav-grid {
         gap: 12px;
+    }
+
+    /* 手机端经典地址卡片：锁定密度，完整显示图标与标题。不改缤纷列表（view-style-2）。 */
+    body,
+    body.density-compact,
+    body.density-standard,
+    body.density-comfortable {
+        --card-scale: 1;
+        --card-font-scale: 1;
+        --icon-size: 32px;
+        --emoji-size: 32px;
+    }
+
+    .visual-lab-phone-hint {
+        display: block;
+    }
+
+    body:not(.view-style-2) .nav-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+        justify-items: stretch;
+        gap: 10px;
+    }
+
+    body:not(.view-style-2) .nav-grid .card,
+    body:not(.view-style-2) .nav-grid .add-new-card {
+        width: 100% !important;
+        max-width: none !important;
+        height: auto !important;
+        min-height: 96px;
+        aspect-ratio: unset;
+        padding: 12px 8px 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    body:not(.view-style-2) .nav-grid .card a {
+        overflow: visible;
+        height: auto;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    body:not(.view-style-2) .nav-grid .card .icon-wrapper,
+    body:not(.view-style-2) .nav-grid .add-new-card .icon-wrapper {
+        width: 32px !important;
+        height: 32px !important;
+        margin: 0 auto 0 auto;
+        flex-shrink: 0;
+    }
+
+    body:not(.view-style-2) .nav-grid .card img,
+    body:not(.view-style-2) .nav-grid .add-new-card img {
+        width: 32px !important;
+        height: 32px !important;
+        max-width: 32px;
+        max-height: 32px;
+    }
+
+    body:not(.view-style-2) .nav-grid .card .emoji-icon {
+        font-size: 32px;
+    }
+
+    body:not(.view-style-2) .nav-grid .card h3,
+    body:not(.view-style-2) .nav-grid .add-new-card h3 {
+        display: block;
+        -webkit-line-clamp: unset;
+        line-clamp: unset;
+        -webkit-box-orient: unset;
+        overflow: visible;
+        text-overflow: unset;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        max-height: none;
+        min-height: 0;
+        font-size: 12px;
+        line-height: 1.35;
+        width: 100%;
+        text-align: center;
     }
 
     .video-grid {
