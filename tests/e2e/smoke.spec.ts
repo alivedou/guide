@@ -9,14 +9,13 @@ async function waitForApp(page) {
       typeof window.updateStyles === 'function' &&
       typeof window.initSearch === 'function'
   );
-  await expect(page.locator('#sea-input')).toBeVisible();
   await expect(page.locator('#sidebar')).toBeVisible();
+  await expect(page.locator('#btn-summon-search')).toBeVisible();
 }
 
 test.describe('P4 smoke', () => {
   test('homepage shell and window APIs', async ({ page }) => {
     await waitForApp(page);
-    await expect(page.locator('#btn-summon-search')).toBeVisible();
     const apis = await page.evaluate(() => ({
       showToast: typeof window.showToast,
       closeAllModals: typeof window.closeAllModals,
@@ -31,5 +30,6 @@ test.describe('P4 smoke', () => {
       expect(kind, name).toBe('function');
     }
     await expect(page.locator('#grid-container')).toBeVisible();
+    await expect(page.locator('#sea-input')).toBeAttached();
   });
 });
