@@ -264,14 +264,15 @@ npm install
 
 ```text
 ├── README.md / AGENTS.md   # 用户手册 / 维护约定
-├── package.json / server.js / Dockerfile / ikun.sh
+├── package.json / server.js / src/server/ / Dockerfile / ikun.sh
 ├── migrations/             # 运行时 DB 权威迁移（进 Docker）
 ├── sql/                    # 控制台/升级用 SQL（不进 Docker）
 ├── docs/                   # 部署/需求/测试报告 + 重构方案
-├── tests/                  # 基线契约与分阶段测试（见 tests/README.md）
-├── nav-main/               # CF Pages 根（public + functions）
+├── tests/                  # 基线契约与分阶段测试
+├── nav-main/               # CF Pages 根（public + functions + shared）
 │   ├── public/             # 静态前端
-│   └── functions/api/      # Pages Functions
+│   ├── functions/api/      # Pages Functions
+│   └── shared/             # 两端共用配额 / 默认数据 / schema patch
 └── .env.example / wrangler.toml*
 ```
 

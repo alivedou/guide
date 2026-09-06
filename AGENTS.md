@@ -36,15 +36,14 @@ CF-nav/
 ├── README.md                 # 用户部署手册（对外）
 ├── LICENSE
 ├── package.json              # 根 npm：dev/start/preview/Docker 依赖
-├── server.js                 # ★ VPS / 本地 Node 唯一运行时入口（大文件，勿拆）
-├── Dockerfile                # ★ Node 22 多阶段；只 COPY 见 §3
+├── server.js                 # ★ VPS / 本地 Node 入口（re-export → src/server）
+├── src/server/               # ★ Express：config / db / kv / middleware / routes
+├── Dockerfile                # ★ Node 22 多阶段；COPY server.js + src/ + migrations + nav-main
 ├── ikun.sh                   # ★ 一键脚本；GitHub raw URL 挂在仓库根，勿挪路径
 ├── wrangler.toml             # 根目录 wrangler（Pages Root=nav-main 时不生效）
 ├── wrangler.toml.example     # 含 KV/D1 binding 示例
 ├── .env.example
 ├── eslint.config.js          # 现行 ESLint flat config（npm run lint 用这个）
-├── .eslintrc.json            # 旧配置残留，勿当权威
-├── metadata.json             # 非运行时残留，勿当入口
 ├── migrations/               # ★ 运行时 DB 权威迁移（进 Docker）
 │   └── 0000_init.sql
 ├── sql/                      # 给人看的 SQL（不进 Docker）
@@ -83,7 +82,7 @@ CF-nav/
 
 | 路径 | 原因 |
 |------|------|
-| `server.js` / `Dockerfile` / `package.json` | Docker 与本地 `npm run dev` |
+| `server.js` / `src/server/` / `Dockerfile` / `package.json` | Docker 与本地 `npm run dev` |
 | `migrations/` | server 自愈 + wrangler migrate |
 | `nav-main/` | CF 构建根；前端与 Functions 都在这 |
 | `ikun.sh` | README 一键 URL：`https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh` |
@@ -106,6 +105,7 @@ CF-nav/
 ```text
 package*.json → npm ci --omit=dev
 server.js
+src/
 migrations/
 nav-main/
 ```
@@ -180,7 +180,7 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 
 1. 改 **`migrations/0000_init.sql`**（或新增 `migrations/000x_*.sql`）。
 2. 同步 **`sql/schema.sql`**。
-3. 视情况更新 `schema.console.sql` / `schema.upgrade.sql`，并给 `_d1_schema_patch.js` 与 `server.js` 热补丁补同一列。
+3. 视情况更新 `schema.console.sql` / `schema.upgrade.sql`，并给 `_d1_schema_patch.js` 与 `src/server/db.js` 热补丁补同一列（SQL 只写在 `nav-main/shared/schema-patch.js`）。
 4. **切记**：`CREATE TABLE IF NOT EXISTS` **不会**给旧表加列。
 
 ### 数据到底在哪（不要假设「全在 SQL」）
@@ -251,7 +251,7 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 
 原则：
 
-- **能新增模块就新增**；少改巨型 `app.js` / `server.js`；禁止无必要重构。
+- **能新增模块就新增**；少改巨型前端 `app.js`；Node 路由改 `src/server/routes/`，禁止无必要重构。
 - 浏览器地址栏焦点无法被网页抢走；omnibox 聚焦时做不到「开浏览器就键入进导航搜索」。
 - 改 PWA 缓存逻辑时升 `ServiceWorker.js` 里的 `CACHE_NAME`。
 
@@ -261,7 +261,7 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 
 ## 7. API 与权限
 
-路径统一 `/api/*`。改接口时 **Functions 与 `server.js` 都要看**。
+路径统一 `/api/*`。改接口时 **Functions 与 `src/server/routes/` 都要看**。
 
 | 路径 | 说明 |
 |------|------|
@@ -281,9 +281,9 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 | `GET /api/admin/audit-logs` | 审计 |
 | `GET /api/admin/cron-digest` | 日报；Header `x-cron-secret` 或已登录 admin |
 
-中间件：CF `_middleware.js` / Node `authenticate`。告警走 Telegram（可多 Bot 逗号分隔）或 Resend 邮件；本地无密钥时 `server.js` 会把日报打到控制台。
+中间件：CF `_middleware.js` / Node `src/server/middleware.js`。告警走 Telegram（可多 Bot 逗号分隔）或 Resend 邮件；本地无密钥时日报打到控制台。
 
-`server.js` 里 `/api/admin/site-config` 目前注册了**两套**相同路由，Express 只跑先注册的那套。不要再抄第三份；若清理重复，只删后一份、保留行为。
+`/api/admin/site-config` 只注册一套（GET 公开，POST 需管理员）。不要再抄第二份。
 
 ---
 
@@ -349,9 +349,9 @@ npm run format
 
 ## 11. 给 AI 的硬约束
 
-1. **增量开发**：优先新文件/新函数，禁止为「好看」重构 `app.js` / `server.js`。
+1. **增量开发**：优先新文件/新函数，禁止为「好看」重构前端 `app.js` 或把 `src/server` 再揉回单文件。
 2. **不删现有功能**，不擅自改对外 URL、binding 名（`nav` / `DB`）、`ikun.sh` 路径、镜像名 `ikun_nav`。
-3. **双部署意识**：改运行时逻辑时同时改 Functions 与 `server.js`；改默认数据只改 `nav-main/shared/default-data.js`；改配额只改 `nav-main/shared/quota.js`。
+3. **双部署意识**：改运行时逻辑时同时改 Functions 与 `src/server`；改默认数据只改 `nav-main/shared/default-data.js`；改配额只改 `nav-main/shared/quota.js`。
 4. **SQL 权威在 `migrations/`**，不要只改 `sql/` 就当修完库。
 5. **不要**把 `schema*.sql` 拷进 Dockerfile「顺便」。
 6. 大改前说明：修改位置、影响范围、风险；能写检查步骤就写。
@@ -376,4 +376,4 @@ npm run format
 
 ---
 
-*维护时以代码与本文为准；REQUIREMENTS / 旧 README 段落与实现冲突时，先核对 `server.js` / `nav-main/functions` 再改文档。*
+*维护时以代码与本文为准；REQUIREMENTS / 旧 README 段落与实现冲突时，先核对 `src/server` / `nav-main/functions` 再改文档。*

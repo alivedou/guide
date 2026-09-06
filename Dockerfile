@@ -28,6 +28,7 @@ COPY package*.json ./
 
 # 复制项目核心文件
 COPY server.js ./
+COPY src/ ./src/
 COPY migrations/ ./migrations/
 COPY nav-main/ ./nav-main/
 

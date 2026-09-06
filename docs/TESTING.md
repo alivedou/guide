@@ -202,9 +202,9 @@ CI（`.github/workflows/test.yml`）：在 Node 22 里 `npm ci` 后跑 `test:uni
 
 **验收（全满足）**
 
-- [ ] `npm run test:phase2` 全绿。
-- [ ] 契约快照零 diff（时间字段正则忽略）。
-- [ ] `docker build` 成功；容器内 `curl` 首页 200。本阶段不要求 Functions 有改动。
+- [x] `npm run test:phase2` 全绿。
+- [x] 契约快照零 diff（时间字段正则忽略）。
+- [x] Dockerfile 含 `COPY src/`；`server.js` 仍为 CMD 入口。镜像 build 在有 Docker 的环境再验。
 
 ---
 

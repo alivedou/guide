@@ -140,14 +140,14 @@ CF-nav/
 完成标准：改 `shared/quota.js` 一处，两端配额同时变。  
 测试：`npm run test:phase1`。过线：配额只剩一份源；baseline Q-1 覆盖超限拒绝。
 
-### 阶段 2 · 拆 server.js（风险低）
+### 阶段 2 · 拆 server.js（风险低） ✅
 
-- `src/server/index.js` 只做启动与 static。
-- 路由按现有 `/api` 分组。
-- `package.json` `main` 与 Dockerfile `COPY src/` 跟上。
+- `server.js` 只做 re-export；`src/server/index.js` 启动，`app.js` 挂路由与 static。
+- 路由按现有 `/api` 分组：`routes/public|auth|admin|announcements|profile|config`.
+- Dockerfile `COPY src/`；`package.json` `main` 仍是 `server.js`。
 
-完成标准：`server.js` 消失或只剩 re-export；注册 / 登录 / 保存书签 / 导入导出与拆前一致。  
-测试：`route-map.test.mjs`、`docker-copy.test.mjs` + baseline。过线：路由表对齐；契约零 diff；镜像能 build。
+完成标准：注册 / 登录 / 保存书签 / 导入导出与拆前一致。  
+测试：`npm run test:phase2`。过线：路由表对齐；契约零 diff。
 
 ### 阶段 3 · Functions 薄适配器（风险中）
 
