@@ -50,7 +50,7 @@
     }
 }
 
-/* 手机端经典卡片列数在 max-width: 768px 中强制为 3 列；密度缩放仍锁定。 */
+/* 窄屏（≤540）经典卡片固定 3 列；541–768 小平板 auto-fill 多列。密度锁定仍在 768。 */
 
 /* 触控反馈优化 */
 .card:active, .sidebar-nav-item:active, .tab-btn:active {
@@ -161,7 +161,7 @@ body.page-manage-active .sidebar-overlay {
     }
 
     body:not(.view-style-2) .nav-grid {
-        grid-template-columns: repeat(3, 1fr) !important;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important;
         justify-items: stretch;
         gap: 8px;
     }
@@ -243,6 +243,12 @@ body.page-manage-active .sidebar-overlay {
 
     .category-section-title {
         font-size: 14px;
+    }
+}
+
+@media (max-width: 540px) {
+    body:not(.view-style-2) .nav-grid {
+        grid-template-columns: repeat(3, 1fr) !important;
     }
 }
 

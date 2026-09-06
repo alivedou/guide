@@ -103,3 +103,27 @@ test.describe('P5 mobile bookmark cards', () => {
     expect(row.columns.split(' ').filter(Boolean)).toHaveLength(3);
   });
 });
+
+test.describe('P5 small-tablet bookmark cards', () => {
+  test.use({ viewport: { width: 768, height: 1024 } });
+
+  test('classic grid uses more than three columns', async ({ page }) => {
+    await waitForApp(page);
+    const cards = page.locator('.nav-grid').first().locator('.card:not(.add-new-card)');
+    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
+    expect(await cards.count()).toBeGreaterThanOrEqual(4);
+
+    const row = await cards.evaluateAll((els) => {
+      const columns = getComputedStyle(els[0].parentElement).gridTemplateColumns
+        .split(' ')
+        .filter(Boolean);
+      const firstFour = els.slice(0, 4).map((el) => el.offsetTop);
+      return { colCount: columns.length, firstFour };
+    });
+
+    expect(row.colCount).toBeGreaterThan(3);
+    expect(Math.abs(row.firstFour[0] - row.firstFour[1])).toBeLessThan(2);
+    expect(Math.abs(row.firstFour[1] - row.firstFour[2])).toBeLessThan(2);
+    expect(Math.abs(row.firstFour[2] - row.firstFour[3])).toBeLessThan(2);
+  });
+});
