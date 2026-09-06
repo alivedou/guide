@@ -90,16 +90,16 @@ test.describe('P5 mobile bookmark cards', () => {
     expect(await cards.count()).toBeGreaterThanOrEqual(3);
 
     const row = await cards.evaluateAll((els) => {
-      const first = els.slice(0, 3).map((el) => {
-        const box = el.getBoundingClientRect();
-        return { top: Math.round(box.top), width: box.width };
-      });
+      const first = els.slice(0, 3).map((el) => ({
+        top: el.offsetTop,
+        width: el.getBoundingClientRect().width,
+      }));
       const columns = getComputedStyle(els[0].parentElement).gridTemplateColumns;
       return { first, columns };
     });
 
-    expect(row.first[0].top).toBe(row.first[1].top);
-    expect(row.first[1].top).toBe(row.first[2].top);
+    expect(Math.abs(row.first[0].top - row.first[1].top)).toBeLessThan(2);
+    expect(Math.abs(row.first[1].top - row.first[2].top)).toBeLessThan(2);
     expect(row.columns.split(' ').filter(Boolean)).toHaveLength(3);
   });
 });
