@@ -259,8 +259,8 @@ CI（`.github/workflows/test.yml`）：在 Node 22 里 `npm ci` 后跑 `test:uni
 
 **验收（全满足）**
 
-- [ ] `npx playwright test tests/e2e` 全绿（桌面 1280 与手机 390 各跑 smoke）。
-- [ ] `npm run test:phase4` 全绿。
+- [x] `npx playwright test tests/e2e` 全绿（桌面 1280 与手机 390 各跑 smoke）。
+- [x] `npm run test:phase4` 全绿。
 - [ ] 手工（本阶段允许作为补充，不能替代 E2E）：禅意开关、侧边栏钉住、拖拽一张卡片、后台四个 Tab 能打开列表。
 
 Playwright 建议 `testId` 先用现有 `id`（`#sidebar`、`#btn-summon-search`），不要为测试改视觉。
@@ -275,7 +275,7 @@ Playwright 建议 `testId` 先用现有 `id`（`#sidebar`、`#btn-summon-search`
 - `tests/e2e/visual.spec.ts`
 - `tests/e2e/responsive.spec.ts`
 - `tests/fixtures/css-selectors.json`
-- `tests/fixtures/screenshots/`
+- `tests/fixtures/screenshots/`（Playwright `toHaveScreenshot` 基线，路径见 `playwright.config.ts` 的 `snapshotPathTemplate`）
 
 **用例**
 

@@ -1,0 +1,780 @@
+/**
+ * search.css — Search overlay, zen mode, and magic-wand controls.
+ * Split from style.css with rule order preserved.
+ */
+/* ==================== 高颜值立体搜索框 (Summoned Overlay) ==================== */
+body.search-active,
+body.search-active .app-layout {
+    overflow: hidden !important;
+    height: 100% !important;
+    height: 100dvh !important;
+}
+
+/* 激活搜索框时，禁用底层一切可能误触的页面交互 (Task UI.27) */
+body.search-active .main-content,
+body.search-active .sidebar,
+body.search-active .sidebar-toggle,
+body.search-active .summon-search-btn,
+body.search-active .sidebar-overlay,
+body.search-active .zen-horizon,
+body.search-active .zen-expand-btn,
+body.search-active .quick-nav-group {
+    pointer-events: none !important;
+}
+
+.search-section {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 5500; /* 确立最高统治权，覆盖侧边栏 (3000) 与气泡提示 (5000) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.68);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+    visibility: hidden;
+    overscroll-behavior: contain; /* 阻止滚动溢出与弹性滚动穿透到底部 */
+    touch-action: none; /* 🚀 核心增加：彻底禁止移动端手势滑动穿透至背景层 */
+}
+
+body.search-active .search-section {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+}
+
+/* 提升主内容上下文，穿透侧边栏遮罩的压制 (z-index 2900) */
+body.search-active .main-content {
+    position: relative;
+    z-index: 6000 !important;
+}
+
+.search-wrapper {
+    background: rgba(15, 25, 35, 0.82); /* 提升背景不透明度以增强输入文字对比度 */
+    border: 1px solid var(--glass-border); /* 复用全局边框变量 */
+    border-radius: 28px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4); /* 增强悬浮阴影，确立 Overlay 深度 */
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+    position: relative;
+    width: 90%;
+    max-width: 720px;
+    margin: 0 auto;
+    /* 抗锯齿补丁 (Task 10.1) */
+    outline: 1px solid transparent;
+    backface-visibility: hidden;
+    transform: perspective(1000px) scale(0.9) translateY(30px);
+    touch-action: auto; /* 🚀 核心增加：保证搜索框内部和下拉匹配词能够正常触发纵向轻触滑动 */
+}
+
+body.search-active .search-wrapper {
+    transform: perspective(1000px) scale(1) translateY(0);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .search-wrapper {
+        width: 95%;
+        border-radius: 20px; /* 移动端圆角稍微减小以适配小屏比例 */
+        transform: perspective(1000px) scale(0.95) translateY(20px);
+    }
+    body.search-active .search-wrapper {
+        transform: perspective(1000px) scale(1) translateY(0);
+    }
+}
+
+/* 搜索引擎切换器具体样式 */
+.search-engine-selector {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    flex-shrink: 0;
+    width: 44px; /* 固定宽度防止抖动 */
+    height: 44px;
+}
+
+.current-engine {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: #fff;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: all 0.2s;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.current-engine:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+body.light-theme .current-engine {
+    color: #444;
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.05);
+}
+
+.engine-list {
+    position: absolute;
+    top: calc(100% + 12px);
+    left: 0;
+    width: 140px;
+    background: #1e1e1e;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 6px;
+    display: none; /* 默认隐藏 */
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    z-index: 2000;
+}
+
+.engine-list.show {
+    display: flex; /* 只在有 .show 时显示 */
+    animation: engineListFadeIn 0.2s ease-out;
+}
+
+@keyframes engineListFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.engine-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.engine-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.engine-item.active {
+    background: rgba(57, 157, 255, 0.2);
+    color: var(--primary);
+}
+
+body.light-theme .engine-list {
+    background: rgba(255, 255, 255, 0.98);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+body.light-theme .engine-item {
+    color: #555;
+}
+
+body.light-theme .engine-item:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a1a;
+}
+
+body.light-theme .engine-item.active {
+    background: rgba(57, 157, 255, 0.1);
+    color: var(--primary);
+}
+
+@keyframes slideInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 移除旧的 Search Tabs 相关样式，防止干扰 */
+.engine-tabs, .engine-tab {
+    display: none !important;
+}
+
+/* ==================== 快捷导航按钮 (Quick Nav) ==================== */
+.quick-nav-group {
+    position: fixed;
+    bottom: 30px;
+    right: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 2000;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+    transform: translateX(20px);
+}
+
+.quick-nav-group.visible {
+    pointer-events: auto;
+}
+
+.quick-nav-btn {
+    width: 45px;
+    height: 45px;
+    border-radius: 12px;
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.quick-nav-btn:hover {
+    background: var(--glass-hover);
+    color: var(--primary);
+    border-color: var(--glass-border);
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 12px 30px rgba(57, 157, 255, 0.4);
+}
+
+body.light-theme .quick-nav-btn {
+    background: rgba(255, 255, 255, 0.8);
+    color: #3d4f5f;
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme .quick-nav-btn:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 12px 30px rgba(57, 157, 255, 0.3);
+}
+
+@media (max-width: 768px) {
+    .quick-nav-group {
+        bottom: calc(30px + env(safe-area-inset-bottom));
+        right: 15px;
+    }
+    .quick-nav-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        font-size: 22px;
+    }
+
+    /* 移动端常驻防护：防止在手机端禅意/静默状态下导致这些按钮完全丢失/隐藏。
+       恢复其可见性，并保持与常规模式完全对齐的收纳隐退策略。 */
+    body.zen-active .sidebar-toggle,
+    body.zen-active.zen-silent .sidebar-toggle,
+    body.zen-active .summon-search-btn,
+    body.zen-active.zen-silent .summon-search-btn {
+        opacity: 0.45 !important; /* 默认未激活时为半透 */
+        pointer-events: auto !important;
+        transform: translateX(35px) !important; /* 一半隐藏在右侧 */
+    }
+
+    body.zen-active .quick-nav-group,
+    body.zen-active.zen-silent .quick-nav-group {
+        opacity: 0.45 !important; /* 默认未激活时为半透 */
+        pointer-events: auto !important;
+        transform: translateX(60px) !important; /* 完全隐藏在右侧 */
+    }
+
+    /* 当激活弹出态时（正在滚动、侧边栏开启、或悬停激活）：强制全显并移回屏幕原位 */
+    body.zen-active.scroll-active .sidebar-toggle,
+    body.zen-active.sidebar-open .sidebar-toggle,
+    body.zen-active.scroll-active .summon-search-btn,
+    body.zen-active.sidebar-open .summon-search-btn,
+    body.zen-active .quick-nav-group:hover,
+    body.zen-active .quick-nav-group.active {
+        opacity: 1 !important;
+        transform: translateX(0) !important;
+    }
+
+    /* 搜索激活时在手机端彻底隐藏这三个按钮，防止在搜索遮罩层上穿透与折射 */
+    body.search-active.zen-active .sidebar-toggle,
+    body.search-active.zen-active .summon-search-btn,
+    body.search-active.zen-active .quick-nav-group {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transform: scale(0.9) translateY(-10px) !important;
+    }
+}
+
+/* ==================== 搜索态与激活态隔离 (Task 2.5.2) ==================== */
+body.search-active .grid-container,
+body.is-searching .grid-container,
+body.search-active .zen-horizon,
+body.is-searching .zen-horizon {
+    opacity: 0.15 !important;
+    filter: none !important;
+    transform: none !important;
+    pointer-events: none !important;
+}
+
+body.search-active .category-section-title,
+body.is-searching .category-section-title {
+    opacity: 0 !important;
+    transform: none !important;
+}
+
+/* 禅意模式悬浮展开按钮在搜索激活时自动隐退 */
+body.search-active .zen-expand-btn,
+body.is-searching .zen-expand-btn {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* 当大搜索激活时，底层的侧边栏遮罩自动静音退场，消灭遮罩重叠和折射杂色 */
+body.search-active .sidebar-overlay {
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
+.grid-container, .category-section-title {
+    transition: all 0.5s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+/* ==================== 极简沉浸沉浸模式 (Zen Mode) ==================== */
+.sidebar,
+.sidebar-toggle,
+.grid-container,
+.category-section-title,
+.footer-info,
+.quick-nav-group {
+    transition: transform 0.6s cubic-bezier(0.165, 0.84, 0.44, 1), 
+                opacity 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+body.zen-active .sidebar,
+body.zen-active .sidebar-toggle,
+body.zen-active .grid-container,
+body.zen-active .category-section-title,
+body.zen-active .quick-nav-group {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(30px);
+}
+
+/* Task 21.2: 禅意模式版权信息策略 - 仅在静默态隐藏 */
+body.zen-active .footer-info {
+    opacity: 0.8;
+    transform: translateY(0);
+}
+
+body.zen-active.zen-silent .footer-info {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
+}
+
+/* Task 33.1: 禅意模式下统一容器宽度与对齐 */
+body.zen-active:not(.zen-silent) .grid-container {
+    max-width: 1200px !important; 
+    margin: 0 auto !important;
+    padding: 0 30px 40px !important; /* 与 zen-horizon 的 padding: 0 30px 一致 */
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+body.zen-active:not(.zen-silent) .category-section-title {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 8px 20px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+/* 确保侧边栏在显式打开时，无论是否在禅意模式都必须可见 */
+body.zen-active .sidebar.open {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateX(0) !important;
+    visibility: visible !important;
+}
+
+body.zen-active .main-content {
+    margin-left: 0 !important;
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+.zen-expand-btn {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    z-index: 100;
+    transition: all 0.3s ease;
+    animation: bounce 2s infinite;
+}
+
+body.light-theme .zen-expand-btn {
+    color: rgba(0, 0, 0, 0.5);
+}
+
+.zen-expand-btn:hover {
+    color: #399dff;
+    transform: translateX(-50%) translateY(-5px);
+}
+
+.zen-expand-btn i {
+    font-size: 28px;
+}
+
+.zen-expand-btn span {
+    font-size: 13px;
+    letter-spacing: 1px;
+}
+
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {transform: translateX(-50%) translateY(0);}
+    40% {transform: translateX(-50%) translateY(-10px);}
+    60% {transform: translateX(-50%) translateY(-5px);}
+}
+
+body:not(.zen-active) .zen-expand-btn {
+    opacity: 0;
+    pointer-events: none;
+    display: none !important;
+}
+
+.sidebar, .sidebar-toggle, .grid-container, .category-section-title, .footer-info {
+    transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+body.light-theme .search-section {
+    background: rgba(255, 255, 255, 0.75);
+}
+
+body.light-theme .search-wrapper {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
+}
+
+.search-section:focus-within .search-wrapper {
+    background: rgba(0, 0, 0, 0.55);
+    border-color: rgba(57, 157, 255, 0.35);
+    box-shadow: 0 8px 32px rgba(57, 157, 255, 0.15), 0 0 15px rgba(57, 157, 255, 0.1);
+}
+
+body.light-theme .search-section:focus-within .search-wrapper {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(57, 157, 255, 0.5);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.06), 0 0 15px rgba(57, 157, 255, 0.2);
+}
+
+.search-input-group {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    gap: 12px;
+}
+
+.search-icon {
+    font-size: 20px;
+    color: var(--text-dim);
+    opacity: 0.8;
+}
+
+#sea-input {
+    flex: 1;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+    font-size: 17px;
+    font-weight: 500;
+    padding: 4px 0 !important; /* 增加上下安全内边距，解决 j, g, y 等字母截断问题 */
+    margin: 0;
+    line-height: 1.4; /* 设定舒适行高确保文本垂直居中与展示 */
+}
+
+body.light-theme #sea-input {
+    color: #1a1a1a !important;
+}
+
+#sea-input::placeholder {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+body.light-theme #sea-input::placeholder {
+    color: rgba(0, 0, 0, 0.55);
+}
+
+.sea-clear-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 20px;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    border-radius: 50%;
+}
+
+.sea-clear-btn:hover {
+    opacity: 1;
+    background: rgba(255,255,255,0.1);
+}
+
+body.light-theme .sea-clear-btn:hover {
+    background: rgba(0,0,0,0.06);
+}
+
+/* 搜索下拉框样式 (Task 2.5.2) - 升级为与输入框 1:1 对齐的一体化磨砂玻璃 (Task UI.26) */
+.search-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: rgba(15, 25, 35, 0.82);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid var(--glass-border);
+    border-top: none;
+    border-radius: 0 0 28px 28px;
+    padding: 15px;
+    z-index: 1000;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+}
+
+/* 当搜索状态激活时，无缝平滑抹平输入框底部圆角 (Task UI.26) */
+body.is-searching .search-wrapper {
+    border-radius: 28px 28px 0 0 !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+}
+
+.local-result-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 15px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.local-result-item:hover,
+.local-result-item.active {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(5px);
+}
+
+.local-result-item.active {
+    border: 1px solid var(--primary);
+}
+
+.result-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    flex-shrink: 0;
+    font-size: 20px;
+    line-height: 1;
+}
+
+.result-icon img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+.result-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.result-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.result-url {
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.6;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-empty-tip {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-style: italic;
+}
+
+body.light-theme .search-dropdown {
+    background: rgba(255, 255, 255, 0.82);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme .local-result-item:hover,
+body.light-theme .local-result-item.active {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* ==================== Task 3.2: 魔法棒与管理按钮 ==================== */
+.card-admin-btns {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: none;
+    gap: 4px;
+    z-index: 10;
+}
+
+/* 进入管理模式后，所有管理按钮（眼睛、编辑、删除）全局保持常亮，方便一眼获知显隐状态，同时解决触屏设备无法悬停的交互盲区 */
+body.page-manage-active .card-admin-btns {
+    display: flex;
+    opacity: 0.75;
+    transition: opacity 0.2s ease;
+}
+
+body.page-manage-active .card:hover .card-admin-btns {
+    opacity: 1;
+}
+
+.card-edit-btn, .card-hide-toggle-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.card-edit-btn:hover, .card-hide-toggle-btn:hover {
+    background: var(--primary);
+    transform: scale(1.1);
+}
+
+.card-delete-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.card-delete-btn:hover {
+    background: #e74c3c;
+    transform: scale(1.1);
+}
+
+/* 对外隐藏书签的状态标识（小眼睛图标） */
+.card-hidden-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    z-index: 10;
+    pointer-events: none; /* 确保不影响点击穿透到卡片链接 */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
+}
+
+body.light-theme .card-hidden-badge {
+    background: rgba(255, 255, 255, 0.7);
+    color: rgba(0, 0, 0, 0.6);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+.icon-btn-action {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.icon-btn-action:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.icon-btn-action.loading i {
+    animation: spin 1s linear infinite;
+}
+
+#edit-icon-preview {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.light-theme .icon-btn-action {
+    background: rgba(0, 0, 0, 0.05);
+    color: #3d4f5f;
+}

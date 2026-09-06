@@ -1,0 +1,211 @@
+/**
+ * tokens.css — Design tokens and the early light-theme overrides (kept in original cascade order).
+ * Split from style.css with rule order preserved.
+ */
+/**
+ * ==========================================
+ * style.css - 核心样式文件（升级版 v5）
+ * 左侧导航 + 连续滚动 + 视频导航 + Monaco Editor
+ * Style 0: 经典图标网格
+ * Style 2: 缤纷模式（列表详情 + 用户自定义背景色）
+ * ==========================================
+ */
+
+/* ==================== CSS 变量定义 ==================== */
+:root {
+    /* 统一毛玻璃背景及透明度（常规/沉浸模式同步复用，黑暗模式高透设计） */
+    --glass-bg: rgba(0, 0, 0, 0.2);
+    --glass: var(--glass-bg);
+    --glass-hover: rgba(0, 0, 0, 0.35);
+    --glass-border: rgba(255, 255, 255, 0.08);
+
+    /* 文字颜色 */
+    --text: #ffffff;
+    --text-dim: rgba(255, 255, 255, 0.85);
+
+    /* 主题色 */
+    --primary: #399dff;
+    --primary-color: var(--primary);
+
+    /* 圆角与尺寸 */
+    --radius: 15px;
+    --card-w-base: 105px;
+    --card-h-base: 105px;
+    --grid-gap-base: 20px;
+    --card-scale: 1;
+    --card-font-scale: 1;
+
+    /* 背景遮罩透明度 */
+    --bg-overlay-opacity: 0.4;
+
+    /* 侧边栏尺寸 */
+    --sidebar-width: 250px;
+    --sidebar-mini-width: 72px;
+    --sidebar-transition: 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+/* ==================== 亮色模式 ==================== */
+body.light-theme {
+    /* 统一亮色毛玻璃背景及透明度（常规/沉浸模式同步复用，明亮模式高透设计） */
+    --glass-bg: rgba(255, 255, 255, 0.45);
+    --glass: var(--glass-bg);
+    --glass-hover: rgba(255, 255, 255, 0.65);
+    --glass-border: rgba(0, 0, 0, 0.06);
+    --text: #2c3e50;
+    --text-dim: rgba(44, 62, 80, 0.7);
+    --bg-overlay-opacity: 0.25;
+}
+
+body.light-theme {
+    background-color: #f0f4f8; /* 仅作为背景图未加载时的底色 */
+    background-image: none;    /* 移除强制渐变，防止干扰 JS 注入的背景图 */
+}
+
+body.light-theme::before {
+    background: rgba(240, 243, 248, var(--bg-overlay-opacity));
+}
+
+body.light-theme .sidebar {
+    background: var(--glass-bg);
+    border-color: rgba(0, 0, 0, 0.06);
+}
+
+body.light-theme .sidebar-nav-item {
+    color: #5a6a7a;
+}
+
+body.light-theme .sidebar-nav-item.active {
+    background: var(--primary);
+    color: white;
+}
+
+body.light-theme .sidebar-nav-item:hover:not(.active) {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+body.light-theme .tab-btn {
+    color: #3d4f5f;
+    border-color: rgba(0, 0, 0, 0.08);
+    background: rgba(255, 255, 255, 0.5);
+}
+
+body.light-theme .tab-btn.active {
+    background: var(--primary);
+    color: white;
+}
+
+body.light-theme .card {
+    background: var(--glass);
+}
+
+body.light-theme .card:hover {
+    background: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 0 12px rgba(57, 157, 255, 0.2), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme .card h3 {
+    color: #3d4f5f;
+}
+
+body.light-theme .modal-content {
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme input,
+body.light-theme select,
+body.light-theme textarea {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #3d4f5f;
+}
+
+body.light-theme input::placeholder,
+body.light-theme textarea::placeholder {
+    color: rgba(0, 0, 0, 0.3);
+}
+
+body.light-theme .admin-actions {
+    background: rgba(255, 255, 255, 0.85);
+}
+
+body.light-theme .batch-actions-bar {
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme .batch-btn.delete {
+    background: rgba(231, 76, 60, 0.85);
+}
+
+body.light-theme .batch-btn.move {
+    background: rgba(57, 157, 255, 0.85);
+}
+
+body.light-theme .sidebar-header {
+    border-color: rgba(0, 0, 0, 0.06);
+}
+
+body.light-theme .sidebar-footer {
+    border-color: rgba(0, 0, 0, 0.06);
+}
+
+body.light-theme .category-section-title {
+    color: #2c3e50;
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+body.light-theme .sidebar-toggle,
+body.light-theme .summon-search-btn {
+    background: rgba(255, 255, 255, 0.8);
+    color: #3d4f5f;
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme .sidebar-toggle:hover,
+body.light-theme .summon-search-btn:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+body.light-theme .video-card {
+    background: var(--glass);
+    border-color: rgba(0, 0, 0, 0.06);
+}
+
+body.light-theme .video-card .video-card-title {
+    color: #3d4f5f;
+}
+
+body.light-theme .video-card .video-card-desc {
+    color: #8a9aaa;
+}
+
+body.light-theme .video-modal-content {
+    background: rgba(245, 247, 250, 0.98);
+}
+
+body.light-theme .video-info h3 {
+    color: #3d4f5f;
+}
+
+body.light-theme .video-info p {
+    color: #8a9aaa;
+}
+
+body.light-theme .monaco-modal-content {
+    background: rgba(245, 247, 250, 0.98);
+}
+
+body.light-theme .monaco-header {
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme .monaco-header h4 {
+    color: #3d4f5f;
+}

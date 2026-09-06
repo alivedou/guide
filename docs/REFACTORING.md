@@ -170,11 +170,13 @@ CF-nav/
 完成标准：搜索首字符、禅意、拖拽、后台四个 Tab 与现在相同。  
 测试：Playwright smoke/search/admin + `module-boot.test.mjs`。过线：首字符与引擎刷新不回归；CACHE_NAME 已升高。
 
-### 阶段 5 · CSS / HTML 减负（风险中）
+### 阶段 5 · CSS / HTML 减负（风险中） ✅
 
-- CSS 按 tokens / layout / sidebar / cards / search / modals / admin / responsive 切开。
-- 不要用深层 `@import`。快捷键指南去掉 inline style。
+- CSS 按 tokens / layout / sidebar / cards / search / modals / admin / responsive 切开（源码顺序未重排）。
+- `style.css` 仅作一层 `@import` 兼容 shim；`index.html` 直接 link 八个文件，tokens 最先。
+- 快捷键指南去掉 inline style。
 - 不给导航站上 Tailwind。
+- **升高** `ServiceWorker.js` 的 `CACHE_NAME`（`nav-core-v11`），precache 拆后的 CSS。
 
 测试：`css-order.test.mjs` + 视觉/响应式 E2E。过线：tokens 先加载；主题截图 diff < 0.3% 或有说明的基线更新。
 

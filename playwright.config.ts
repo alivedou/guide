@@ -7,7 +7,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,
-  expect: { timeout: 10_000 },
+  expect: { timeout: 10_000, toHaveScreenshot: { maxDiffPixelRatio: 0.003, animations: 'disabled' } },
+  snapshotPathTemplate: 'tests/fixtures/screenshots/{arg}{-projectName}{ext}',
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     trace: 'on-first-retry',

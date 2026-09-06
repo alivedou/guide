@@ -1,0 +1,1149 @@
+/**
+ * modals.css — Modals, forms, toast, skeleton, page-manage, video, Monaco, and system preference hooks.
+ * Split from style.css with rule order preserved.
+ */
+/* ==================== 模态框 ==================== */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: rgba(30, 30, 30, 0.95);
+    width: 90%;
+    max-width: 480px;
+    padding: 24px;
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    position: relative;
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+/* 优化滚动条样式 */
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+.modal-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+.modal-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+body.light-theme .modal-content {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+}
+
+/* ==================== 表单元素 ==================== */
+.form-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.form-row label {
+    width: 100px;
+    text-align: left;
+    font-size: 13px;
+    color: #ccc;
+    flex-shrink: 0;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+body.light-theme .form-row label {
+    color: #555;
+}
+
+/* ==================== 登录/注册 Tab 样式 (Task 6.1) ==================== */
+.auth-title-group {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 25px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.auth-tab {
+    position: relative;
+    cursor: pointer;
+    margin: 0;
+    padding-bottom: 10px;
+    font-size: 18px;
+    color: var(--text-dim);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-bottom: 3px solid transparent;
+    opacity: 0.6;
+}
+
+.auth-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+    font-weight: bold;
+    opacity: 1;
+    transform: translateY(-1px);
+}
+
+.auth-tab:hover:not(.active) {
+    color: var(--text);
+    opacity: 0.9;
+}
+
+body.light-theme .auth-title-group {
+    border-color: rgba(0, 0, 0, 0.05);
+}
+
+body.light-theme .auth-tab {
+    color: #666;
+}
+
+body.light-theme .auth-tab.active {
+    color: var(--primary);
+}
+
+input,
+select {
+    flex: 1;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.3);
+    color: #fff;
+    outline: none;
+    font-size: 14px;
+    width: 100%;
+}
+
+input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* ==================== 复选框和单选框 ==================== */
+input[type="checkbox"],
+input[type="radio"] {
+    margin: 0;
+    padding: 10px;
+    flex-shrink: 0;
+    width: auto !important;
+    min-width: 18px;
+    max-width: 18px;
+    height: 18px;
+}
+
+/* ==================== 图标预览容器 ==================== */
+.preview-container {
+    width: 38px;
+    height: 38px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 20px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.preview-container img {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    object-fit: contain;
+}
+
+.preview-container span {
+    font-size: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+/* 亮色模式适配 */
+body.light-theme .preview-container {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.08);
+    color: #3d4f5f;
+}
+
+/* ==================== Toast 提示 ==================== */
+#toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(50px);
+    background: #27ae60;
+    color: white;
+    padding: 12px 30px;
+    border-radius: 30px;
+    border: 1px solid var(--glass-border);
+    z-index: 3000;
+    text-align: center;
+    font-weight: bold;
+    font-size: 14px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+    pointer-events: none;
+}
+
+#toast.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* ==================== 加载动画 ==================== */
+.global-spinner {
+    width: 45px;
+    height: 45px;
+    border: 4px solid rgba(255, 255, 255, 0.2);
+    border-top: 4px solid var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+#global-loading-overlay {
+    display: none;
+    flex-direction: column;
+}
+
+/* ==================== 骨架屏 ==================== */
+#skeleton-screen {
+    display: none;
+    width: 100%;
+    max-width: 62rem;
+    margin: 0 auto;
+    padding-top: 10px;
+}
+
+.skel-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+    width: 120px;
+}
+
+.skel-tab {
+    width: 100%;
+    height: 35px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.skel-grid {
+    display: grid;
+    gap: 15px;
+    margin: 0 auto;
+    width: 100%;
+    grid-template-columns: repeat(6, 1fr);
+}
+
+.skel-card {
+    height: var(--card-h, 105px); /* 🚀 对齐默认 105px 骨架屏高度 */
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.05);
+    position: relative;
+    overflow: hidden;
+}
+
+.skel-anim::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+}
+
+/* ==================== 页脚信息 ==================== */
+.footer-info {
+    margin-top: auto; /* Task 21.1: 关键！将页脚推至容器底部 */
+    padding: 50px 0 20px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+    z-index: 50;
+    transition: all 0.3s ease;
+}
+
+/* Task 21.2: 管理模式下强制隐藏页脚，避免干扰编辑交互 */
+body.admin-mode .footer-info {
+    display: none !important;
+}
+
+body.light-theme .footer-info {
+    color: rgba(0, 0, 0, 0.3);
+}
+
+.copyright-text a:hover {
+    opacity: 1 !important;
+    text-decoration: underline !important;
+}
+
+/* ==================== 拖拽排序相关 ==================== */
+.card.sortable-ghost {
+    opacity: 0.4;
+    background: var(--primary);
+}
+
+.card.sortable-drag {
+    opacity: 0.9;
+    transform: rotate(3deg) scale(1.05);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(57, 157, 255, 0.4);
+    z-index: 1000;
+}
+
+.card.drag-over {
+    transform: translateY(5px);
+    border-color: var(--primary);
+}
+
+/* 视频卡片拖拽排序样式 */
+.video-card.sortable-ghost {
+    opacity: 0.4;
+    background: var(--primary);
+}
+
+.video-card.sortable-drag {
+    opacity: 0.9;
+    transform: rotate(2deg) scale(1.03);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(57, 157, 255, 0.4);
+    z-index: 1000;
+}
+
+.video-card.drag-over {
+    transform: translateY(5px);
+    border-color: var(--primary);
+}
+
+.cat-item-row.sortable-ghost {
+    background: var(--primary) !important;
+    opacity: 0.5;
+}
+
+.drag-handle {
+    cursor: grab;
+    color: #666;
+    margin-right: 5px;
+    font-size: 18px;
+}
+
+/* Task 11.1: 管理模式下网格掉落区视觉强化 */
+body.page-manage-active .nav-grid {
+    min-height: 120px;
+    border: 2px dashed rgba(57, 157, 255, 0.15);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin: 10px 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(57, 157, 255, 0.02);
+    position: relative;
+}
+
+/* Task 11.6: 拖拽悬停高亮 */
+body.page-manage-active .nav-grid.grid-active {
+    border-color: var(--primary);
+    background: rgba(57, 157, 255, 0.08);
+    box-shadow: inset 0 0 20px rgba(57, 157, 255, 0.1);
+    transform: scale(1.01);
+}
+
+/* 优化占位符 (Ghost) 样式 - 使其更有“坑位”感 */
+.card.sortable-ghost {
+    opacity: 0.2 !important;
+    background: var(--primary) !important;
+    border: 2px dashed var(--primary) !important;
+    box-shadow: none !important;
+}
+
+/* 全卡片热区提示 (排除新增按钮) */
+body.page-manage-active .card:not(.add-new-card) {
+    cursor: grab;
+}
+
+body.page-manage-active .card:not(.add-new-card):active {
+    cursor: grabbing;
+}
+
+/* ==================== 批量选择样式 ==================== */
+.card.selected {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    background: rgba(57, 157, 255, 0.2);
+}
+
+.card.selected::after {
+    content: '✓';
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.batch-actions-bar {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 30, 30, 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 30px;
+    padding: 10px 20px;
+    display: none;
+    gap: 10px;
+    align-items: center;
+    z-index: 1000;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+.batch-actions-bar.visible {
+    display: flex;
+}
+
+/* ==================== Task 3.3: 页面管理模式增强 ==================== */
+body.page-manage-active .card {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+body.page-manage-active .card .icon-wrapper {
+    cursor: grab;
+    position: relative;
+}
+
+body.page-manage-active .card .icon-wrapper:active {
+    cursor: grabbing;
+}
+
+body.page-manage-active .card .icon-wrapper::after {
+    content: '⠿';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 20px;
+    color: var(--primary);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    background: rgba(var(--primary-rgb), 0.1);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+body.page-manage-active .card:hover .icon-wrapper::after {
+    opacity: 0.8;
+}
+
+.batch-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+}
+
+.batch-btns {
+    display: flex;
+    gap: 10px;
+}
+
+.batch-btn.cancel {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text);
+}
+
+.batch-actions-bar span {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+    margin-right: 5px;
+}
+
+.batch-btn {
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.batch-btn.delete {
+    background: rgba(231, 76, 60, 0.8);
+    color: white;
+}
+
+.batch-btn.move {
+    background: rgba(57, 157, 255, 0.8);
+    color: white;
+}
+
+.batch-btn:hover {
+    transform: scale(1.05);
+}
+
+.batch-btn:active {
+    transform: scale(0.95);
+}
+
+/* ==================== Emoji 推荐选中状态 ==================== */
+.emoji-suggestion {
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 20px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    transition: 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.emoji-suggestion.selected {
+    background: rgba(57, 157, 255, 0.4);
+    box-shadow: 0 0 8px rgba(57, 157, 255, 0.5);
+}
+
+body.light-theme .emoji-suggestion {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme .emoji-suggestion.selected {
+    background: rgba(57, 157, 255, 0.3);
+}
+
+/* ==================== 缤纷模式 ==================== */
+body.view-style-2 .nav-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+    gap: 15px;
+}
+
+body.view-style-2 .card {
+    border-radius: var(--radius);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+    justify-content: flex-start;
+    transition: all 0.25s ease;
+}
+
+body.view-style-2 .card.has-bg {
+    background: var(--card-bg-color, rgba(255,255,255,0.15));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+body.view-style-2 .card.has-bg:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+        0 8px 25px rgba(0, 0, 0, 0.3), 
+        0 0 15px var(--card-bg-color, rgba(255,255,255,0.2)),
+        0 0 30px rgba(255, 255, 255, 0.1);
+}
+
+body.view-style-2 .card:not(.has-bg):hover {
+    background: rgba(110, 115, 135, 0.32);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-color: rgba(255, 255, 255, 0.4);
+    box-shadow: 
+        0 8px 20px rgba(0, 0, 0, 0.3),
+        0 0 15px rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+body.view-style-2 .card a {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0 4px;
+    gap: 10px;
+}
+
+body.view-style-2 .icon-wrapper {
+    width: calc(var(--icon-size) + 10px);
+    height: calc(var(--icon-size) + 10px);
+    min-width: calc(var(--icon-size) + 10px);
+    border-radius: 8px;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+body.view-style-2 .card img {
+    width: 30px;
+    height: 30px;
+    border-radius: 5px;
+    object-fit: contain;
+}
+
+body.view-style-2 .card .emoji-icon {
+    font-size: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+body.view-style-2 .card-text-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+}
+
+body.view-style-2 .card h3 {
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    margin-left: 0;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    display: -webkit-box;
+    color: #fff;
+    line-height: 1.25;
+    min-height: 2.5em;
+}
+
+body.view-style-2 .card[data-tooltip]::after {
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+}
+
+body.view-style-2 .card[data-tooltip]:hover::after {
+    transform: translateX(-50%) translateY(0);
+}
+
+body.view-style-2 .card[data-tooltip]::before {
+    display: none;
+}
+
+/* ==================== 视频卡片网格 ==================== */
+.video-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.video-card {
+    background: var(--glass);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid var(--glass-border);
+    position: relative;
+}
+
+.video-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(57, 157, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.video-card-cover {
+    position: relative;
+    width: 100%;
+    padding-top: 56.25%; /* 16:9 */
+    background: rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.video-card-cover img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.video-card:hover .video-card-cover img {
+    transform: scale(1.05);
+}
+
+.video-card-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    z-index: 2;
+    backdrop-filter: blur(4px);
+}
+
+.video-card-badge.bilibili {
+    background: rgba(251, 114, 153, 0.9);
+    color: white;
+}
+
+.video-card-badge.youtube {
+    background: rgba(255, 0, 0, 0.9);
+    color: white;
+}
+
+.video-play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0);
+    transition: background 0.3s;
+    z-index: 1;
+}
+
+.video-card:hover .video-play-overlay {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.video-play-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.75);
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.video-play-btn i {
+    font-size: 24px;
+    color: #333;
+    margin-left: 2px;
+}
+
+.video-card:hover .video-play-btn {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.video-card-body {
+    padding: 10px 12px;
+}
+
+.video-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 4px;
+}
+
+.video-card-desc {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 视频封面加载失败占位 */
+.video-card-cover-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(57, 157, 255, 0.2), rgba(139, 92, 246, 0.2));
+}
+
+.video-card-cover-fallback i {
+    font-size: 40px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* 视频封面异步加载插槽 */
+.video-cover-slot {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.video-cover-slot img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.video-card:hover .video-cover-slot img {
+    transform: scale(1.05);
+}
+
+/* ==================== 视频播放弹窗 ==================== */
+.video-modal-content {
+    background: rgba(20, 20, 20, 0.98);
+    width: 90%;
+    max-width: 900px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+}
+
+.video-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: all 0.2s;
+}
+
+.video-close-btn:hover {
+    background: rgba(231, 76, 60, 0.8);
+    transform: scale(1.1);
+}
+
+.video-player-wrapper {
+    width: 100%;
+    padding-top: 56.25%; /* 16:9 */
+    position: relative;
+    background: #000;
+}
+
+.video-player-wrapper iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.video-info {
+    padding: 16px 20px;
+}
+
+.video-info h3 {
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.video-info p {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+
+.video-ext-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--primary);
+    font-size: 13px;
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+
+.video-ext-link:hover {
+    opacity: 0.8;
+}
+
+/* ==================== Monaco Editor 弹窗 ==================== */
+.monaco-modal-content {
+    background: rgba(20, 20, 20, 0.98);
+    width: 92%;
+    max-width: 1000px;
+    height: 80vh;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+}
+
+.monaco-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+}
+
+.monaco-header h4 {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.monaco-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.monaco-action-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ccc;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s;
+}
+
+.monaco-action-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+.monaco-action-btn.primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.monaco-action-btn.primary:hover {
+    opacity: 0.9;
+}
+
+.monaco-action-btn.close:hover {
+    background: rgba(231, 76, 60, 0.8);
+    border-color: rgba(231, 76, 60, 0.8);
+    color: white;
+}
+
+.monaco-container {
+    flex: 1;
+    min-height: 0;
+}
+
+/* ==================== 跟随系统偏好 ==================== */
+@media (prefers-color-scheme: light) {
+    body:not(.light-theme):not(.dark-theme) {
+        --glass: rgba(255, 255, 255, 0.55);
+        --glass-hover: rgba(255, 255, 255, 0.75);
+        --glass-border: rgba(0, 0, 0, 0.07);
+        --text: #2c3e50;
+        --text-dim: rgba(44, 62, 80, 0.7);
+        --bg-overlay-opacity: 0.25;
+    }
+
+    body:not(.light-theme):not(.dark-theme) {
+        background-color: #eef1f5;
+    }
+
+    body:not(.light-theme):not(.dark-theme)::before {
+        background: rgba(240, 243, 248, var(--bg-overlay-opacity));
+    }
+
+    body:not(.light-theme):not(.dark-theme) .sidebar {
+        background: rgba(255, 255, 255, 0.72);
+        border-color: rgba(0, 0, 0, 0.06);
+    }
+
+    body:not(.light-theme):not(.dark-theme) .sidebar-nav-item {
+        color: #5a6a7a;
+    }
+
+    body:not(.light-theme):not(.dark-theme) .sidebar-nav-item.active {
+        background: var(--primary);
+        color: white;
+    }
+
+    body:not(.light-theme):not(.dark-theme) .sidebar-nav-item:hover:not(.active) {
+        background: rgba(0, 0, 0, 0.05);
+    }
+
+    body:not(.light-theme):not(.dark-theme) .card {
+        background: rgba(255, 255, 255, 0.55);
+    }
+
+    body:not(.light-theme):not(.dark-theme) .card h3 {
+        color: #3d4f5f;
+    }
+
+    body:not(.light-theme):not(.dark-theme) .modal-content {
+        background: rgba(255, 255, 255, 0.92);
+        border-color: rgba(0, 0, 0, 0.08);
+    }
+
+    body:not(.light-theme):not(.dark-theme) input,
+    body:not(.light-theme):not(.dark-theme) select {
+        background: rgba(255, 255, 255, 0.7);
+        border-color: rgba(0, 0, 0, 0.1);
+        color: #3d4f5f;
+    }
+}
+
+/* Keyboard shortcut guide (moved off index.html inline styles) */
+#keyboard-help-modal {
+    z-index: 10500;
+}
+#keyboard-help-modal .keyboard-help-content {
+    max-width: 480px;
+    text-align: left;
+    position: relative;
+}
+#keyboard-help-modal .modal-close-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: none;
+    border: none;
+    color: #777;
+    cursor: pointer;
+    font-size: 24px;
+}
+.keyboard-help-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+.keyboard-help-icon {
+    font-size: 36px;
+    color: var(--primary);
+}
+.keyboard-help-header h4 {
+    font-size: 16px;
+    color: var(--text);
+    margin-top: 5px;
+}
+.keyboard-shortcuts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    font-size: 13px;
+    max-height: 480px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.keyboard-help-group-title {
+    font-weight: bold;
+    color: var(--primary);
+    margin-bottom: 8px;
+    border-left: 3px solid var(--primary);
+    padding-left: 6px;
+    font-size: 13px;
+}
+.keyboard-help-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.keyboard-help-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 6px;
+}
+.keyboard-help-row:last-child {
+    border-bottom: none;
+    padding-bottom: 4px;
+}
+.keyboard-help-desc {
+    color: var(--text-dim);
+}

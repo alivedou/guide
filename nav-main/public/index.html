@@ -31,8 +31,15 @@
     <!-- Monaco Editor (国内加速) -->
     <script src="https://lib.baomitu.com/monaco-editor/0.45.0/min/vs/loader.js" defer></script>
     
-    <!-- 样式文件 -->
-    <link rel="stylesheet" href="/assets/css/style.css">
+    <!-- 样式文件：tokens 最先。不要再 link style.css（那是旧 PWA 的一层 @import 兼容 shim）。 -->
+    <link rel="stylesheet" href="/assets/css/tokens.css">
+    <link rel="stylesheet" href="/assets/css/layout.css">
+    <link rel="stylesheet" href="/assets/css/sidebar.css">
+    <link rel="stylesheet" href="/assets/css/cards.css">
+    <link rel="stylesheet" href="/assets/css/modals.css">
+    <link rel="stylesheet" href="/assets/css/responsive.css">
+    <link rel="stylesheet" href="/assets/css/search.css">
+    <link rel="stylesheet" href="/assets/css/admin.css">
 </head>
 <body>
     <!-- 管理员高亮状态栏 -->
@@ -305,79 +312,75 @@
         </button>
     </div>
 
-    <!-- 键盘快捷键帮助手册弹窗 -->
-    <div id="keyboard-help-modal" class="modal" style="z-index: 10500;">
-        <div class="modal-content" style="max-width: 480px; text-align: left; position: relative;">
-            <button id="btn-close-keyboard-help" style="position:absolute; top:15px; right:15px; background:none; border:none; color:#777; cursor:pointer; font-size:24px">×</button>
-            <div style="text-align: center; margin-bottom: 20px;">
-                <div style="font-size: 36px; color: var(--primary-color);"><i class="ri-keyboard-line"></i></div>
-                <h4 style="font-size:16px; color: var(--text); margin-top: 5px;">键盘快捷键指南</h4>
+    <!-- 键盘快捷键帮助手册弹窗（样式在 modals.css，无 inline style） -->
+    <div id="keyboard-help-modal" class="modal">
+        <div class="modal-content keyboard-help-content">
+            <button id="btn-close-keyboard-help" class="modal-close-btn" type="button" aria-label="关闭快捷键指南">×</button>
+            <div class="keyboard-help-header">
+                <div class="keyboard-help-icon"><i class="ri-keyboard-line"></i></div>
+                <h4>键盘快捷键指南</h4>
             </div>
-            <div class="keyboard-shortcuts-list" style="display: flex; flex-direction: column; gap: 16px; font-size: 13px; max-height: 480px; overflow-y: auto; padding-right: 4px;">
-                <!-- 分组 1：全局核心调度 -->
-                <div>
-                    <div style="font-weight: bold; color: var(--primary-color); margin-bottom: 8px; border-left: 3px solid var(--primary-color); padding-left: 6px; font-size: 13px;">视图与核心调度</div>
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Ctrl</kbd> + <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">B</kbd></span>
-                            <span style="color: var(--text-dim);">隐藏/显示侧边栏分类</span>
+            <div class="keyboard-shortcuts-list">
+                <div class="keyboard-help-group">
+                    <div class="keyboard-help-group-title">视图与核心调度</div>
+                    <div class="keyboard-help-rows">
+                        <div class="keyboard-help-row">
+                            <span><kbd>Ctrl</kbd> + <kbd>B</kbd></span>
+                            <span class="keyboard-help-desc">隐藏/显示侧边栏分类</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Alt</kbd> + <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Z</kbd></span>
-                            <span style="color: var(--text-dim);">开启/退出极简禅意模式</span>
+                        <div class="keyboard-help-row">
+                            <span><kbd>Alt</kbd> + <kbd>Z</kbd></span>
+                            <span class="keyboard-help-desc">开启/退出极简禅意模式</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Ctrl</kbd> / <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Alt</kbd> + <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">L</kbd></span>
-                            <span style="color: var(--text-dim);">唤起个人中心/登录弹窗</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 分组 2：搜索与呼出 -->
-                <div>
-                    <div style="font-weight: bold; color: var(--primary-color); margin-bottom: 8px; border-left: 3px solid var(--primary-color); padding-left: 6px; font-size: 13px;">智能搜索与唤醒</div>
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">/</kbd> 或 <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">任意字母</kbd></span>
-                            <span style="color: var(--text-dim);">自动激活并聚焦中央搜索框</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Ctrl</kbd> + <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">K</kbd></span>
-                            <span style="color: var(--text-dim);">一键清空搜索并重新聚焦</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Esc</kbd></span>
-                            <span style="color: var(--text-dim);">智能退栈（关闭弹窗➔搜索➔管理➔侧边栏）</span>
+                        <div class="keyboard-help-row">
+                            <span><kbd>Ctrl</kbd> / <kbd>Alt</kbd> + <kbd>L</kbd></span>
+                            <span class="keyboard-help-desc">唤起个人中心/登录弹窗</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- 分组 3：全键盘极客操控 -->
-                <div>
-                    <div style="font-weight: bold; color: var(--primary-color); margin-bottom: 8px; border-left: 3px solid var(--primary-color); padding-left: 6px; font-size: 13px;">无鼠标全键盘操控</div>
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">←</kbd> <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">↑</kbd> <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">→</kbd> <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">↓</kbd></span>
-                            <span style="color: var(--text-dim);">智能 4 向空间网格几何焦点流转</span>
+                <div class="keyboard-help-group">
+                    <div class="keyboard-help-group-title">智能搜索与唤醒</div>
+                    <div class="keyboard-help-rows">
+                        <div class="keyboard-help-row">
+                            <span><kbd>/</kbd> 或 <kbd>任意字母</kbd></span>
+                            <span class="keyboard-help-desc">自动激活并聚焦中央搜索框</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Enter</kbd> 或 <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Space</kbd></span>
-                            <span style="color: var(--text-dim);">访问/激活选中高亮的导航卡片项</span>
+                        <div class="keyboard-help-row">
+                            <span><kbd>Ctrl</kbd> + <kbd>K</kbd></span>
+                            <span class="keyboard-help-desc">一键清空搜索并重新聚焦</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 6px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Home</kbd> / <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">End</kbd></span>
-                            <span style="color: var(--text-dim);">平滑滚动直达页面最顶端/最底端</span>
+                        <div class="keyboard-help-row">
+                            <span><kbd>Esc</kbd></span>
+                            <span class="keyboard-help-desc">智能退栈（关闭弹窗➔搜索➔管理➔侧边栏）</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- 分组 4：本指南 -->
-                <div>
-                    <div style="font-weight: bold; color: var(--primary-color); margin-bottom: 8px; border-left: 3px solid var(--primary-color); padding-left: 6px; font-size: 13px;">帮助手册</div>
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 4px;">
-                            <span><kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">Shift + /</kbd> (即 <kbd style="background: var(--glass-bg); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--glass-border); font-family: monospace; font-weight: bold; box-shadow: 0 1px 2px rgba(0,0,0,0.4)">?</kbd> 键)</span>
-                            <span style="color: var(--text-dim);">唤起/关闭本快捷键指南</span>
+                <div class="keyboard-help-group">
+                    <div class="keyboard-help-group-title">无鼠标全键盘操控</div>
+                    <div class="keyboard-help-rows">
+                        <div class="keyboard-help-row">
+                            <span><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></span>
+                            <span class="keyboard-help-desc">智能 4 向空间网格几何焦点流转</span>
+                        </div>
+                        <div class="keyboard-help-row">
+                            <span><kbd>Enter</kbd> 或 <kbd>Space</kbd></span>
+                            <span class="keyboard-help-desc">访问/激活选中高亮的导航卡片项</span>
+                        </div>
+                        <div class="keyboard-help-row">
+                            <span><kbd>Home</kbd> / <kbd>End</kbd></span>
+                            <span class="keyboard-help-desc">平滑滚动直达页面最顶端/最底端</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keyboard-help-group">
+                    <div class="keyboard-help-group-title">帮助手册</div>
+                    <div class="keyboard-help-rows">
+                        <div class="keyboard-help-row">
+                            <span><kbd>Shift + /</kbd> (即 <kbd>?</kbd> 键)</span>
+                            <span class="keyboard-help-desc">唤起/关闭本快捷键指南</span>
                         </div>
                     </div>
                 </div>
