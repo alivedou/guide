@@ -12,6 +12,26 @@ function exists(rel) {
   return fs.existsSync(path.join(REPO_ROOT, rel));
 }
 
+function walkJs(dir, acc = []) {
+  if (!fs.existsSync(dir)) return acc;
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name);
+    const st = fs.statSync(full);
+    if (st.isDirectory()) {
+      if (name === 'node_modules') continue;
+      walkJs(full, acc);
+    } else if (name.endsWith('.js') || name.endsWith('.mjs')) {
+      acc.push(full);
+    }
+  }
+  return acc;
+}
+
+function collectServerRuntimeSource() {
+  const files = [path.join(REPO_ROOT, 'server.js'), ...walkJs(path.join(REPO_ROOT, 'src/server'))];
+  return files.filter((p) => fs.existsSync(p)).map((p) => fs.readFileSync(p, 'utf8')).join('\n');
+}
+
 describe('phase 0 hygiene', () => {
   it('dead files are gone', () => {
     assert.equal(exists('metadata.json'), false);
@@ -20,7 +40,7 @@ describe('phase 0 hygiene', () => {
   });
 
   it('site-config routes are registered once', () => {
-    const src = read('server.js');
+    const src = collectServerRuntimeSource();
     const gets = src.match(/app\.get\(\s*['"`]\/api\/admin\/site-config['"`]/g) || [];
     const posts = src.match(/app\.post\(\s*['"`]\/api\/admin\/site-config['"`]/g) || [];
     assert.equal(gets.length, 1, `GET site-config count=${gets.length}`);

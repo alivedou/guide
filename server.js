@@ -14,7 +14,11 @@ import fs from 'fs';
 import crypto from 'crypto';
 import * as jose from 'jose';
 import Database from 'better-sqlite3';
-import { defaultData, MINIMAL_SAFE_DATA } from './nav-main/functions/api/defaultData.js';
+import { defaultData, MINIMAL_SAFE_DATA } from './nav-main/shared/default-data.js';
+import { getQuota as resolveQuota } from './nav-main/shared/quota.js';
+import { formatCNTime } from './nav-main/shared/time.js';
+import { applySchemaPatches } from './nav-main/shared/schema-patch.js';
+import { sendEmailHelper as sendSharedEmail } from './nav-main/shared/alerts.js';
 import { parse } from 'node-html-parser';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -66,107 +70,15 @@ if (fs.existsSync(migrationsDir)) {
     });
 }
 
-// ====== 数据库自动热迁移 (修复字段缺失) ======
+// ====== 数据库自动热迁移（与 CF PATCH_SQL 同源） ======
 try {
-    const tableInfo = db.prepare("PRAGMA table_info(users)").all();
-    const columns = tableInfo.map(c => c.name);
-    if (columns.length > 0) {
-        if (!columns.includes('status')) {
-            console.log('[DB] Patching: Adding status column to users table');
-            db.exec("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
-        }
-        if (!columns.includes('role')) {
-            console.log('[DB] Patching: Adding role column to users table');
-            db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
-        }
-        if (!columns.includes('uid')) {
-            console.log('[DB] Patching: Adding uid column to users table');
-            db.exec("ALTER TABLE users ADD COLUMN uid INTEGER");
-            db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid)");
-        }
-        if (!columns.includes('temp_password_hash')) {
-            console.log('[DB] Patching: Adding temp_password_hash column to users table');
-            db.exec("ALTER TABLE users ADD COLUMN temp_password_hash TEXT");
-        }
-        if (!columns.includes('temp_password_expires_at')) {
-            console.log('[DB] Patching: Adding temp_password_expires_at column to users table');
-            db.exec("ALTER TABLE users ADD COLUMN temp_password_expires_at DATETIME");
-        }
-        if (!columns.includes('is_temp_password_active')) {
-            console.log('[DB] Patching: Adding is_temp_password_active column to users table');
-            db.exec("ALTER TABLE users ADD COLUMN is_temp_password_active INTEGER DEFAULT 0");
-        }
-    }
-
-    const annInfo = db.prepare("PRAGMA table_info(announcements)").all();
-    const annCols = annInfo.map(c => c.name);
-    if (annCols.length > 0) {
-        if (!annCols.includes('expire_at')) {
-            console.log('[DB] Patching: Adding expire_at column to announcements table');
-            db.exec("ALTER TABLE announcements ADD COLUMN expire_at DATETIME");
-        }
-        if (!annCols.includes('status')) {
-            console.log('[DB] Patching: Adding status column to announcements table');
-            db.exec("ALTER TABLE announcements ADD COLUMN status TEXT DEFAULT 'published'");
-        }
-        if (!annCols.includes('type')) {
-            console.log('[DB] Patching: Adding type column to announcements table');
-            db.exec("ALTER TABLE announcements ADD COLUMN type TEXT DEFAULT 'quiet'");
-        }
-        if (!annCols.includes('is_top')) {
-            console.log('[DB] Patching: Adding is_top column to announcements table');
-            db.exec("ALTER TABLE announcements ADD COLUMN is_top BOOLEAN DEFAULT 0");
-        }
-        if (!annCols.includes('creator_id')) {
-            console.log('[DB] Patching: Adding creator_id column to announcements table');
-            db.exec("ALTER TABLE announcements ADD COLUMN creator_id TEXT");
-        }
-    }
-
-    // 补齐 user_settings 缺失字段
-    const settingsInfo = db.prepare("PRAGMA table_info(user_settings)").all();
-    const settingsCols = settingsInfo.map(c => c.name);
-    if (settingsCols.length > 0) {
-        if (!settingsCols.includes('hide_bg_mask')) {
-            console.log('[DB] Patching: Adding hide_bg_mask column to user_settings table');
-            db.exec("ALTER TABLE user_settings ADD COLUMN hide_bg_mask BOOLEAN DEFAULT 0");
-        }
-        if (!settingsCols.includes('isolated_view')) {
-            console.log('[DB] Patching: Adding isolated_view column to user_settings table');
-            db.exec("ALTER TABLE user_settings ADD COLUMN isolated_view BOOLEAN DEFAULT 0");
-        }
-        if (!settingsCols.includes('density')) {
-            console.log('[DB] Patching: Adding density column to user_settings table');
-            db.exec("ALTER TABLE user_settings ADD COLUMN density TEXT DEFAULT 'standard'");
-        }
-        if (!settingsCols.includes('link_target')) {
-            console.log('[DB] Patching: Adding link_target column to user_settings table');
-            db.exec("ALTER TABLE user_settings ADD COLUMN link_target TEXT DEFAULT '_blank'");
-        }
-        if (!settingsCols.includes('sync_interval')) {
-            console.log('[DB] Patching: Adding sync_interval column to user_settings table');
-            db.exec("ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7");
-        }
-        if (!settingsCols.includes('is_shared')) {
-            console.log('[DB] Patching: Adding is_shared column to user_settings table');
-            db.exec("ALTER TABLE user_settings ADD COLUMN is_shared BOOLEAN DEFAULT 0");
-        }
-        if (!settingsCols.includes('share_slug')) {
-            console.log('[DB] Patching: Adding share_slug column to user_settings table');
-            db.exec("ALTER TABLE user_settings ADD COLUMN share_slug TEXT");
-            try {
-                db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_settings_share_slug ON user_settings(share_slug)");
-            } catch (indexErr) {
-                console.warn('[DB] Share index warning:', indexErr.message);
-            }
-        }
-
-        // 💡 自动数据自愈修复：将本地已经被邀请码绑定的用户的 has_invite 状态强制修正回填为 1，确保本地开发测试时其享有 20 个书签的配额
-        try {
-            db.exec("UPDATE users SET has_invite = 1 WHERE id IN (SELECT used_by FROM invitation_codes WHERE used_by IS NOT NULL)");
-        } catch (patchErr) {
-            console.warn('[DB] Retroactive invite patch skipped:', patchErr.message);
-        }
+    await applySchemaPatches((sql) => {
+        db.exec(sql);
+    });
+    try {
+        db.exec("UPDATE users SET has_invite = 1 WHERE id IN (SELECT used_by FROM invitation_codes WHERE used_by IS NOT NULL)");
+    } catch (patchErr) {
+        console.warn('[DB] Retroactive invite patch skipped:', patchErr.message);
     }
 } catch (e) {
     console.warn('[DB] Auto-patch skipped:', e.message);
@@ -188,31 +100,16 @@ const loginAttempts = new Map(); // IP -> { count, lockUntil }
 const registerAttempts = new Map(); // 注册防爆破 IP -> { count, lockUntil }
 
 // ====== 资源配额管理 ======
-const QUOTA_CONFIG = {
-    guest: { maxCategories: 6, maxItemsPerCategory: 12 },
-    user: { maxCategories: 12, maxItemsPerCategory: 25 },
-    invited_user: { maxCategories: 15, maxItemsPerCategory: 30 },
-    super_user: { maxCategories: 20, maxItemsPerCategory: 40 },
-    admin: { maxCategories: 150, maxItemsPerCategory: 500 }
-};
-
 function getQuota(user) {
-    if (!user || !user.id || user.id === 'guest') return QUOTA_CONFIG.guest;
-    if (user.role === 'admin') return QUOTA_CONFIG.admin;
-    if (user.role === 'super_user') return QUOTA_CONFIG.super_user;
-    if (user.role === 'user') {
-        // 本地 SQLite 实时查询 has_invite 状态
+    if (user && user.role === 'user' && user.id && user.id !== 'guest') {
         try {
             const dbUser = db.prepare('SELECT has_invite FROM users WHERE id = ?').get(user.id);
-            if (dbUser && dbUser.has_invite === 1) {
-                return QUOTA_CONFIG.invited_user;
-            }
+            return resolveQuota(user, { hasInvite: !!(dbUser && dbUser.has_invite === 1) });
         } catch (e) {
             console.error('[Quota] Failed to query user invite status from DB:', e.message);
         }
-        return QUOTA_CONFIG.user;
     }
-    return QUOTA_CONFIG.guest;
+    return resolveQuota(user);
 }
 
 // ====== 鉴权中间件 ======
@@ -323,27 +220,11 @@ async function dispatchInstantAdminAlert(action, details, adminUserId, ip) {
 
 // ====== Email 发送辅助函数 ======
 async function sendEmailHelper(recipient, subject, content) {
-    if (RESEND_API_KEY) {
-        try {
-            await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${RESEND_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    from: EMAIL_FROM,
-                    to: recipient,
-                    subject: subject,
-                    text: content
-                })
-            });
-        } catch (e) {
-            console.error('[Email] Resend send failed:', e.message);
-        }
-    } else {
-        console.log(`[Email Mock] Target: ${recipient} | Subject: ${subject} | Content length: ${content.length}`);
-    }
+    return sendSharedEmail(recipient, subject, content, {
+        resendApiKey: RESEND_API_KEY,
+        emailFrom: EMAIL_FROM,
+        mockIfMissing: true
+    });
 }
 
 app.use(express.json({ limit: '10mb' }));
@@ -461,11 +342,6 @@ app.get('/api/proxy/fetch-metadata', authenticate, async (req, res) => {
 });
 
 // ====== 核心业务逻辑 (4.6 数据持久化) ======
-
-const formatCNTime = (date) => {
-    const d = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
-    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
 
 const syncUserToKV = (userId) => {
     console.log(`[KV] Syncing data for user: ${userId}`);

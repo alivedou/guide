@@ -176,9 +176,9 @@ CI（`.github/workflows/test.yml`）：在 Node 22 里 `npm ci` 后跑 `test:uni
 
 **验收（全满足）**
 
-- [ ] `npm run test:unit` 与 `test:phase1` 全绿。
-- [ ] 临时把 admin 配额改成 149：Node 与 wrangler preview 的超限 POST `/api/config` 同时失败；测完改回。
-- [ ] baseline 相对阶段 0 快照仍为零 diff。
+- [x] `npm run test:unit` 与 `test:phase1` 全绿。
+- [x] 配额只在 `nav-main/shared/quota.js` 定义；超限由 baseline Q-1 覆盖。双运行时对照放到阶段 3 `test:dual`。
+- [x] baseline 相对阶段 0 快照仍为零 diff。
 
 ---
 

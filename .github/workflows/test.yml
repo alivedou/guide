@@ -17,3 +17,4 @@ jobs:
       - run: npm ci
       - run: npm run test:baseline
       - run: npm run test:phase0
+      - run: npm run test:phase1

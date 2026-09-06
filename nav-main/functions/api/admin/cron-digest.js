@@ -14,28 +14,14 @@
  * ==========================================
  */
 
+import { sendEmailHelper as sendSharedEmail } from '../../../shared/alerts.js';
+
 async function sendEmailHelper(recipient, subject, content, env) {
-  if (env.RESEND_API_KEY) {
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: env.EMAIL_FROM || 'CloudNav Alerts <alerts@cloudnav.tech>',
-          to: recipient,
-          subject: subject,
-          text: content
-        })
-      });
-    } catch (e) {
-      console.error('[Email] Resend send failed:', e);
-    }
-  } else {
-    console.log(`[Email Mock] Target: ${recipient} | Subject: ${subject} | Content length: ${content.length}`);
-  }
+  return sendSharedEmail(recipient, subject, content, {
+    resendApiKey: env.RESEND_API_KEY,
+    emailFrom: env.EMAIL_FROM,
+    mockIfMissing: true
+  });
 }
 
 async function sendTelegramHelper(subject, content, env) {

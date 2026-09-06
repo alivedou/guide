@@ -9,7 +9,7 @@
 /**
  * 注册接口 (D1 + KV)
  */
-import { defaultData } from '../defaultData.js';
+import { defaultData } from '../../shared/default-data.js';
 
 async function sha256(text) {
   const msgBuffer = new TextEncoder().encode(text);

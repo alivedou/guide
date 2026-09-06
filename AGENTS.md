@@ -55,6 +55,7 @@ CF-nav/
 ├── nav-main/                 # ★ CF Pages 项目根（控制台 Root directory = nav-main）
 │   ├── wrangler.toml         # Pages 侧 nodejs_compat（jose）
 │   ├── package.json          # Pages 构建 npm install（jose）
+│   ├── shared/               # ★ 两端共用：quota / default-data / schema-patch / time / alerts
 │   ├── public/               # 静态资源 + 前端
 │   │   ├── index.html        # 脚本加载顺序见 §6
 │   │   ├── manifest.json     # PWA
@@ -65,7 +66,7 @@ CF-nav/
 │   └── functions/api/        # Pages Functions（与 server 路由近同构）
 │       ├── _middleware.js    # JWT + 缺列补丁 waitUntil + 异常告警
 │       ├── _d1_schema_patch.js
-│       ├── defaultData.js    # ★ 默认分类/书签模板（server.js 也 import 这里）
+│       ├── defaultData.js    # 兼容 re-export → ../../shared/default-data.js
 │       ├── config.js         # GET/POST/DELETE /api/config
 │       ├── bing.js / share.js / announcements.js
 │       ├── auth/ login.js register.js
@@ -192,7 +193,7 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 | 大图背景 | — | — | IndexedDB `nav_local_db`（老值从 `nav_local_bg_image` 迁移） |
 | 搜索引擎选择 | — | 云端 settings 不覆盖本地 | `nav_search_engine` / `nav_search_prefix` |
 
-默认分类模板：`nav-main/functions/api/defaultData.js`（**server.js 直接 import 同一文件**）。改默认书签只改这一处。
+默认分类模板：`nav-main/shared/default-data.js`（server 与 Functions 都 import 这里；`functions/api/defaultData.js` 只做兼容转发）。改默认书签只改这一处。
 
 ### KV 键名两边不一样（改存储时必须对齐）
 
@@ -215,7 +216,7 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 
 `categories.id` / `items.id` 在 SQL 里是**全局主键**。保存/导入必须重映射 id（`config.js` 与 `server.js` POST `/api/config` 已做；前端 `import-export-sanitize.js` 导出时去掉身份字段、导入时换新 id）。不要为了「保留原 id」去掉这段。
 
-### 角色与配额（改配额时 Functions 与 server 各有一份 `QUOTA_CONFIG`）
+### 角色与配额（改配额只改 `nav-main/shared/quota.js`）
 
 | 角色 | 分类上限 | 每分类书签 |
 |------|----------|------------|
@@ -318,7 +319,7 @@ npm run format
 
 - [ ] 是否破坏「根目录勿动」文件路径？
 - [ ] 若改表：是否更新了 `migrations/` + `sql/` + 两端热补丁？
-- [ ] 若改 API / 配额 / 默认数据：Functions **与** `server.js` 是否对称？`defaultData.js` 是否只改一处？
+- [ ] 若改 API / 配额 / 默认数据：Functions **与** `server.js` 是否对称？配额只改 `nav-main/shared/quota.js`，默认数据只改 `nav-main/shared/default-data.js`？
 - [ ] 若改前端：Docker 用户是否需要 **新镜像**？PWA `CACHE_NAME` 要不要升？
 - [ ] 若改 `ikun.sh`：README 里的 raw URL 是否仍有效？
 - [ ] CF 相关：binding 名是否仍是 `nav` / `DB`？`JWT_SECRET` 是否文档有写？
@@ -350,7 +351,7 @@ npm run format
 
 1. **增量开发**：优先新文件/新函数，禁止为「好看」重构 `app.js` / `server.js`。
 2. **不删现有功能**，不擅自改对外 URL、binding 名（`nav` / `DB`）、`ikun.sh` 路径、镜像名 `ikun_nav`。
-3. **双部署意识**：改运行时逻辑时同时改 Functions 与 `server.js`；改默认数据只改 `defaultData.js`。
+3. **双部署意识**：改运行时逻辑时同时改 Functions 与 `server.js`；改默认数据只改 `nav-main/shared/default-data.js`；改配额只改 `nav-main/shared/quota.js`。
 4. **SQL 权威在 `migrations/`**，不要只改 `sql/` 就当修完库。
 5. **不要**把 `schema*.sql` 拷进 Dockerfile「顺便」。
 6. 大改前说明：修改位置、影响范围、风险；能写检查步骤就写。

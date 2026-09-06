@@ -14,33 +14,13 @@
  * ==========================================
  */
 
-import { defaultData, MINIMAL_SAFE_DATA } from './defaultData.js';
+import { defaultData, MINIMAL_SAFE_DATA } from '../../shared/default-data.js';
+import { getQuota } from '../../shared/quota.js';
+import { formatCNTime } from '../../shared/time.js';
 
 const CONFIG = {
   bingApi: "https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1"
 };
-
-const QUOTA_CONFIG = {
-  guest: { maxCategories: 6, maxItemsPerCategory: 12 },
-  user: { maxCategories: 12, maxItemsPerCategory: 25 },
-  invited_user: { maxCategories: 15, maxItemsPerCategory: 30 },
-  super_user: { maxCategories: 20, maxItemsPerCategory: 40 },
-  admin: { maxCategories: 150, maxItemsPerCategory: 500 }
-};
-
-function getQuota(user) {
-  if (user.role === 'admin') return QUOTA_CONFIG.admin;
-  if (user.role === 'super_user') return QUOTA_CONFIG.super_user;
-  if (user.id && user.role === 'user') {
-    return user.hasInvite ? QUOTA_CONFIG.invited_user : QUOTA_CONFIG.user;
-  }
-  return QUOTA_CONFIG.guest;
-}
-
-function formatCNTime(date) {
-  const d = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 
 const getFreshDefaultData = () => ({
   ...defaultData,

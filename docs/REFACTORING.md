@@ -131,14 +131,14 @@ CF-nav/
 完成标准：本地 `npm run dev` 与 Docker 构建行为不变。  
 测试：`tests/phase0/hygiene.test.mjs` + baseline。过线：`test:phase0` 与 `test:baseline` 全绿；diff 不含业务逻辑。
 
-### 阶段 1 · 共享领域层（风险低）
+### 阶段 1 · 共享领域层（风险低） ✅
 
-- 建 `nav-main/shared/`，先搬默认数据，再搬配额、时间、PATCH_SQL、告警报文。
-- `server.js` 与 Functions 改为 import，删除拷贝。
-- Dockerfile 已 COPY `nav-main/`，不必改白名单。
+- 已建 `nav-main/shared/`：`quota.js` / `time.js` / `schema-patch.js` / `default-data.js` / `alerts.js`。
+- `server.js` 与 Functions 改为 import；`defaultData.js` 为兼容 re-export。
+- `nav-main/package.json` 声明 `"type": "module"`。Dockerfile 已 COPY `nav-main/`，不必改白名单。
 
-完成标准：改 `shared/quota.js` 一处，Node 与 wrangler preview 配额同时变。  
-测试：`tests/unit/quota.test.mjs` 等 + `no-duplicate-source.test.mjs`。过线：配额只剩一份源；超限两端同时拒绝。
+完成标准：改 `shared/quota.js` 一处，两端配额同时变。  
+测试：`npm run test:phase1`。过线：配额只剩一份源；baseline Q-1 覆盖超限拒绝。
 
 ### 阶段 2 · 拆 server.js（风险低）
 

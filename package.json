@@ -14,10 +14,11 @@
     "deploy": "wrangler pages deploy ./nav-main/public",
     "clean": "rm -rf local_kv local_d1.db kv_mock.json tests/.tmp",
     "build": "echo 'Build successfully'",
-    "test": "node --test --test-concurrency=1 tests/baseline/*.test.mjs tests/phase0/*.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/baseline/*.test.mjs tests/phase0/*.test.mjs tests/phase1/*.test.mjs tests/unit/*.test.mjs",
     "test:baseline": "node --test --test-concurrency=1 tests/baseline/*.test.mjs",
     "test:unit": "node --test --test-concurrency=1 tests/unit/*.test.mjs",
     "test:phase0": "node --test --test-concurrency=1 tests/phase0/*.test.mjs",
+    "test:phase1": "node --test --test-concurrency=1 tests/phase1/*.test.mjs tests/unit/*.test.mjs",
     "test:capture": "node tests/scripts/capture-baseline.mjs"
   },
   "dependencies": {

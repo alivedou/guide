@@ -1,6 +1,7 @@
 {
   "name": "cloudnav-functions",
   "private": true,
+  "type": "module",
   "dependencies": {
     "jose": "^6.2.3"
   }

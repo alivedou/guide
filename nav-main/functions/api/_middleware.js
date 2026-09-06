@@ -8,31 +8,10 @@
 
 import * as jose from 'jose';
 import { ensureD1Schema } from './_d1_schema_patch.js';
+import { sendEmailHelper } from '../../shared/alerts.js';
 
 // 每个 Worker isolate 只跑一次 D1 结构补丁，避免每请求 ALTER
 let _d1SchemaPatched = false;
-
-async function sendEmailHelper(recipient, subject, content, env) {
-  if (env.RESEND_API_KEY) {
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: env.EMAIL_FROM || 'CloudNav Alerts <alerts@cloudnav.tech>',
-          to: recipient,
-          subject: subject,
-          text: content
-        })
-      });
-    } catch (e) {
-      console.error('[Email] Resend send failed:', e);
-    }
-  }
-}
 
 async function triggerExceptionAlert(err, request, env) {
   const subject = `【CloudNav 紧急异常告警】边缘节点未捕获严重异常`;
@@ -75,7 +54,10 @@ async function triggerExceptionAlert(err, request, env) {
 
     if (receivers.results && receivers.results.length > 0) {
       for (const r of receivers.results) {
-        await sendEmailHelper(r.email, subject, text, env);
+        await sendEmailHelper(r.email, subject, text, {
+          resendApiKey: env.RESEND_API_KEY,
+          emailFrom: env.EMAIL_FROM
+        });
       }
     }
   } catch (e) {
