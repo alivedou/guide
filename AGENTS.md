@@ -54,7 +54,7 @@ CF-nav/
 ├── nav-main/                 # ★ CF Pages 项目根（控制台 Root directory = nav-main）
 │   ├── wrangler.toml         # Pages 侧 nodejs_compat（jose）
 │   ├── package.json          # Pages 构建 npm install（jose）
-│   ├── shared/               # ★ 两端共用：quota / default-data / schema-patch / time / alerts
+│   ├── shared/               # ★ 两端共用：quota / ids / config-core / default-data / schema-patch / time / alerts
 │   ├── public/               # 静态资源 + 前端
 │   │   ├── index.html        # 脚本加载顺序见 §6
 │   │   ├── manifest.json     # PWA
@@ -66,7 +66,8 @@ CF-nav/
 │       ├── _middleware.js    # JWT + 缺列补丁 waitUntil + 异常告警
 │       ├── _d1_schema_patch.js
 │       ├── defaultData.js    # 兼容 re-export → ../../shared/default-data.js
-│       ├── config.js         # GET/POST/DELETE /api/config
+│       ├── config.js         # 薄适配器 → shared/config-core.js
+│       ├── _cf-storage.js    # CF StoragePort（KV 键 user_config:<uuid>）
 │       ├── bing.js / share.js / announcements.js
 │       ├── auth/ login.js register.js
 │       ├── user/ profile.js
@@ -214,7 +215,7 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 | 静态资源 | `express.static(nav-main/public)` | Pages `public/` |
 | JSON 体大小 | `express.json({ limit: '10mb' })` | Workers 默认限制更严，大图不要走 API |
 
-`categories.id` / `items.id` 在 SQL 里是**全局主键**。保存/导入必须重映射 id（`config.js` 与 `server.js` POST `/api/config` 已做；前端 `import-export-sanitize.js` 导出时去掉身份字段、导入时换新 id）。不要为了「保留原 id」去掉这段。
+`categories.id` / `items.id` 在 SQL 里是**全局主键**。保存/导入必须重映射 id（`nav-main/shared/ids.js`，由 Node `src/server/storage-port.js` 与 CF `_cf-storage.js` 调用；前端 `import-export-sanitize.js` 导出时去掉身份字段、导入时换新 id）。不要为了「保留原 id」去掉这段。
 
 ### 角色与配额（改配额只改 `nav-main/shared/quota.js`）
 

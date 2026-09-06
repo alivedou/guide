@@ -6,6 +6,7 @@ build/
 
 # Cloudflare Wrangler
 .wrangler/
+nav-main/.wrangler/
 
 # Environment variables
 .env

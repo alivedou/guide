@@ -229,9 +229,9 @@ CI（`.github/workflows/test.yml`）：在 Node 22 里 `npm ci` 后跑 `test:uni
 
 **验收（全满足）**
 
-- [ ] `npm run test:phase3` 与 `test:dual` 全绿。
-- [ ] id 重映射实现只出现在 `nav-main/shared`。
-- [ ] 导入带旧 id 的 JSON 后，两端都能再保存成功。
+- [x] `npm run test:phase3` 与 `test:dual` 全绿。
+- [x] id 重映射实现只出现在 `nav-main/shared`（运行时：functions / src/server）。
+- [x] 导入带旧 id 的 JSON 后，两端都能再保存成功（dual-runtime 两次 POST 同 id）。
 
 ---
 

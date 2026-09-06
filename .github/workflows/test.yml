@@ -19,3 +19,4 @@ jobs:
       - run: npm run test:phase0
       - run: npm run test:phase1
       - run: npm run test:phase2
+      - run: npm run test:phase3

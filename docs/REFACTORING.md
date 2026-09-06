@@ -149,15 +149,15 @@ CF-nav/
 完成标准：注册 / 登录 / 保存书签 / 导入导出与拆前一致。  
 测试：`npm run test:phase2`。过线：路由表对齐；契约零 diff。
 
-### 阶段 3 · Functions 薄适配器（风险中）
+### 阶段 3 · Functions 薄适配器（风险中） ✅
 
-- 定义最小 `StoragePort`：`kv.get/put/delete`、`db.prepare`、`waitUntil`、密钥。
-- 先迁 `/api/config`（配额 + id 重映射最肥），再迁登录和后台。
-- **不要**统一 CF 与 Node 的 KV 键名。
-- **不要**去掉 POST `/api/config` 的 id 重映射。
+- 已定义 StoragePort：`nav-main/functions/api/_cf-storage.js`（KV `user_config:<uuid>`）与 `src/server/storage-port.js`（文件 `user_<uuid>.json`）。
+- `/api/config` GET/POST/DELETE 领域逻辑在 `nav-main/shared/config-core.js`；id 重映射只在 `nav-main/shared/ids.js`。
+- **没有**统一 CF 与 Node 的 KV 键名。
+- **没有**去掉 POST `/api/config` 的 id 重映射。
 
 完成标准：保存书签的 id 重映射只存在于 shared。  
-测试：`ids.test.mjs`、`dual-runtime.test.mjs`。过线：`test:dual` 全绿；KV 键名保持两端旧约定。
+测试：`npm run test:phase3` 与 `npm run test:dual`。
 
 ### 阶段 4 · 前端按功能拆（风险中）
 

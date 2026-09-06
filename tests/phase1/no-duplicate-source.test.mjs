@@ -11,7 +11,7 @@ function walkJs(dir, acc = []) {
     const full = path.join(dir, name);
     const st = fs.statSync(full);
     if (st.isDirectory()) {
-      if (name === 'node_modules' || name === '.tmp' || name === '.git') continue;
+      if (name === 'node_modules' || name === '.tmp' || name === '.git' || name === '.wrangler') continue;
       walkJs(full, acc);
     } else if (name.endsWith('.js') || name.endsWith('.mjs')) {
       acc.push(full);
