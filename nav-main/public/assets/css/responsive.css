@@ -50,7 +50,7 @@
     }
 }
 
-/* 手机端列数由下方 max-width: 768px 的经典卡片网格接管，不再强制 3 列。 */
+/* 手机端经典卡片列数在 max-width: 768px 中强制为 3 列；密度缩放仍锁定。 */
 
 /* 触控反馈优化 */
 .card:active, .sidebar-nav-item:active, .tab-btn:active {
@@ -161,9 +161,9 @@ body.page-manage-active .sidebar-overlay {
     }
 
     body:not(.view-style-2) .nav-grid {
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+        grid-template-columns: repeat(3, 1fr) !important;
         justify-items: stretch;
-        gap: 10px;
+        gap: 8px;
     }
 
     body:not(.view-style-2) .nav-grid .card,
@@ -173,12 +173,12 @@ body.page-manage-active .sidebar-overlay {
         height: auto !important;
         min-height: 96px;
         aspect-ratio: unset;
-        padding: 12px 8px 10px;
+        padding: 10px 4px 8px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: flex-start;
-        gap: 8px;
+        gap: 6px;
     }
 
     body:not(.view-style-2) .nav-grid .card a {
@@ -221,7 +221,7 @@ body.page-manage-active .sidebar-overlay {
         overflow-wrap: anywhere;
         max-height: none;
         min-height: 0;
-        font-size: 12px;
+        font-size: 11px;
         line-height: 1.35;
         width: 100%;
         text-align: center;
