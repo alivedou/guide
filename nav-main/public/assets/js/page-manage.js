@@ -1,3 +1,11 @@
+const showToast = (...args) => window.showToast(...args);
+const closeAllModals = (...args) => window.closeAllModals(...args);
+const updateStyles = (...args) => window.updateStyles(...args);
+const renderNav = (...args) => window.renderNav(...args);
+const renderTools = (...args) => window.renderTools(...args);
+const utils = window.utils;
+const Sortable = window.Sortable;
+
 /**
  * page-manage.js
  * 页面管理模块 (Page Management Module)

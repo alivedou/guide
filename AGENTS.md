@@ -233,10 +233,11 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 
 ## 6. 前端约定
 
-无 React/Vue 构建链。`index.html` 脚本顺序（后加载可覆盖前者挂到 `window` 的函数）：
+无 React/Vue 构建链。入口是 `<script type="module" src="/assets/js/main.js">`。`main.js` 按序 import，功能函数仍挂到 `window`（兼容 inline `onclick`）。
 
 | 文件 | 职责 |
 |------|------|
+| `main.js` | ES module 入口 |
 | `utils.js` | 防抖、HTML 转义等 |
 | `colorExtractor.js` | 图标主色 → 卡片毛玻璃底色 |
 | `emoji-pool.js` | Emoji 选图标 |
@@ -244,17 +245,18 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 | `personalization.js` | 视觉实验室（密度、背景、毛玻璃） |
 | `cloud-sync.js` | 云端同步中心 UI |
 | `sys-config.js` | 站点品牌 / 注册策略 / 角色授权 |
-| `user-manage.js` | 用户、邀请、公告、审计后台 |
 | `import-export-sanitize.js` | 导入导出清洗（去身份字段、换 id） |
 | `page-manage.js` | 分类/书签 CRUD、拖拽、魔棒抓图标 |
-| `app.js` | **主业务**（渲染、登录、搜索、公告、键盘、IndexedDB 背景） |
-| `search-ux.js` | 增量补丁：引擎 localStorage 优先、首字符保留、best-effort 聚焦 |
+| `features/state.js` | 共享 UI 状态 + `window` getter |
+| `features/{boot,auth,render,search,sidebar,zen,notices,profile,idb-bg}.js` | 原 `app.js` 按功能块 |
+| `features/search.js` | 搜索 + 原 search-ux（引擎 localStorage 优先、首字符保留） |
+| `features/admin/{hub,users,invites,announcements,audit}.js` | 后台四个 Tab |
 
 原则：
 
-- **能新增模块就新增**；少改巨型前端 `app.js`；Node 路由改 `src/server/routes/`，禁止无必要重构。
+- **能新增模块就新增**；不要再把逻辑堆回已弃用的 `app.js` 桩文件；Node 路由改 `src/server/routes/`。
 - 浏览器地址栏焦点无法被网页抢走；omnibox 聚焦时做不到「开浏览器就键入进导航搜索」。
-- 改 PWA 缓存逻辑时升 `ServiceWorker.js` 里的 `CACHE_NAME`。
+- 改 PWA 缓存逻辑时升 `ServiceWorker.js` 里的 `CACHE_NAME`（当前 `nav-core-v10`）。
 
 本地偏好键示例：`nav_token`、`nav_current_user`、`nav_app_data`、`nav_search_engine`、`nav_search_prefix`、`nav_sidebar_pinned`、`nav_theme_mode`、`nav_clicks_history`、`nav_last_cloud_sync`。
 
@@ -300,7 +302,8 @@ npm run dev            # http://localhost:3000  （node --watch）
 npm run test:capture   # 重新冻结 HTTP 快照（改契约时才跑）
 npm run test:baseline  # 每阶段合并前
 npm run test:phase0    # 阶段 0 卫生
-npm test               # baseline + phase0
+npm run test:phase4    # 前端 ES module + Playwright
+npm test               # baseline + phase0–4 的 node:test（不含浏览器）
 
 # Wrangler 本地 Pages 模拟（数据在 .wrangler/，与 Node 的 local_d1.db 隔离）
 npm run preview
@@ -336,8 +339,8 @@ npm run format
 | `no such table` | D1/SQLite 未初始化；CF 绑错库或未跑 schema |
 | `no such column` | 老库缺列；跑 `sql/schema.upgrade.sql` 或等补丁 |
 | 一键脚本仍是旧功能 | GHCR `latest` 未发布新镜像 |
-| 搜索引擎刷新变回必应 | `search-ux.js`：localStorage 优先于云端 settings |
-| 键入丢首字符 | `search-ux.js` capture + `app.js` 防双写标记 |
+| 搜索引擎刷新变回必应 | `features/search.js` 的 SearchUX：localStorage 优先于云端 settings |
+| 键入丢首字符 | `initSearchUx` capture + boot 里 `e.searchUxHandled` 防双写 |
 | Pages 有静态无 API | Root 不是 `nav-main` 或未绑 KV/D1 |
 | 登录异常 | 缺 `JWT_SECRET` 或两端密钥不一致 |
 | 导入/同步 500 或 UNIQUE | 分类/书签 id 全局唯一；走 sanitize + 服务端重映射，不要原样写库 |
@@ -350,7 +353,7 @@ npm run format
 
 ## 11. 给 AI 的硬约束
 
-1. **增量开发**：优先新文件/新函数，禁止为「好看」重构前端 `app.js` 或把 `src/server` 再揉回单文件。
+1. **增量开发**：优先新文件/新函数，禁止把前端再揉回 `app.js`，也禁止把 `src/server` 再揉回单文件。
 2. **不删现有功能**，不擅自改对外 URL、binding 名（`nav` / `DB`）、`ikun.sh` 路径、镜像名 `ikun_nav`。
 3. **双部署意识**：改运行时逻辑时同时改 Functions 与 `src/server`；改默认数据只改 `nav-main/shared/default-data.js`；改配额只改 `nav-main/shared/quota.js`。
 4. **SQL 权威在 `migrations/`**，不要只改 `sql/` 就当修完库。

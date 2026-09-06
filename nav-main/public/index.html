@@ -385,19 +385,7 @@
         </div>
     </div>
 
-    <!-- JavaScript 文件 -->
-    <script src="/assets/js/utils.js"></script>
-    <script src="/assets/js/colorExtractor.js"></script>
-    <script src="/assets/js/emoji-pool.js"></script>
-    <script src="/assets/js/theme-mode.js"></script>
-    <script src="/assets/js/personalization.js"></script>
-    <script src="/assets/js/cloud-sync.js"></script>
-    <script src="/assets/js/sys-config.js"></script>
-    <script src="/assets/js/user-manage.js"></script>
-    <script src="/assets/js/import-export-sanitize.js"></script>
-    <script src="/assets/js/page-manage.js"></script>
-    <script src="/assets/js/app.js"></script>
-    <!-- 搜索体验增量补丁：引擎本地持久化 / 首字符保留 / best-effort 聚焦 -->
-    <script src="/assets/js/search-ux.js"></script>
+    <!-- ES module 入口（search-ux 已并入 features/search.js，不再要求最后加载） -->
+    <script type="module" src="/assets/js/main.js"></script>
 </body>
 </html>

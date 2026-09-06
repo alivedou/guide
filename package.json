@@ -14,13 +14,15 @@
     "deploy": "wrangler pages deploy ./nav-main/public",
     "clean": "rm -rf local_kv local_d1.db kv_mock.json tests/.tmp",
     "build": "echo 'Build successfully'",
-    "test": "node --test --test-concurrency=1 tests/baseline/*.test.mjs tests/phase0/*.test.mjs tests/phase1/*.test.mjs tests/phase2/*.test.mjs tests/phase3/*.test.mjs tests/unit/*.test.mjs",
+    "test": "node --test --test-concurrency=1 tests/baseline/*.test.mjs tests/phase0/*.test.mjs tests/phase1/*.test.mjs tests/phase2/*.test.mjs tests/phase3/*.test.mjs tests/phase4/*.test.mjs tests/unit/*.test.mjs",
     "test:baseline": "node --test --test-concurrency=1 tests/baseline/*.test.mjs",
     "test:unit": "node --test --test-concurrency=1 tests/unit/*.test.mjs",
     "test:phase0": "node --test --test-concurrency=1 tests/phase0/*.test.mjs",
     "test:phase1": "node --test --test-concurrency=1 tests/phase1/*.test.mjs tests/unit/*.test.mjs",
     "test:phase2": "node --test --test-concurrency=1 tests/phase2/*.test.mjs tests/baseline/*.test.mjs",
     "test:phase3": "node --test --test-concurrency=1 tests/phase3/*.test.mjs tests/unit/ids.test.mjs",
+    "test:phase4": "node --test --test-concurrency=1 tests/phase4/*.test.mjs tests/unit/sanitize.test.mjs && playwright test tests/e2e/smoke.spec.ts tests/e2e/search.spec.ts tests/e2e/admin.spec.ts",
+    "test:e2e": "playwright test tests/e2e",
     "test:dual": "node --test --test-concurrency=1 tests/phase3/dual-runtime.test.mjs",
     "test:capture": "node tests/scripts/capture-baseline.mjs"
   },
@@ -32,9 +34,11 @@
     "node-html-parser": "^7.1.0"
   },
   "devDependencies": {
+    "acorn": "^8.18.0",
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.3",
+    "@playwright/test": "^1.55.0",
     "wrangler": "^4.95.0"
   }
 }

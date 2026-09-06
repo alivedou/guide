@@ -45,6 +45,12 @@ local_d1.db
 *.db-journal
 tests/.tmp/
 
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
+
 # Dev test / fix documentation
 test-hash-consistency.js
 FIX_INSTRUCTIONS.md

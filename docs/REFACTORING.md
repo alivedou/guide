@@ -159,7 +159,7 @@ CF-nav/
 完成标准：保存书签的 id 重映射只存在于 shared。  
 测试：`npm run test:phase3` 与 `npm run test:dual`。
 
-### 阶段 4 · 前端按功能拆（风险中）
+### 阶段 4 · 前端按功能拆（风险中） ✅
 
 - `<script type="module" src="/assets/js/main.js">`。
 - 按现有函数块切：boot、auth、render、search、sidebar、zen、notices、profile、idb-bg。

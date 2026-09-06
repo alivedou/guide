@@ -14,7 +14,7 @@
  */
 
 // 缓存版本号
-const CACHE_NAME = 'nav-core-v9';
+const CACHE_NAME = 'nav-core-v10';
 const ICON_CACHE_NAME = 'nav-icons-v2'; // cache version
 const MAX_ICON_CACHE_ITEMS = 150; // 图标缓存自限容量
 
@@ -59,7 +59,7 @@ const URLS_TO_CACHE = [
   '/manifest.json',
   '/assets/css/style.css',
   '/assets/js/utils.js',
-  '/assets/js/app.js',
+  '/assets/js/main.js',
   'https://lib.baomitu.com/remixicon/3.5.0/remixicon.css',
   'https://lib.baomitu.com/Sortable/1.15.0/Sortable.min.js'
 ];
