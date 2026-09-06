@@ -1,0 +1,8 @@
+# Pages 根目录设为 nav-main 时，会读取本文件（仓库根目录的 wrangler.toml 不会生效）
+compatibility_date = "2024-05-28"
+compatibility_flags = ["nodejs_compat"]
+
+# 绑定请在 Cloudflare Pages 控制台配置：
+# - KV binding: nav
+# - D1 binding: DB
+# - Vars: JWT_SECRET（必需）, CRON_SECRET / TELEGRAM_*（可选）

@@ -5,7 +5,7 @@
 
 v4 目前几乎没有自动化测试，只有手工 Docker 清单 `docs/TESTING-REPORT.md`。重构期间 **测试不是收尾**：没有基线快照不准改业务；阶段测试没绿不准进下一阶段。
 
-测试代码加在 **CF-nav 仓库**，不在本说明书仓库。推荐 Node 22 自带 `node --test`；阶段 4 再加 Playwright。
+测试代码加在 **CF-nav 仓库**（本仓库 `tests/`）。用 Node 22 自带 `node --test`；阶段 4 再加 Playwright。
 
 ---
 

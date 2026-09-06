@@ -1,0 +1,37 @@
+{
+  "user": "should-not-export",
+  "username": "alice",
+  "uid": 10002,
+  "role": "user",
+  "isAdmin": false,
+  "quota": { "maxCategories": 12, "maxItemsPerCategory": 25 },
+  "lastUpdated": "2026/1/1 00:00",
+  "categories": [
+    { "id": "old_cat_1", "name": "工作", "icon": "💼", "hidden": false },
+    { "id": "old_cat_2", "name": "学习", "icon": "📚", "hidden": false }
+  ],
+  "items": [
+    {
+      "id": "old_item_1",
+      "catId": "old_cat_1",
+      "title": "文档",
+      "url": "https://example.com/docs",
+      "desc": "",
+      "icon": ""
+    },
+    {
+      "id": "old_item_2",
+      "catId": "old_cat_2",
+      "title": "教程",
+      "url": "https://example.com/learn",
+      "desc": "",
+      "icon": ""
+    }
+  ],
+  "settings": {
+    "zenMode": false,
+    "density": "standard",
+    "is_shared": true,
+    "share_slug": "keep-me-out"
+  }
+}

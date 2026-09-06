@@ -1,0 +1,100 @@
+{
+  "D-1": {
+    "status": 200,
+    "htmlHasShell": true
+  },
+  "A-1": {
+    "status": 200,
+    "hasCategories": true,
+    "categoryNames": [
+      "AI",
+      "新闻",
+      "社交",
+      "视频"
+    ],
+    "itemCount": 20,
+    "role": "guest",
+    "isAdmin": false,
+    "quota": {
+      "maxCategories": 6,
+      "maxItemsPerCategory": 12
+    }
+  },
+  "A-2": {
+    "status": 401
+  },
+  "A-3": {
+    "status": 400,
+    "code": "ERR_MISSING_USERNAME"
+  },
+  "A-3b": {
+    "status": 400,
+    "code": "ERR_MISSING_PASSWORD"
+  },
+  "A-4": {
+    "status": 200,
+    "success": true,
+    "role": "admin"
+  },
+  "A-8": {
+    "status": 401
+  },
+  "A-5": {
+    "status": 200,
+    "hasToken": true,
+    "role": "admin"
+  },
+  "A-6": {
+    "status": 200,
+    "hasCategories": true,
+    "categoryNames": [
+      "AI",
+      "新闻",
+      "社交",
+      "视频"
+    ],
+    "itemCount": 20,
+    "role": "admin",
+    "isAdmin": true,
+    "quota": {
+      "maxCategories": 150,
+      "maxItemsPerCategory": 500
+    }
+  },
+  "A-7": {
+    "status": 200,
+    "getStatus": 200,
+    "hasContractCategory": true,
+    "hasBookmark": true
+  },
+  "A-10": {
+    "status": 200,
+    "hasImage": true
+  },
+  "A-11": {
+    "status": 200,
+    "isArray": true
+  },
+  "A-12": {
+    "status": 403
+  },
+  "Q-1": {
+    "registerStatus": 200,
+    "registerRole": "user",
+    "loginStatus": 200,
+    "overStatus": 403,
+    "overCode": "ERR_QUOTA_EXCEEDED",
+    "beforeCount": 4,
+    "afterCount": 4,
+    "unchanged": true
+  },
+  "I-1": {
+    "hasIdentity": false
+  },
+  "I-2": {
+    "catIdsChanged": true,
+    "itemIdsChanged": true,
+    "catCount": 2,
+    "itemCount": 2
+  }
+}

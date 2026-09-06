@@ -1,32 +1,36 @@
 {
-  "name": "cfnav-refactor-plan",
-  "version": "0.1.0",
-  "private": true,
+  "name": "customizable-navigation-website",
+  "version": "1.0.0",
+  "description": "高度自定义的导航网站",
+  "main": "server.js",
+  "type": "module",
   "scripts": {
-    "dev": "next dev -p 43147 -H 0.0.0.0",
-    "build": "next build",
-    "start": "next start -p 43147 -H 0.0.0.0",
-    "lint": "eslint"
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "lint": "eslint . --fix",
+    "format": "prettier --write .",
+    "preview": "wrangler pages dev ./nav-main/public --functions nav-main/functions --kv=nav --d1=DB --compatibility-date=2024-05-28 --local",
+    "db:migrate": "wrangler d1 migrations apply cloudnav-db --local",
+    "deploy": "wrangler pages deploy ./nav-main/public",
+    "clean": "rm -rf local_kv local_d1.db kv_mock.json tests/.tmp",
+    "build": "echo 'Build successfully'",
+    "test": "node --test --test-concurrency=1 tests/baseline/*.test.mjs tests/phase0/*.test.mjs",
+    "test:baseline": "node --test --test-concurrency=1 tests/baseline/*.test.mjs",
+    "test:unit": "node --test --test-concurrency=1 tests/unit/*.test.mjs",
+    "test:phase0": "node --test --test-concurrency=1 tests/phase0/*.test.mjs",
+    "test:capture": "node tests/scripts/capture-baseline.mjs"
   },
   "dependencies": {
-    "@base-ui/react": "^1.8.0",
-    "class-variance-authority": "^0.7.1",
-    "cn": "^0.2.6",
-    "lucide-react": "^1.41.0",
-    "next": "16.3.4",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "shadcn": "^4.21.0",
-    "tw-animate-css": "^1.4.0"
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.2",
+    "jose": "^6.2.3",
+    "node-html-parser": "^7.1.0"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.3.4",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "wrangler": "^4.95.0"
   }
 }
