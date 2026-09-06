@@ -25,6 +25,9 @@ jobs:
         with:
           node-version: 22 # 100% 对齐您本地与 Docker 的 Node.js 22 环境
 
+      - name: Set up QEMU (arm64 on the ubuntu-latest amd64 runner)
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -52,6 +55,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

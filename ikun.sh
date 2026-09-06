@@ -130,8 +130,18 @@ EOF
     chmod -R 777 "$DATA_DIR"
 
     echo -e "${YELLOW}---> 第四步：拉取镜像与运行容器...${NC}"
-    docker pull "$FULL_IMAGE"
-    
+    PLATFORM_ARGS=()
+    if ! docker pull "$FULL_IMAGE"; then
+        echo -e "${YELLOW}镜像清单没有当前架构 $(uname -m)，改拉 linux/amd64（ARM VPS 可用模拟运行）...${NC}"
+        if docker pull --platform linux/amd64 "$FULL_IMAGE"; then
+            PLATFORM_ARGS=(--platform linux/amd64)
+        else
+            echo -e "${RED}镜像拉取失败。ARM 机器需要 multi-arch 镜像：在 GitHub Actions 用 v5 分支重新构建并勾选 amd64+arm64。${NC}"
+            pause_and_back
+            return
+        fi
+    fi
+
     # 全自动防冲突：如果已经存在老容器，先删掉再无缝换新
     if [ "$(docker ps -aq -f name=ikun-navigation)" ]; then
         echo -e "${YELLOW}检测到已存在旧容器，正在自动清理以便升级...${NC}"
@@ -141,6 +151,7 @@ EOF
     # 运行连招
     docker run -d \
       --name ikun-navigation \
+      "${PLATFORM_ARGS[@]}" \
       -p "${NAV_PORT}:${NAV_PORT}" \
       --env-file "$ENV_FILE" \
       -v "${DATA_DIR}:/app/local_kv" \
