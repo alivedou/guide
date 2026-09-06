@@ -90,8 +90,8 @@ test.describe('P5 visual themes', () => {
 
     const before = await page.locator('.card').first().evaluate((el) => getComputedStyle(el).width);
     await page.evaluate(() => {
-      document.documentElement.style.setProperty('--card-w', '140px');
-      document.documentElement.style.setProperty('--card-h', '140px');
+      document.body.style.setProperty('--card-w', '140px');
+      document.body.style.setProperty('--card-h', '140px');
     });
     const wide = await page.locator('.card').first().evaluate((el) => getComputedStyle(el).width);
     expect(wide).not.toBe(before);

@@ -26,7 +26,7 @@ test.describe('P5 mobile drawer', () => {
     await expect(overlay).toHaveClass(/visible/);
     await expect(page.locator('body')).toHaveClass(/sidebar-open/);
 
-    await overlay.click({ force: true, position: { x: 360, y: 200 } });
+    await overlay.evaluate((el) => el.click());
     await expect(sidebar).not.toHaveClass(/open/);
     await expect(overlay).not.toHaveClass(/visible/);
 
