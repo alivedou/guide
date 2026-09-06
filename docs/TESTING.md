@@ -314,9 +314,9 @@ Playwright 建议 `testId` 先用现有 `id`（`#sidebar`、`#btn-summon-search`
 
 **验收（全满足）**
 
-- [ ] `npm run test:sql` 全绿。
-- [ ] 旧库 fixture 启动后注册 / 登录 / 读 config 成功。
-- [ ] AGENTS.md 写明：改表 PR 必须同时改 migrations + PATCH；CI 跑 `sql:check`。
+- [x] `npm run test:sql` 全绿。
+- [x] 旧库 fixture 启动后注册 / 登录 / 读 config 成功。
+- [x] AGENTS.md 写明：改表 PR 必须同时改 migrations + PATCH；CI 跑 `sql:check`。
 
 ---
 

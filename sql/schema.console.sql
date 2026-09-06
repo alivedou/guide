@@ -1,6 +1,8 @@
--- 路径: sql/schema.console.sql（Docker 不打包本文件）
--- Cloudflare D1 控制台专用：无行内说明注释，可整段粘贴执行
--- （若控制台仍报错，请按「每条 CREATE 单独执行」方式运行）
+-- AUTO-GENERATED from migrations/0000_init.sql. Do not edit by hand.
+-- Regenerate: npm run sql:generate
+-- Runtime authority is migrations/0000_init.sql (copied into Docker).
+-- This directory is documentation / Cloudflare console material only.
+-- Cloudflare D1 console: paste this file (or run each CREATE alone if the console rejects a batch).
 
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -20,7 +22,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid);
+
 CREATE INDEX IF NOT EXISTS idx_users_temp_password_expires ON users(temp_password_expires_at);
+
 CREATE INDEX IF NOT EXISTS idx_users_temp_password_active ON users(is_temp_password_active);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -49,7 +53,7 @@ CREATE TABLE IF NOT EXISTS items (
     cat_id TEXT,
     title TEXT NOT NULL,
     url TEXT NOT NULL,
-    "desc" TEXT,
+    desc TEXT,
     icon TEXT,
     bg_color TEXT,
     sort_order INTEGER DEFAULT 0,

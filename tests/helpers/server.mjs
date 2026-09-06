@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import { REPO_ROOT, TEST_SECRET } from './paths.mjs';
@@ -29,8 +30,11 @@ async function waitForServer(url, timeoutMs = 20000) {
   throw new Error(`Server did not start in time: ${lastErr?.message || 'timeout'}`);
 }
 
-export async function startTestServer({ runId = 'node' } = {}) {
+export async function startTestServer({ runId = 'node', seedDb } = {}) {
   const paths = resetTestData(runId);
+  if (seedDb) {
+    fs.copyFileSync(seedDb, paths.db);
+  }
   const port = await getFreePort();
   const child = spawn(process.execPath, ['server.js'], {
     cwd: REPO_ROOT,

@@ -180,11 +180,11 @@ CF-nav/
 
 测试：`css-order.test.mjs` + 视觉/响应式 E2E。过线：tokens 先加载；主题截图 diff < 0.3% 或有说明的基线更新。
 
-### 阶段 6 · SQL 单一权威（风险中）
+### 阶段 6 · SQL 单一权威（风险中） ✅
 
-- PATCH 列表只维护一份。
-- `schema.upgrade.sql` 同源生成。
-- 改表 PR 必须同时改 `migrations/0000_init.sql`。
+- PATCH 列表只维护在 `nav-main/shared/schema-patch.js`。
+- `sql/schema.sql` / `schema.console.sql` 从 `migrations/0000_init.sql` 生成；`schema.upgrade.sql` 从 `PATCH_SQL` 生成。
+- 改表必须同时改 `migrations/0000_init.sql` 与 `PATCH_SQL`，再 `npm run sql:generate`。
 - 不要把 `sql/` 拷进 Docker，不要 DROP 用户表。
 
 测试：`tests/phase6/*.test.mjs` + 旧库 fixture。过线：CREATE/ALTER 集合对齐；缺列旧库能自愈；Dockerfile 不 COPY `sql/`。

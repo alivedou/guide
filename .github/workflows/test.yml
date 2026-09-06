@@ -22,6 +22,7 @@ jobs:
       - run: npm run test:phase3
       - run: node --test --test-concurrency=1 tests/phase4/*.test.mjs tests/unit/sanitize.test.mjs
       - run: node --test --test-concurrency=1 tests/phase5/*.test.mjs
+      - run: npm run sql:check
 
   playwright:
     runs-on: ubuntu-latest

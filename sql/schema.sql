@@ -1,18 +1,7 @@
--- ==========================================
--- 完整 D1/SQLite 表结构（给人看 / 控制台参考）
--- ==========================================
--- 【维护约定】
---   运行时权威源：migrations/0000_init.sql
---   Docker / server.js 只读 migrations/，不会读取本目录。
---   改表结构时：先改 migrations/0000_init.sql，再同步更新本文件。
---
--- 控制台初始化请优先用：sql/schema.console.sql
--- 老库补列请用：sql/schema.upgrade.sql
---
--- wrangler:
---   npx wrangler d1 migrations apply cloudnav-db --remote
---   或: npx wrangler d1 execute cloudnav-db --remote --file=./sql/schema.sql
--- ==========================================
+-- AUTO-GENERATED from migrations/0000_init.sql. Do not edit by hand.
+-- Regenerate: npm run sql:generate
+-- Runtime authority is migrations/0000_init.sql (copied into Docker).
+-- This directory is documentation / Cloudflare console material only.
 
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -31,14 +20,12 @@ CREATE TABLE IF NOT EXISTS users (
     is_temp_password_active BOOLEAN DEFAULT 0
 );
 
--- 创建用户 UID 索引
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid);
 
--- 临时密码查询索引
 CREATE INDEX IF NOT EXISTS idx_users_temp_password_expires ON users(temp_password_expires_at);
+
 CREATE INDEX IF NOT EXISTS idx_users_temp_password_active ON users(is_temp_password_active);
 
--- 2. 审计日志
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT,
@@ -48,7 +35,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. 分类表
 CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY,
     user_id TEXT,
@@ -60,7 +46,6 @@ CREATE TABLE IF NOT EXISTS categories (
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- 4. 网址项目表
 CREATE TABLE IF NOT EXISTS items (
     id TEXT PRIMARY KEY,
     user_id TEXT,
@@ -76,7 +61,6 @@ CREATE TABLE IF NOT EXISTS items (
     FOREIGN KEY(cat_id) REFERENCES categories(id) ON DELETE CASCADE
 );
 
--- 5. 用户偏好设置
 CREATE TABLE IF NOT EXISTS user_settings (
     user_id TEXT PRIMARY KEY,
     card_width INTEGER DEFAULT 85,
@@ -99,7 +83,6 @@ CREATE TABLE IF NOT EXISTS user_settings (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_settings_share_slug ON user_settings(share_slug);
 
--- 6. 公告系统
 CREATE TABLE IF NOT EXISTS announcements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     creator_id TEXT,
@@ -113,7 +96,6 @@ CREATE TABLE IF NOT EXISTS announcements (
     FOREIGN KEY(creator_id) REFERENCES users(id)
 );
 
--- 7. 邀请码表
 CREATE TABLE IF NOT EXISTS invitation_codes (
     code TEXT PRIMARY KEY,
     creator_id TEXT,
@@ -125,7 +107,6 @@ CREATE TABLE IF NOT EXISTS invitation_codes (
     FOREIGN KEY(used_by) REFERENCES users(id)
 );
 
--- 8. 公告已读状态表
 CREATE TABLE IF NOT EXISTS announcement_read_states (
     user_id TEXT,
     announcement_id INTEGER,

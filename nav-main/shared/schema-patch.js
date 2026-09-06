@@ -1,5 +1,6 @@
 /**
  * 老库缺列/缺表运行时补丁（唯一 SQL 列表）。
+ * sql/schema.upgrade.sql 由本列表生成（npm run sql:generate）。
  * 不删表；ALTER 已存在则静默跳过。
  */
 
@@ -17,6 +18,7 @@ export const PATCH_SQL = [
   "ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0",
   "ALTER TABLE categories ADD COLUMN is_video BOOLEAN DEFAULT 0",
   "ALTER TABLE categories ADD COLUMN hidden BOOLEAN DEFAULT 0",
+  'ALTER TABLE items ADD COLUMN "desc" TEXT',
   "ALTER TABLE items ADD COLUMN bg_color TEXT",
   "ALTER TABLE items ADD COLUMN sort_order INTEGER DEFAULT 0",
   "ALTER TABLE items ADD COLUMN hidden BOOLEAN DEFAULT 0",
@@ -36,6 +38,8 @@ export const PATCH_SQL = [
   "ALTER TABLE user_settings ADD COLUMN share_slug TEXT",
   "ALTER TABLE user_settings ADD COLUMN sync_interval INTEGER DEFAULT 7",
   "ALTER TABLE announcements ADD COLUMN creator_id TEXT",
+  "ALTER TABLE announcements ADD COLUMN title TEXT",
+  "ALTER TABLE announcements ADD COLUMN content TEXT",
   "ALTER TABLE announcements ADD COLUMN type TEXT DEFAULT 'quiet'",
   "ALTER TABLE announcements ADD COLUMN status TEXT DEFAULT 'published'",
   "ALTER TABLE announcements ADD COLUMN is_top BOOLEAN DEFAULT 0",
@@ -48,7 +52,9 @@ export const PATCH_SQL = [
     user_id TEXT,
     announcement_id INTEGER,
     read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, announcement_id)
+    PRIMARY KEY (user_id, announcement_id),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(announcement_id) REFERENCES announcements(id) ON DELETE CASCADE
   )`,
   `CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +65,8 @@ export const PATCH_SQL = [
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_uid ON users(uid)",
+  "CREATE INDEX IF NOT EXISTS idx_users_temp_password_expires ON users(temp_password_expires_at)",
+  "CREATE INDEX IF NOT EXISTS idx_users_temp_password_active ON users(is_temp_password_active)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_settings_share_slug ON user_settings(share_slug)"
 ];
 

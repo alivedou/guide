@@ -9,7 +9,8 @@ npm run test:baseline   # 每阶段合并前
 npm run test:phase0     # 阶段 0 卫生
 npm run test:phase4     # 阶段 4 模块入口 + Playwright
 npm run test:phase5     # 阶段 5 CSS 顺序 + 视觉/响应式 Playwright
-npm test                # baseline + phase0–5 的 node:test（不含浏览器）
+npm run test:sql        # 阶段 6 SQL 同源 + 旧库自愈（等同 sql:check）
+npm test                # baseline + phase0–6 的 node:test（不含浏览器）
 ```
 
 数据写在 `tests/.tmp/`（已 gitignore），通过 `DB_PATH` + `KV_DIR` 与开发者的 `local_d1.db` / `local_kv/` 隔离。

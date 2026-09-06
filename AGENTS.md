@@ -173,17 +173,17 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 
 | 文件 | 角色 |
 |------|------|
-| **`migrations/0000_init.sql`** | **唯一运行时权威**（Docker + server 自愈 + wrangler migrate） |
-| `sql/schema.sql` | 给人看的完整结构，**正文应与 0000 对齐** |
-| `sql/schema.console.sql` | CF 控制台粘贴 |
-| `sql/schema.upgrade.sql` | 已有库 `ALTER` 补列（duplicate 可忽略） |
+| **`migrations/0000_init.sql`** | **唯一运行时权威 CREATE**（Docker + server 自愈 + wrangler migrate） |
+| **`nav-main/shared/schema-patch.js` `PATCH_SQL`** | **唯一运行时权威 ALTER/缺表补丁**（Node `src/server/db.js` 与 CF `_d1_schema_patch.js`） |
+| `sql/schema.sql` / `schema.console.sql` | 从 `0000_init.sql` 生成，给人看 / 控制台粘贴 |
+| `sql/schema.upgrade.sql` | 从 `PATCH_SQL` 生成，已有库手工补列 |
 
 ### 改表流程
 
-1. 改 **`migrations/0000_init.sql`**（或新增 `migrations/000x_*.sql`）。
-2. 同步 **`sql/schema.sql`**。
-3. 视情况更新 `schema.console.sql` / `schema.upgrade.sql`，并给 `_d1_schema_patch.js` 与 `src/server/db.js` 热补丁补同一列（SQL 只写在 `nav-main/shared/schema-patch.js`）。
-4. **切记**：`CREATE TABLE IF NOT EXISTS` **不会**给旧表加列。
+1. 改 **`migrations/0000_init.sql`**（或新增 `migrations/000x_*.sql`）。**不要 DROP 用户表。**
+2. 老库需要自愈的列/表，只追加到 **`PATCH_SQL`**（不要在 Functions 或 `src/server/db.js` 再抄一份）。
+3. 跑 **`npm run sql:generate`**，把 `sql/` 三个文件重写进 git。
+4. 本地 **`npm run sql:check`**（CI 同样跑）。`CREATE TABLE IF NOT EXISTS` **不会**给旧表加列，缺列必须走 PATCH。
 
 ### 数据到底在哪（不要假设「全在 SQL」）
 
@@ -324,7 +324,7 @@ npm run format
 ## 9. 改动时检查清单
 
 - [ ] 是否破坏「根目录勿动」文件路径？
-- [ ] 若改表：是否更新了 `migrations/` + `sql/` + 两端热补丁？
+- [ ] 若改表：是否同时改了 `migrations/0000_init.sql` **和** `PATCH_SQL`？是否跑了 `npm run sql:generate` 与 `npm run sql:check`？
 - [ ] 若改 API / 配额 / 默认数据：Functions **与** `server.js` 是否对称？配额只改 `nav-main/shared/quota.js`，默认数据只改 `nav-main/shared/default-data.js`？
 - [ ] 若改前端：Docker 用户是否需要 **新镜像**？PWA `CACHE_NAME` 要不要升？
 - [ ] 若改 `ikun.sh`：README 里的 raw URL 是否仍有效？
