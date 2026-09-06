@@ -4,7 +4,7 @@
 基线分支：`v4`  
 原则：**功能全部保留，双部署保留，不换成 React。** 乱的根源是业务写了两遍和几个上帝文件，不是缺框架。
 
-本文可以整份拷进 CF-nav 仓库，作为后续增量重构的施工单。每阶段可独立合并；上一阶段没验收不要跳。
+本文可以整份拷进 CF-nav 仓库，作为后续增量重构的施工单。每阶段可独立合并；**阶段测试没绿，不准进下一阶段。** 测试目录、用例表和验收勾选见 [TESTING.md](./TESTING.md)。
 
 ---
 
@@ -114,6 +114,12 @@ CF-nav/
 
 ## 5. 阶段计划
 
+**先做阶段 B（冻结基线），再动 0–6。** 每个阶段的测试文件、用例表、验收勾选见 [TESTING.md](./TESTING.md)。下面补上过线条件。
+
+### 阶段 B · 基线（改代码之前）
+
+在 CF-nav 增加 `tests/`，对当前 v4 打 HTTP 快照。`npm run test:capture` 提交 `fixtures/baseline/`。没有快照不准改业务。
+
 ### 阶段 0 · 卫生清理（风险极低）
 
 - 删 `metadata.json`、根 `.eslintrc.json`。
@@ -122,7 +128,8 @@ CF-nav/
 - README 以 `JWT_SECRET` + `local_kv/` 为准，去掉 TOKEN / kv_mock。
 - 过时 docs 顶部注明「以 AGENTS.md 与代码为准」。
 
-完成标准：本地 `npm run dev` 与 Docker 构建行为不变。
+完成标准：本地 `npm run dev` 与 Docker 构建行为不变。  
+测试：`tests/phase0/hygiene.test.mjs` + baseline。过线：`test:phase0` 与 `test:baseline` 全绿；diff 不含业务逻辑。
 
 ### 阶段 1 · 共享领域层（风险低）
 
@@ -130,7 +137,8 @@ CF-nav/
 - `server.js` 与 Functions 改为 import，删除拷贝。
 - Dockerfile 已 COPY `nav-main/`，不必改白名单。
 
-完成标准：改 `shared/quota.js` 一处，Node 与 wrangler preview 配额同时变。
+完成标准：改 `shared/quota.js` 一处，Node 与 wrangler preview 配额同时变。  
+测试：`tests/unit/quota.test.mjs` 等 + `no-duplicate-source.test.mjs`。过线：配额只剩一份源；超限两端同时拒绝。
 
 ### 阶段 2 · 拆 server.js（风险低）
 
@@ -138,7 +146,8 @@ CF-nav/
 - 路由按现有 `/api` 分组。
 - `package.json` `main` 与 Dockerfile `COPY src/` 跟上。
 
-完成标准：`server.js` 消失或只剩 re-export；注册 / 登录 / 保存书签 / 导入导出与拆前一致。
+完成标准：`server.js` 消失或只剩 re-export；注册 / 登录 / 保存书签 / 导入导出与拆前一致。  
+测试：`route-map.test.mjs`、`docker-copy.test.mjs` + baseline。过线：路由表对齐；契约零 diff；镜像能 build。
 
 ### 阶段 3 · Functions 薄适配器（风险中）
 
@@ -147,7 +156,8 @@ CF-nav/
 - **不要**统一 CF 与 Node 的 KV 键名。
 - **不要**去掉 POST `/api/config` 的 id 重映射。
 
-完成标准：保存书签的 id 重映射只存在于 shared。
+完成标准：保存书签的 id 重映射只存在于 shared。  
+测试：`ids.test.mjs`、`dual-runtime.test.mjs`。过线：`test:dual` 全绿；KV 键名保持两端旧约定。
 
 ### 阶段 4 · 前端按功能拆（风险中）
 
@@ -157,7 +167,8 @@ CF-nav/
 - 合并 `search-ux.js`。`user-manage.js` 按 Tab 拆。
 - **升高** `ServiceWorker.js` 的 `CACHE_NAME`。
 
-完成标准：搜索首字符、禅意、拖拽、后台四个 Tab 与现在相同。
+完成标准：搜索首字符、禅意、拖拽、后台四个 Tab 与现在相同。  
+测试：Playwright smoke/search/admin + `module-boot.test.mjs`。过线：首字符与引擎刷新不回归；CACHE_NAME 已升高。
 
 ### 阶段 5 · CSS / HTML 减负（风险中）
 
@@ -165,12 +176,16 @@ CF-nav/
 - 不要用深层 `@import`。快捷键指南去掉 inline style。
 - 不给导航站上 Tailwind。
 
+测试：`css-order.test.mjs` + 视觉/响应式 E2E。过线：tokens 先加载；主题截图 diff < 0.3% 或有说明的基线更新。
+
 ### 阶段 6 · SQL 单一权威（风险中）
 
 - PATCH 列表只维护一份。
 - `schema.upgrade.sql` 同源生成。
 - 改表 PR 必须同时改 `migrations/0000_init.sql`。
 - 不要把 `sql/` 拷进 Docker，不要 DROP 用户表。
+
+测试：`tests/phase6/*.test.mjs` + 旧库 fixture。过线：CREATE/ALTER 集合对齐；缺列旧库能自愈；Dockerfile 不 COPY `sql/`。
 
 ---
 
@@ -205,6 +220,8 @@ CF-nav/
 
 ## 8. 每阶段回归清单
 
+自动化先跑：`test:baseline`（以及该阶段的 `test:phaseN`）。下列为机器覆盖不到、仍需点一次的项：
+
 - [ ] 打开首页，无闪烁、无裂图
 - [ ] 首位注册成为 admin
 - [ ] 登录 / 登出
@@ -215,13 +232,16 @@ CF-nav/
 - [ ] 后台：用户 / 邀请 / 公告 / 审计
 - [ ] Docker：数据写在挂载的 `/app/local_kv`，重启不丢
 
+测试项目细节、双运行时对比、旧库 fixture 见 [TESTING.md](./TESTING.md)。
+
 ---
 
 ## 9. 建议开工顺序
 
-1. 阶段 0 + 1：立刻去掉双份配额和死文件。
-2. 阶段 2：只动 Node，Pages 无感。
-3. 阶段 3 用 `/api/config` 试点，再铺开。
-4. 前端拆分放到后端共享层稳定之后，并升 PWA 缓存。
+1. 阶段 B：在 CF-nav 加上 `tests/`，冻结基线。
+2. 阶段 0 + 1，测试跟着合（配额单测是硬门槛）。
+3. 阶段 2：路由表 + 契约零 diff；Dockerfile COPY 要测。
+4. 阶段 3 用 `/api/config` 试点，强制 `test:dual`。
+5. 前端拆分必须带 Playwright；搜索首字符是历史回归点。
 
 不要把导航站迁到其它框架仓库。本方案仓库里的 Next.js 页面只是说明书。

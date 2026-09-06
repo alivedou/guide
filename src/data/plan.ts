@@ -221,6 +221,13 @@ export const mapping = [
   },
 ];
 
+export type TestCase = {
+  id: string;
+  name: string;
+  how: string;
+  expect: string;
+};
+
 export type Phase = {
   id: string;
   name: string;
@@ -229,6 +236,9 @@ export type Phase = {
   steps: string[];
   doneWhen: string[];
   notThisPhase: string[];
+  testFiles: string[];
+  testCases: TestCase[];
+  accept: string[];
 };
 
 export const phases: Phase[] = [
@@ -249,6 +259,42 @@ export const phases: Phase[] = [
       "git diff 不含业务逻辑。",
     ],
     notThisPhase: ["不改目录名", "不拆 app.js", "不改 Pages Root"],
+    testFiles: [
+      "tests/baseline/contract.test.mjs",
+      "tests/phase0/hygiene.test.mjs",
+      "tests/scripts/capture-baseline.mjs",
+    ],
+    testCases: [
+      {
+        id: "B-0",
+        name: "先钉基线再改代码",
+        how: "npm run test:baseline 对当前 v4 打快照到 tests/fixtures/baseline/",
+        expect: "auth/config/admin 的状态码与关键 JSON 字段写入仓库，后续阶段对这份 diff",
+      },
+      {
+        id: "P0-1",
+        name: "死文件已消失",
+        how: "断言仓库根不存在 metadata.json、.eslintrc.json",
+        expect: "文件不存在；eslint.config.js 仍在且 npm run lint 可跑",
+      },
+      {
+        id: "P0-2",
+        name: "site-config 只注册一次",
+        how: "扫描 server.js 中 app.get/post('/api/admin/site-config') 次数",
+        expect: "GET、POST 各恰好 1 次",
+      },
+      {
+        id: "P0-3",
+        name: "契约未漂",
+        how: "跑完整 baseline 套件（Node :3000）",
+        expect: "与 B-0 快照零 diff；首页 200；匿名写 config 仍 401",
+      },
+    ],
+    accept: [
+      "test:baseline 全绿，且与提交的 fixtures/baseline 一致。",
+      "npm run test:phase0 全绿。",
+      "git diff 不含路由处理函数体、不含 SQL、不含前端逻辑。",
+    ],
   },
   {
     id: "p1",
@@ -267,6 +313,49 @@ export const phases: Phase[] = [
       "两端 schema 补丁 SQL 字符串相同。",
     ],
     notThisPhase: ["还不做通用 Storage Port", "不改 KV 键名", "不拆前端"],
+    testFiles: [
+      "tests/unit/quota.test.mjs",
+      "tests/unit/schema-patch.test.mjs",
+      "tests/unit/default-data.test.mjs",
+      "tests/phase1/no-duplicate-source.test.mjs",
+    ],
+    testCases: [
+      {
+        id: "P1-1",
+        name: "配额表",
+        how: "单测 getQuota：guest/user/invited_user/super_user/admin",
+        expect: "6/12、12/25、15/30、20/40、150/500；无用户按 guest",
+      },
+      {
+        id: "P1-2",
+        name: "配额只有一份源",
+        how: "rg QUOTA_CONFIG 全仓库",
+        expect: "只出现在 nav-main/shared/quota.js 与测试；server/functions 不得再定义对象字面量",
+      },
+      {
+        id: "P1-3",
+        name: "PATCH_SQL 同源",
+        how: "比较 Node 启动补丁列表与 _d1_schema_patch 实际执行的 SQL",
+        expect: "字符串集合相等；ALTER 失败（列已存在）必须被吞掉",
+      },
+      {
+        id: "P1-4",
+        name: "默认书签单源",
+        how: "比较 defaultData 的 categories/items 指纹",
+        expect: "server import 与 Functions import 是同一模块；改一处两边 JSON 指纹相同",
+      },
+      {
+        id: "P1-5",
+        name: "shared 无 Node/Worker 私货",
+        how: "扫描 nav-main/shared 的 import",
+        expect: "不得 import better-sqlite3、express、fs、path；不得读 process.env.DB_PATH",
+      },
+    ],
+    accept: [
+      "npm run test:unit 与 test:phase1 全绿。",
+      "临时把 admin 配额改成 149，Node 与 wrangler preview 的超限 POST /api/config 同时失败；测完改回。",
+      "baseline 契约套件相对阶段 0 快照仍为零 diff。",
+    ],
   },
   {
     id: "p2",
@@ -284,6 +373,48 @@ export const phases: Phase[] = [
       "本地注册首位管理员、登录、保存书签、导入导出与拆前一致。",
     ],
     notThisPhase: ["不改 Functions 文件结构", "不改前端"],
+    testFiles: [
+      "tests/baseline/contract.test.mjs",
+      "tests/phase2/route-map.test.mjs",
+      "tests/phase2/docker-copy.test.mjs",
+    ],
+    testCases: [
+      {
+        id: "P2-1",
+        name: "路由表完整",
+        how: "从 src/server/routes 收集已挂载 path+method，对照 tests/fixtures/route-map.json",
+        expect: "14 组 API 一条不少；无多余 path",
+      },
+      {
+        id: "P2-2",
+        name: "空登录体",
+        how: "POST /api/auth/login {} 与缺 password",
+        expect: "400 + code ERR_MISSING_* ；进程不退出（对照原 A-3 回归）",
+      },
+      {
+        id: "P2-3",
+        name: "注册登录写配置闭环",
+        how: "空库注册 → 登录拿 token → GET/POST /api/config → 错误密码 401",
+        expect: "首位 role=admin；写回后 GET 能读到同分类名；匿名 POST 仍 401",
+      },
+      {
+        id: "P2-4",
+        name: "Docker COPY 含 src/",
+        how: "解析 Dockerfile，断言 COPY src 或等价路径",
+        expect: "镜像构建上下文包含拆后入口；CMD 能启动",
+      },
+      {
+        id: "P2-5",
+        name: "管理接口鉴权",
+        how: "无 token 打 GET /api/admin/users",
+        expect: "403（或与基线相同的拒绝码，不得变成 200）",
+      },
+    ],
+    accept: [
+      "npm run test:phase2 全绿。",
+      "对照 fixtures/baseline 的契约快照零 diff（允许 Date/lastUpdated 一类时间字段用正则忽略）。",
+      "docker build 成功；容器内 curl 首页 200。本阶段不要求改 Functions。",
+    ],
   },
   {
     id: "p3",
@@ -302,6 +433,49 @@ export const phases: Phase[] = [
       "Functions 文件明显变短，不再出现第二份 QUOTA_CONFIG。",
     ],
     notThisPhase: ["不要统一 CF 与 Node 的 KV 键名", "不要上 ORM"],
+    testFiles: [
+      "tests/unit/ids.test.mjs",
+      "tests/phase3/config-handler.test.mjs",
+      "tests/phase3/dual-runtime.test.mjs",
+      "tests/phase3/kv-key-compat.test.mjs",
+    ],
+    testCases: [
+      {
+        id: "P3-1",
+        name: "id 重映射",
+        how: "POST /api/config 两次提交相同 category.id / item.id",
+        expect: "第二次写入的 SQL 主键与第一次不同；响应/再 GET 不出现 UNIQUE 500",
+      },
+      {
+        id: "P3-2",
+        name: "超配额拒绝",
+        how: "普通用户提交 13 个分类或单分类 26 个书签",
+        expect: "4xx，库中数据保持提交前快照",
+      },
+      {
+        id: "P3-3",
+        name: "双运行时同一 handler",
+        how: "同一组请求打 Node :3000 与 wrangler preview（或 functions 的 handler 单测）",
+        expect: "状态码一致；config 的 categories[].name / items[].url 集合相等",
+      },
+      {
+        id: "P3-4",
+        name: "KV 键名未统一",
+        how: "断言 CF 适配器仍写 user_config:<uuid>，Node 仍写 local_kv/user_<uuid>.json",
+        expect: "测试失败条件是「两边键名被改成同一种」；兼容是功能",
+      },
+      {
+        id: "P3-5",
+        name: "handler 无第二份配额",
+        how: "rg QUOTA_CONFIG functions/ 与 src/server/",
+        expect: "零命中定义；只 import shared",
+      },
+    ],
+    accept: [
+      "npm run test:phase3 与 test:dual 全绿。",
+      "id 重映射的实现只出现在 nav-main/shared（rg remap 或等价函数名）。",
+      "导入一份带旧 id 的 JSON 后，两端都能再保存成功。",
+    ],
   },
   {
     id: "p4",
@@ -321,6 +495,56 @@ export const phases: Phase[] = [
       "app.js 不复存在，或只剩 re-export。",
     ],
     notThisPhase: ["不上 Vite/React", "不改视觉", "不重写 HTML 模板系统"],
+    testFiles: [
+      "tests/unit/sanitize.test.mjs",
+      "tests/phase4/module-boot.test.mjs",
+      "tests/e2e/smoke.spec.ts",
+      "tests/e2e/search.spec.ts",
+      "tests/e2e/admin.spec.ts",
+    ],
+    testCases: [
+      {
+        id: "P4-1",
+        name: "入口是 type=module",
+        how: "解析 index.html 的 script 标签",
+        expect: "主入口为 /assets/js/main.js 且 type=module；不再依赖 search-ux.js 必须最后加载",
+      },
+      {
+        id: "P4-2",
+        name: "window 兼容桥",
+        how: "在 jsdom/Playwright 里求值 window.showToast / closeAllModals / updateStyles",
+        expect: "均为 function；inline onclick 用到的名字一张表列在 tests/fixtures/window-api.json",
+      },
+      {
+        id: "P4-3",
+        name: "搜索首字符",
+        how: "E2E：焦点在页面时直接键入字母",
+        expect: "搜索框出现且第一个字符被保留（原 search-ux 修复不得回归）",
+      },
+      {
+        id: "P4-4",
+        name: "引擎持久化",
+        how: "E2E：切到百度，刷新",
+        expect: "仍是百度，不被云端 settings 打回必应",
+      },
+      {
+        id: "P4-5",
+        name: "PWA 缓存版本",
+        how: "读 ServiceWorker.js 的 CACHE_NAME，对比 git 上一版",
+        expect: "字符串已升高；旧 app.js 不得再被 Precache",
+      },
+      {
+        id: "P4-6",
+        name: "导入清洗",
+        how: "单测 sanitizeForExport / sanitizeForImport",
+        expect: "去掉 user/role/quota/isAdmin；导入后分类与书签 id 全部换新",
+      },
+    ],
+    accept: [
+      "npx playwright test tests/e2e 全绿（桌面 1280 与手机 390 各跑 smoke）。",
+      "test:phase4 全绿：window API 表、CACHE_NAME、不再加载独立 search-ux.js。",
+      "手工：禅意开关、侧边栏钉住、拖拽一张卡片、后台四个 Tab 打开列表。缺一不可。",
+    ],
   },
   {
     id: "p5",
@@ -338,6 +562,42 @@ export const phases: Phase[] = [
       "桌面与手机各走一遍主路径。",
     ],
     notThisPhase: ["不引入 Tailwind 到导航站本体", "不改 densify 算法"],
+    testFiles: [
+      "tests/phase5/css-order.test.mjs",
+      "tests/e2e/visual.spec.ts",
+      "tests/e2e/responsive.spec.ts",
+    ],
+    testCases: [
+      {
+        id: "P5-1",
+        name: "CSS 加载顺序",
+        how: "解析 index.html link[rel=stylesheet]",
+        expect: "tokens 在最先；不存在链式 @import 超过一层",
+      },
+      {
+        id: "P5-2",
+        name: "关键选择器还在",
+        how: "对拆后 CSS 做选择器清单断言（sidebar / card / modal / zen）",
+        expect: "tests/fixtures/css-selectors.json 里的选择器每个文件集合都能 grep 到",
+      },
+      {
+        id: "P5-3",
+        name: "主题与禅意",
+        how: "E2E 截图：暗色首页、亮色首页、禅意模式、管理模式",
+        expect: "与 tests/fixtures/screenshots/ 基线对比，diff 像素 < 0.3%（字体抗锯齿允许）",
+      },
+      {
+        id: "P5-4",
+        name: "移动端抽屉",
+        how: "390×844：点汉堡，侧栏出现；点遮罩关闭",
+        expect: "主内容不被永久挡住；搜索召唤按钮可点",
+      },
+    ],
+    accept: [
+      "test:phase5 全绿。",
+      "视觉基线四张图通过（或经人工确认后更新基线并写明原因）。",
+      "密度/卡片宽度滑块仍改变网格，不要求像素级动画一致。",
+    ],
   },
   {
     id: "p6",
@@ -355,6 +615,42 @@ export const phases: Phase[] = [
       "老 D1 库仍能靠 upgrade / 热补丁起来。",
     ],
     notThisPhase: ["不要把 sql/ 拷进 Docker", "不要 DROP 重建用户表"],
+    testFiles: [
+      "tests/phase6/sql-source.test.mjs",
+      "tests/phase6/old-db-upgrade.test.mjs",
+      "tests/phase6/docker-no-sql-dir.test.mjs",
+    ],
+    testCases: [
+      {
+        id: "P6-1",
+        name: "CREATE TABLE 对齐",
+        how: "解析 migrations/0000_init.sql 与 sql/schema.sql 的建表语句",
+        expect: "表名集合与列名集合相等",
+      },
+      {
+        id: "P6-2",
+        name: "upgrade 与 PATCH 同源",
+        how: "抽出 schema.upgrade.sql 的 ALTER 与 shared/schema-patch.js 的 PATCH_SQL",
+        expect: "列级 ALTER 集合相等（允许注释/空白差）",
+      },
+      {
+        id: "P6-3",
+        name: "缺列表能补上",
+        how: "用一份故意去掉 users.email 的旧库 fixture 启动 Node",
+        expect: "启动后 PRAGMA table_info(users) 含 email；接口不报 no such column",
+      },
+      {
+        id: "P6-4",
+        name: "sql/ 不进镜像",
+        how: "Dockerfile 不得 COPY sql/",
+        expect: "白名单仍是 package、src/server、migrations、nav-main",
+      },
+    ],
+    accept: [
+      "npm run test:sql 全绿。",
+      "旧库 fixture 启动后注册/登录/读 config 成功。",
+      "文档写明：改表 PR 必须同时改 migrations + PATCH；CI 跑 sql:check。",
+    ],
   },
 ];
 
@@ -433,4 +729,67 @@ export const apiParity = [
   "GET|POST|PATCH|DELETE /api/admin/announcements",
   "GET /api/admin/audit-logs",
   "GET /api/admin/cron-digest",
+];
+
+export const testStrategy = {
+  title: "测试不是收尾，是每个阶段的入场券",
+  body: "v4 现在几乎没有自动化测试，只有一份手工 Docker 清单（docs/TESTING-REPORT.md）。重构如果还靠「点一点感觉没坏」，拆文件一定会静默回归。规则：先冻结基线，再改代码；阶段测试没绿，不允许进下一阶段。测试项目加在 CF-nav 仓库里，用 Node 22 自带的 node:test，前端阶段再加 Playwright。本说明书仓库不跑那些测试。",
+};
+
+export const testProjectTree = `CF-nav/
+├── package.json                 # 增加 test / test:baseline / test:phaseN
+├── tests/
+│   ├── README.md                # 怎么跑、对哪套运行时
+│   ├── fixtures/
+│   │   ├── baseline/            # 阶段 B 冻结的 HTTP 快照
+│   │   ├── route-map.json       # 允许的 method+path
+│   │   ├── window-api.json      # 前端必须挂到 window 的名字
+│   │   ├── css-selectors.json
+│   │   ├── nav-export.sample.json
+│   │   ├── old-db.sqlite        # 缺列的老库
+│   │   └── screenshots/         # 阶段 5 视觉基线
+│   ├── helpers/
+│   │   ├── api.mjs              # 带 token 的 fetch
+│   │   ├── reset-db.mjs         # 清空 local_d1.db + local_kv
+│   │   └── dual.mjs             # 同一用例打 Node 与 wrangler
+│   ├── baseline/
+│   │   └── contract.test.mjs    # 每阶段都要跑的契约套件
+│   ├── unit/                    # 不启服务器：quota / ids / sanitize / patch
+│   ├── phase0/ … phase6/        # 只在对应阶段强制
+│   └── e2e/                     # Playwright，阶段 4 起
+└── .github/workflows/test.yml   # push 时跑 unit + baseline（Node）`;
+
+export const baselineCases = [
+  { id: "A-1", name: "游客读 config", expect: "GET /api/config → 200，带默认分类" },
+  { id: "A-2", name: "匿名写 config", expect: "POST /api/config 无 token → 401" },
+  { id: "A-3", name: "空登录体", expect: "POST /api/auth/login {} → 400，进程不崩" },
+  { id: "A-4", name: "首位注册", expect: "空库 POST /api/auth/register → 200，role=admin" },
+  { id: "A-5", name: "登录发 token", expect: "POST /api/auth/login 正确密码 → 200 + JWT" },
+  { id: "A-6", name: "鉴权读 config", expect: "带 Bearer → 200" },
+  { id: "A-7", name: "鉴权写 config", expect: "POST 合法书签 JSON → 200，再 GET 能读回" },
+  { id: "A-8", name: "错误密码", expect: "401" },
+  { id: "A-10", name: "Bing 壁纸", expect: "GET /api/bing → 200" },
+  { id: "A-11", name: "用户侧公告", expect: "GET /api/announcements → 200" },
+  { id: "A-12", name: "管理接口拒绝匿名", expect: "GET /api/admin/users 无 token → 403" },
+  { id: "Q-1", name: "普通用户超分类配额", expect: "13 个分类 → 4xx，库不变" },
+  { id: "I-1", name: "导出去身份字段", expect: "JSON 不含 user/role/quota/isAdmin" },
+  { id: "I-2", name: "导入换新 id", expect: "categories/items 的 id 与文件内原值全不同" },
+  { id: "D-1", name: "首页", expect: "GET / → 200，HTML 含导航壳" },
+];
+
+export const testCommands = [
+  { cmd: "npm run test:baseline", when: "阶段 B 与之后每一阶段合并前" },
+  { cmd: "npm run test:unit", when: "阶段 1 起，配额/补丁/id/清洗" },
+  { cmd: "npm run test:phase0 … test:phase6", when: "只在对应阶段的 PR 强制" },
+  { cmd: "npm run test:dual", when: "阶段 3 起，同一用例打 Node + wrangler" },
+  { cmd: "npx playwright test", when: "阶段 4–5，浏览器回归" },
+  { cmd: "npm run test:sql", when: "阶段 6，表结构对齐与旧库自愈" },
+];
+
+export const gateRule = [
+  "阶段 B 的契约快照进 git。之后任何阶段如果 baseline 红了，先修回归，再谈拆文件。",
+  "单测能覆盖的（配额、id 重映射、sanitize、PATCH_SQL）禁止只靠手工。",
+  "双运行时从阶段 3 开始强制：只测 Node 绿、Pages 红，算没过。",
+  "前端阶段 4 起必须有 Playwright smoke；搜索首字符、引擎刷新是必测，因为历史上就回归过。",
+  "视觉对比允许更新基线，但 PR 说明里要写「改了什么外观」。无说明的截图更新视为失败。",
 ];

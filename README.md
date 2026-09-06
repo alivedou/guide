@@ -14,7 +14,8 @@
 
 对策是抽出 `nav-main/shared`（Pages 构建根必须能看见共享代码），再按功能拆文件。双部署、无打包前端、绑定名、`ikun.sh` 路径都保持不动。
 
-完整施工单见 [docs/REFACTORING.md](./docs/REFACTORING.md)。
+完整施工单见 [docs/REFACTORING.md](./docs/REFACTORING.md)。  
+测试目录、分阶段用例和验收标准见 [docs/TESTING.md](./docs/TESTING.md)。
 
 ## 本地预览本说明书
 

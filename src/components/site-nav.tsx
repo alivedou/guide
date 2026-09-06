@@ -10,6 +10,7 @@ const links = [
   { href: "#current", label: "现状" },
   { href: "#target", label: "目标结构" },
   { href: "#phases", label: "阶段计划" },
+  { href: "#testing", label: "测试与验收" },
   { href: "#guardrails", label: "不能动" },
 ];
 

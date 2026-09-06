@@ -18,19 +18,25 @@ import {
   SOURCE_BRANCH,
   SOURCE_REPO,
   apiParity,
+  baselineCases,
   currentTree,
   features,
   frontendSplit,
+  gateRule,
   guardrails,
   mapping,
   pains,
   phases,
   stats,
   targetTree,
+  testCommands,
+  testProjectTree,
+  testStrategy,
   verdict,
 } from "@/data/plan";
 import {
   ArrowRight,
+  ClipboardCheck,
   GitBranch,
   Layers,
   ShieldAlert,
@@ -59,6 +65,9 @@ export default function Home() {
               </Badge>
               <Badge variant="outline" className="font-normal">
                 不换成 React
+              </Badge>
+              <Badge variant="outline" className="font-normal">
+                每阶段带测试与验收
               </Badge>
             </div>
             <h1 className="text-3xl font-bold leading-tight tracking-tight sm:text-5xl">
@@ -246,7 +255,7 @@ export default function Home() {
             <h2 className="text-xl font-semibold sm:text-2xl">分阶段计划</h2>
           </div>
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            每一阶段结束时功能必须可演示：打开首页、首位注册成 admin、登录、搜索、加书签、云同步、导入导出、后台四个 Tab。做不到就停，不要赶下一阶段。
+            每一阶段都带测试文件和验收标准。阶段测试没绿，不准进下一阶段。先看下面的「测试与验收」。
           </p>
           <Accordion multiple defaultValue={["p0"]}>
             {phases.map((phase) => (
@@ -260,19 +269,11 @@ export default function Home() {
                   </span>
                 </AccordionTrigger>
                 <AccordionContent>
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <p className="mb-2 text-xs tracking-wide text-mint uppercase">做什么</p>
                       <ul className="space-y-1.5 text-sm leading-6">
                         {phase.steps.map((s) => (
-                          <li key={s}>{s}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="mb-2 text-xs tracking-wide text-mint uppercase">做到什么算完</p>
-                      <ul className="space-y-1.5 text-sm leading-6">
-                        {phase.doneWhen.map((s) => (
                           <li key={s}>{s}</li>
                         ))}
                       </ul>
@@ -286,10 +287,121 @@ export default function Home() {
                       </ul>
                     </div>
                   </div>
+                  <div className="mt-4 rounded-lg bg-muted/40 p-3">
+                    <p className="mb-2 text-xs tracking-wide text-mint uppercase">本阶段测试文件</p>
+                    <ul className="flex flex-col gap-1 font-mono text-xs text-amber">
+                      {phase.testFiles.map((f) => (
+                        <li key={f}>{f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="mt-4 overflow-x-auto">
+                    <p className="mb-2 text-xs tracking-wide text-mint uppercase">用例</p>
+                    <table className="w-full min-w-[560px] text-left text-sm">
+                      <thead className="text-muted-foreground">
+                        <tr>
+                          <th className="py-1 pr-3 font-medium">ID</th>
+                          <th className="py-1 pr-3 font-medium">测什么</th>
+                          <th className="py-1 pr-3 font-medium">怎么测</th>
+                          <th className="py-1 font-medium">期望</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {phase.testCases.map((c) => (
+                          <tr key={c.id} className="border-t border-line align-top">
+                            <td className="py-2 pr-3 font-mono text-xs text-mint">{c.id}</td>
+                            <td className="py-2 pr-3">{c.name}</td>
+                            <td className="py-2 pr-3 text-muted-foreground">{c.how}</td>
+                            <td className="py-2 text-muted-foreground">{c.expect}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs tracking-wide text-mint uppercase">验收标准（全满足才算过）</p>
+                    <ul className="space-y-1.5 text-sm leading-6">
+                      {phase.accept.map((s) => (
+                        <li key={s}>☐ {s}</li>
+                      ))}
+                    </ul>
+                  </div>
                 </AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
+        </section>
+
+        <section id="testing" className="scroll-mt-24 space-y-6">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="size-5 text-mint" />
+            <h2 className="text-xl font-semibold sm:text-2xl">{testStrategy.title}</h2>
+          </div>
+          <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{testStrategy.body}</p>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {gateRule.map((g) => (
+              <Card key={g} size="sm" className="bg-panel/70">
+                <CardContent className="pt-4 text-sm leading-6">{g}</CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">测试项目目录（加在 CF-nav 里）</h3>
+              <p className="text-sm text-muted-foreground">
+                用 Node 22 自带 <span className="font-mono text-foreground">node --test</span>
+                ，不另上 Jest。阶段 4 才加 Playwright。完整说明见
+                <span className="font-mono text-foreground"> docs/TESTING.md</span>。
+              </p>
+              <Card>
+                <CardContent className="pt-4">
+                  <pre className="tree-block">{testProjectTree}</pre>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">命令与何时跑</h3>
+              <div className="space-y-2">
+                {testCommands.map((c) => (
+                  <Card key={c.cmd} size="sm">
+                    <CardHeader>
+                      <CardTitle className="font-mono text-sm text-mint">{c.cmd}</CardTitle>
+                      <CardDescription>{c.when}</CardDescription>
+                    </CardHeader>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold">阶段 B · 基线契约（每阶段合并前必跑）</h3>
+            <p className="text-sm leading-6 text-muted-foreground">
+              在改第一行业务代码之前，对当前 v4 打 HTTP 快照。编号沿用仓库里已有的 TESTING-REPORT（A-1…），并补上配额和导入导出。时间字段用正则忽略。
+            </p>
+            <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="bg-muted/50 text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">ID</th>
+                    <th className="px-4 py-3 font-medium">用例</th>
+                    <th className="px-4 py-3 font-medium">通过标准</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {baselineCases.map((c) => (
+                    <tr key={c.id} className="border-t border-line">
+                      <td className="px-4 py-2.5 font-mono text-xs text-mint">{c.id}</td>
+                      <td className="px-4 py-2.5">{c.name}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{c.expect}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
@@ -347,24 +459,28 @@ export default function Home() {
           <h2 className="text-xl font-semibold">建议的开工顺序</h2>
           <ol className="mt-4 space-y-3 text-sm leading-7 text-muted-foreground">
             <li>
-              <span className="font-medium text-foreground">1. 先做阶段 0 + 1。</span>
-              仓库立刻干净，配额和默认书签不再双份。这是收益最高、风险最低的两步。
+              <span className="font-medium text-foreground">0. 先做阶段 B：冻结基线。</span>
+              在 CF-nav 里加上 tests/，对现网行为打快照。没有这份快照，后面的「没坏」无法证明。
             </li>
             <li>
-              <span className="font-medium text-foreground">2. 再拆 server.js（阶段 2）。</span>
-              不影响 Pages。Docker 记得把 src/ 加进 COPY。
+              <span className="font-medium text-foreground">1. 阶段 0 + 1，测试跟着合。</span>
+              卫生清理和共享层。P1 的配额单测和「只有一份 QUOTA_CONFIG」扫描是硬门槛。
             </li>
             <li>
-              <span className="font-medium text-foreground">3. 用 /api/config 试点阶段 3。</span>
-              保存书签这条链路最肥，也最容易两端漂移。跑通再迁登录和后台。
+              <span className="font-medium text-foreground">2. 拆 server.js（阶段 2）。</span>
+              路由表对照 + 契约零 diff。Docker COPY 要测，不只是文档里写一句。
             </li>
             <li>
-              <span className="font-medium text-foreground">4. 前端拆分放到能稳定回归之后。</span>
-              app.js 拆文件不改行为，但必须升 PWA 缓存版本，并手工点一遍搜索首字符、禅意、拖拽。
+              <span className="font-medium text-foreground">3. /api/config 试点阶段 3。</span>
+              开始强制 test:dual。id 重映射和超配额必须单测，不能只手工点保存。
+            </li>
+            <li>
+              <span className="font-medium text-foreground">4. 前端拆分必须带 Playwright。</span>
+              搜索首字符、引擎刷新是历史回归点。升 CACHE_NAME。CSS 阶段才比截图。
             </li>
           </ol>
           <p className="mt-6 text-sm text-muted-foreground">
-            若要在 CF-nav 仓库里直接落地某一阶段，指定阶段号即可。不要把导航站迁到本 Next 项目里。
+              落地时从阶段 B 的测试脚手架开始。施工单见 docs/REFACTORING.md，测试项目见 docs/TESTING.md。不要把导航站迁到本 Next 项目里。
           </p>
         </section>
       </main>
