@@ -297,6 +297,12 @@ const renderNav = () => {
                 };
                 zenMenu.appendChild(menuItem);
             });
+            const activeChip = zenMenu.querySelector('.zen-menu-item.active');
+            if (activeChip && window.matchMedia('(max-width: 768px)').matches) {
+                requestAnimationFrame(() => {
+                    activeChip.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' });
+                });
+            }
         }
 
         const sidebarFragment = document.createDocumentFragment();

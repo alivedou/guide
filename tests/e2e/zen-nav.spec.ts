@@ -60,24 +60,42 @@ test.describe('Zen category chips wrap instead of clipping', () => {
   });
 });
 
-test.describe('Zen category chips wrap on a phone', () => {
+test.describe('Zen category chips scroll on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('last category stays inside the phone viewport', async ({ page }) => {
+  test('stays on one row and the last chip can be scrolled into view', async ({ page }) => {
     await waitForApp(page);
     await enableZenWithManyCategories(page, 12);
 
-    const geometry = await page.evaluate(() => {
-      const el = document.querySelector('#zen-nav-menu .zen-menu-item:last-child');
-      const box = el.getBoundingClientRect();
+    const metrics = await page.evaluate(() => {
+      const menu = document.getElementById('zen-nav-menu');
+      const last = menu.querySelector('.zen-menu-item:last-child');
+      const cs = getComputedStyle(menu);
       return {
-        right: box.right,
+        wrap: cs.flexWrap,
+        overflowX: cs.overflowX,
+        scrollWidth: menu.scrollWidth,
+        clientWidth: menu.clientWidth,
+        lastRightBefore: last.getBoundingClientRect().right,
         viewW: window.innerWidth,
-        wrap: getComputedStyle(document.getElementById('zen-nav-menu')).flexWrap,
       };
     });
 
-    expect(geometry.wrap).toBe('wrap');
-    expect(geometry.right).toBeLessThanOrEqual(geometry.viewW + 1);
+    expect(metrics.wrap).toBe('nowrap');
+    expect(['auto', 'scroll', 'overlay']).toContain(metrics.overflowX);
+    expect(metrics.scrollWidth).toBeGreaterThan(metrics.clientWidth);
+    expect(metrics.lastRightBefore).toBeGreaterThan(metrics.viewW);
+
+    await page.locator('#zen-nav-menu .zen-menu-item').last().evaluate((el) => {
+      el.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    });
+
+    const after = await page.evaluate(() => {
+      const last = document.querySelector('#zen-nav-menu .zen-menu-item:last-child');
+      const box = last.getBoundingClientRect();
+      return { left: box.left, right: box.right, viewW: window.innerWidth };
+    });
+    expect(after.left).toBeGreaterThanOrEqual(-2);
+    expect(after.right).toBeLessThanOrEqual(after.viewW + 2);
   });
 });

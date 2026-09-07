@@ -823,7 +823,48 @@ body.zen-active:not(.zen-silent) .zen-horizon {
 }
 
 .zen-nav-menu::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
+    display: none; /* Chrome/Safari — desktop wrap does not scroll */
+}
+
+/* 手机端禅意分类：单行横向滑动，避免换行把内容顶下去。 */
+@media (max-width: 768px) {
+    body.zen-active .zen-horizon {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .zen-nav-menu {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x proximity;
+        scrollbar-width: thin;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        align-self: stretch;
+        padding-bottom: 8px;
+    }
+
+    .zen-nav-menu::-webkit-scrollbar {
+        display: block;
+        height: 3px;
+    }
+
+    .zen-nav-menu::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.35);
+        border-radius: 3px;
+    }
+
+    body.light-theme .zen-nav-menu::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.25);
+    }
+
+    .zen-menu-item {
+        scroll-snap-align: start;
+    }
 }
 
 .zen-menu-item {
