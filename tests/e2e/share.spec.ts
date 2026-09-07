@@ -28,7 +28,7 @@ test.describe('shared homepage', () => {
     const saved = await request.post('/api/config', {
       headers: { Authorization: token },
       data: {
-        categories: [{ id: 'share-cat', name: '分享专属分类', icon: '📌' }],
+        categories: [{ id: 'share-cat', name: '专属库', icon: '📌' }],
         items: [
           {
             id: 'share-item',
@@ -52,7 +52,7 @@ test.describe('shared homepage', () => {
     const page = await visitor.newPage();
     await page.goto(`/?p=${slug}`);
     await waitForShare(page);
-    await expect(page.locator('#grid-container')).toContainText('分享专属分类');
+    await expect(page.locator('#grid-container')).toContainText('专属库');
     await expect(page.locator('#grid-container')).toContainText('分享专属书签');
     await expect(page.locator('#grid-container')).not.toContainText('微博');
     await expect(page).toHaveURL(new RegExp(`[?&]p=${slug}`));
