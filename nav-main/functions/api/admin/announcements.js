@@ -130,8 +130,14 @@ export async function onRequestPatch(context) {
         return new Response(JSON.stringify({ error: "No fields to update" }), { status: 400 });
     }
 
+    // 白名单校验：确保拼接的字段仅来自固定的、预定义的列集合，杜绝SQL注入
+    const allowedSetClauses = ['title = ?', 'content = ?', 'type = ?', 'is_top = ?', 'expire_at = ?', 'status = ?'];
+    if (!updates.every(u => allowedSetClauses.includes(u))) {
+        return new Response(JSON.stringify({ error: "Invalid update fields" }), { status: 400 });
+    }
+
     params.push(targetId);
-    const sql = `UPDATE announcements SET ${updates.join(', ')} WHERE id = ?`;
+    const sql = 'UPDATE announcements SET ' + updates.join(', ') + ' WHERE id = ?';
 
     const result = await env.DB.prepare(sql)
       .bind(...params)
