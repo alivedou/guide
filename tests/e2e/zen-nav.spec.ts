@@ -20,6 +20,9 @@ async function enableZenWithManyCategories(page, count = 16) {
     }
     window.toggleZenMode(true);
   });
+  await page.addStyleTag({
+    content: '.zen-menu-item { animation: none !important; opacity: 1 !important; transform: none !important; }',
+  });
   await expect(page.locator('body')).toHaveClass(/zen-active/);
   await expect(page.locator('#zen-nav-menu .zen-menu-item').first()).toBeVisible();
 }
