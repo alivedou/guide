@@ -1,9 +1,8 @@
 name: tests
 
+# 不在每次 git push 时自动跑。需要时在 GitHub → Actions → tests → Run workflow 手动点。
 on:
-  push:
-    branches: [main, v4]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   node-baseline:
