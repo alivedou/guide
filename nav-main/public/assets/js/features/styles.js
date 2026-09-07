@@ -115,7 +115,7 @@ const updateStyles = () => {
         if (typeof refreshNoticeBadge === 'function') refreshNoticeBadge();
     } catch (e) { console.warn('[Notice] UI sync failed'); }
 
-    // 背景：本地上传只存在 IndexedDB。云端只有 local_upload 指针时，缺图回退必应，禁止指向不存在的 default-bg.jpg。
+    // 背景：本地上传只存在 IndexedDB。云端只有 local_upload 指针时，缺图回退必应，避免白屏。
     let bingUrl = null;
     const bingCache = localStorage.getItem('nav_bing_cache');
     if (bingCache) {
