@@ -73,5 +73,27 @@ describe('phase 3 dual runtime', () => {
     const rows = nodeDb.prepare('SELECT id FROM categories').all();
     nodeDb.close();
     assert.equal(rows.some((r) => r.id === 'same-cat'), false);
+
+    const nodeShareEnable = await nodeClient.post(
+      '/api/user/profile',
+      { username: 'dual_node', isShared: true, shareSlug: 'dual-node' },
+      { token: nodeFlow.token }
+    );
+    const cfShareEnable = await cfClient.post(
+      '/api/user/profile',
+      { username: 'dual_cf', isShared: true, shareSlug: 'dual-cf' },
+      { token: cfFlow.token }
+    );
+    assert.equal(nodeShareEnable.status, 200, JSON.stringify(nodeShareEnable.body));
+    assert.equal(cfShareEnable.status, 200, JSON.stringify(cfShareEnable.body));
+
+    const nodeShare = await nodeClient.get('/api/share?slug=dual-node');
+    const cfShare = await cfClient.get('/api/share?slug=dual-cf');
+    assert.equal(nodeShare.status, 200, JSON.stringify(nodeShare.body));
+    assert.equal(cfShare.status, 200, JSON.stringify(cfShare.body) + '\n' + cf.output());
+    assert.equal((nodeShare.body.categories || []).some((c) => c.name === '双端分类'), true);
+    assert.equal((cfShare.body.categories || []).some((c) => c.name === '双端分类'), true);
+    assert.equal((nodeShare.body.categories || []).some((c) => c.name === '社交'), false);
+    assert.equal((cfShare.body.categories || []).some((c) => c.name === '社交'), false);
   });
 });

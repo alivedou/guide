@@ -1,5 +1,5 @@
 /**
- * @fileoverview 
+ * @fileoverview
  * @author adou
  * @copyright Copyright (c) 2026 adou. All rights reserved.
  * @license MIT
@@ -10,8 +10,12 @@
  * ==========================================
  * share.js - 主页公开分享 API (免登录只读)
  * 路由: /api/share?slug=xxx
+ * 导航内容以 D1 为准，避免 KV 停留在注册默认模板。
  * ==========================================
  */
+
+import { assembleUserNavFromD1 } from './_cf-storage.js';
+import { filterHiddenNav, navSnapshotIsEmpty, sharePagePayload } from '../../shared/share-page.js';
 
 export async function onRequestGet(context) {
   const { request, env } = context;
@@ -23,10 +27,9 @@ export async function onRequestGet(context) {
   }
 
   try {
-    // 1. 从 D1 数据库查询 slug 对应的分享配置并校验
     const settings = await env.DB.prepare(`
-      SELECT user_id, is_shared, share_slug 
-      FROM user_settings 
+      SELECT user_id, is_shared, share_slug
+      FROM user_settings
       WHERE share_slug = ? AND is_shared = 1
     `).bind(slug).first();
 
@@ -35,34 +38,28 @@ export async function onRequestGet(context) {
     }
 
     const userId = settings.user_id;
+    let dataObj = await assembleUserNavFromD1(env, userId);
 
-    // 2. 从 Workers KV 获取用户的导航配置
-    const kvKey = `user_config:${userId}`;
-    const dataStr = await env.nav.get(kvKey);
-    
-    if (!dataStr) {
+    if (navSnapshotIsEmpty(dataObj)) {
+      const kvKey = `user_config:${userId}`;
+      const dataStr = await env.nav.get(kvKey);
+      if (dataStr) {
+        try {
+          dataObj = JSON.parse(dataStr);
+        } catch {
+          dataObj = { categories: [], items: [], settings: {} };
+        }
+      }
+    }
+
+    const publicNav = filterHiddenNav(dataObj);
+    if (navSnapshotIsEmpty(publicNav)) {
       return new Response(JSON.stringify({ error: "EMPTY_DATA", message: "该用户尚未同步任何导航数据" }), { status: 404 });
     }
 
-    const dataObj = JSON.parse(dataStr);
-
-    // 3. 严格的安全过滤脱敏，防止隐藏内容与个人隐私泄漏
-    dataObj.categories = (dataObj.categories || []).filter(c => !c.hidden);
-    dataObj.items = (dataObj.items || []).filter(i => !i.hidden);
-
-    // 过滤出公开分享用户的信息
     const owner = await env.DB.prepare('SELECT username, uid FROM users WHERE id = ?').bind(userId).first();
 
-    // 强制设置只读与分享上下文
-    return new Response(JSON.stringify({
-      categories: dataObj.categories,
-      items: dataObj.items,
-      settings: dataObj.settings || {},
-      isReadOnlyShare: true,
-      shareOwner: owner ? owner.username : "Nav User",
-      shareUid: owner ? owner.uid : null,
-      shareSlug: slug
-    }), {
+    return new Response(JSON.stringify(sharePagePayload(publicNav, owner, slug)), {
       headers: {
         "Content-Type": "application/json;charset=UTF-8",
         "Cache-Control": "no-store, no-cache, must-revalidate"

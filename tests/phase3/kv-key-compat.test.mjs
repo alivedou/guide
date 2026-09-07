@@ -38,6 +38,10 @@ describe('phase 3 kv key compatibility', () => {
     assert.equal(sharedCore.includes('user_config:'), false);
     assert.equal(sharedIds.includes('user_config:'), false);
     assert.equal(/user_\$\{userId\}\.json/.test(sharedCore), false);
+
+    const sharePage = fs.readFileSync(path.join(REPO_ROOT, 'nav-main/shared/share-page.js'), 'utf8');
+    assert.equal(sharePage.includes('user_config:'), false);
+    assert.equal(/user_\$\{userId\}\.json/.test(sharePage), false);
   });
 
   it('P3-5 QUOTA_CONFIG is not redefined in functions or src/server', () => {

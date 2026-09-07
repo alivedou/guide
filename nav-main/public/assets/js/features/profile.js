@@ -279,6 +279,38 @@ const openProfileCenter = async () => {
                     modal.style.display = 'none';
                     renderNav();
                     renderTools();
+
+                    // 开启分享时立刻把当前本地导航发布到云端，否则访客会读到注册时的默认主页
+                    if (isShared && shareSlug && window.sysToken && window.appData?.categories && window.appData?.items) {
+                        showLoader('正在把当前主页发布到分享链接...');
+                        try {
+                            const uploadData = JSON.parse(JSON.stringify(window.appData));
+                            if (uploadData.settings) delete uploadData.settings.themeMode;
+                            const syncRes = await fetch('/api/config', {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': window.sysToken,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify(uploadData)
+                            });
+                            const syncBody = await syncRes.json().catch(() => ({}));
+                            if (syncRes.ok && syncBody.success) {
+                                window.isDataDirty = false;
+                                localStorage.setItem('nav_last_cloud_sync', Date.now().toString());
+                                localStorage.setItem('nav_app_data', JSON.stringify(window.appData));
+                                if (typeof window.getCoreDataFingerprint === 'function') {
+                                    window.lastSyncFingerprint = window.getCoreDataFingerprint(window.appData);
+                                }
+                            } else {
+                                showToast("分享已开启，但当前主页上传失败。请打开云端同步手动上传，否则访客仍可能看到默认模板。", "#e67e22");
+                            }
+                        } catch (syncErr) {
+                            showToast("分享已开启，但当前主页上传失败。请打开云端同步手动上传，否则访客仍可能看到默认模板。", "#e67e22");
+                        } finally {
+                            hideLoader();
+                        }
+                    }
                 } else {
                     showToast(saveResult.error || "修改失败，请重试", "#e74c3c");
                 }

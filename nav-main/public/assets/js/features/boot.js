@@ -846,11 +846,22 @@ const initSharedPage = async (slug) => {
     } catch (e) {
         hideLoader();
         toggleSkeleton(false);
+        window.isSharedPageMode = true;
+        window.isAdmin = false;
+        window.currentUser = null;
+        window.sysToken = null;
         showToast(e.message || "分享主页不存在或已关闭", "#e74c3c");
-        // 3秒后跳转回主站
-        setTimeout(() => {
-            window.location.href = '/';
-        }, 3000);
+        const grid = document.getElementById('grid-container');
+        if (grid) {
+            grid.innerHTML = `
+                <div class="empty-state-tip" style="text-align:center; padding: 100px 20px; color: var(--text-dim);">
+                    <i class="ri-link-unlink" style="font-size: 48px; opacity: 0.5;"></i>
+                    <p style="margin-top: 15px;">${escapeHTML(e.message || "分享主页不存在或已关闭")}</p>
+                    <p style="margin-top: 8px; font-size: 13px; opacity: 0.7;">不会自动跳转到默认主页，以免看起来像分享失败却打开了站点模板。</p>
+                </div>
+            `;
+        }
+        if (typeof renderTools === 'function') renderTools();
     } finally {
         hideLoader();
     }

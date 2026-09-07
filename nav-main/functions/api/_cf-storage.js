@@ -4,6 +4,24 @@
 import { defaultData, MINIMAL_SAFE_DATA } from '../../shared/default-data.js';
 import { formatCNTime } from '../../shared/time.js';
 import { applySchemaPatches } from '../../shared/schema-patch.js';
+import { buildUserNavSnapshot } from '../../shared/share-page.js';
+
+export async function assembleUserNavFromD1(env, userId) {
+  const cats = await env.DB.prepare(
+    'SELECT * FROM categories WHERE user_id = ? ORDER BY sort_order ASC, name ASC'
+  )
+    .bind(userId)
+    .all();
+  const items = await env.DB.prepare(
+    'SELECT * FROM items WHERE user_id = ? ORDER BY sort_order ASC, title ASC'
+  )
+    .bind(userId)
+    .all();
+  const settingsRow = await env.DB.prepare('SELECT * FROM user_settings WHERE user_id = ?')
+    .bind(userId)
+    .first();
+  return buildUserNavSnapshot(cats.results || [], items.results || [], settingsRow);
+}
 
 export function createCfStoragePort(env, waitUntil = () => {}) {
   return {
@@ -19,9 +37,12 @@ export function createCfStoragePort(env, waitUntil = () => {}) {
       const kvKey = `user_config:${userId}`;
       const dataStr = await env.nav.get(kvKey);
       if (dataStr) return JSON.parse(dataStr);
-      const dataObj = { ...defaultData, lastUpdated: formatCNTime(new Date()) };
-      waitUntil(env.nav.put(kvKey, JSON.stringify(dataObj)));
-      return dataObj;
+      // 不要把游客默认模板写入 user_config:<uuid>：否则分享页会一直读到未定制的主页
+      const fromD1 = await assembleUserNavFromD1(env, userId);
+      if ((fromD1.categories && fromD1.categories.length) || (fromD1.items && fromD1.items.length)) {
+        return fromD1;
+      }
+      return { ...defaultData, lastUpdated: formatCNTime(new Date()) };
     },
     async persistSavedConfig(userId, { remapped, requestBody, lastUpdated }) {
       const kvKey = `user_config:${userId}`;

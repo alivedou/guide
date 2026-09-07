@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { defaultData, MINIMAL_SAFE_DATA } from '../../nav-main/shared/default-data.js';
+import { buildUserNavSnapshot } from '../../nav-main/shared/share-page.js';
 import { KV_DIR } from './config.js';
 import { db } from './db.js';
 
@@ -22,38 +23,7 @@ export const syncUserToKV = (userId) => {
         }
     }
 
-    const userData = {
-        categories: categories.map(c => ({
-            ...c,
-            id: c.id,
-            _isVideo: !!c.is_video,
-            hidden: !!c.hidden
-        })),
-        items: items.map(i => ({
-            ...i,
-            catId: i.cat_id,
-            cat_id: i.cat_id,
-            hidden: !!i.hidden
-        })),
-        settings: settings ? {
-            cardWidth: settings.card_width,
-            zenMode: !!settings.zen_mode,
-            showFrequent: !!settings.show_f_requent,
-            bgUrl: settings.bg_url,
-            hideBgMask: !!settings.hide_bg_mask,
-            isolatedView: !!settings.isolated_view,
-            density: settings.density || 'standard',
-            simpleMode: !!settings.simple_mode,
-            link_target: settings.link_target || '_blank',
-            syncInterval: settings.sync_interval !== null && settings.sync_interval !== undefined ? settings.sync_interval : 7,
-            themeMode: settings.theme_mode
-        } : defaultData.settings,
-        lastUpdated: existingLastUpdated || null
-    };
-
-    if (settings && settings.show_frequent !== undefined) {
-        userData.settings.showFrequent = !!settings.show_frequent;
-    }
+    const userData = buildUserNavSnapshot(categories, items, settings, existingLastUpdated);
 
     if (!fs.existsSync(kvDir)) fs.mkdirSync(kvDir);
 

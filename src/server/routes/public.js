@@ -1,9 +1,8 @@
 import { parse } from 'node-html-parser';
 import { authenticate } from '../middleware.js';
-import { KV_DIR } from '../config.js';
 import { db } from '../db.js';
-import fs from 'fs';
-import path from 'path';
+import { syncUserToKV } from '../kv.js';
+import { filterHiddenNav, navSnapshotIsEmpty, sharePagePayload } from '../../../nav-main/shared/share-page.js';
 
 export function registerPublicRoutes(app) {
 app.get('/api/bing', async (req, res) => {
@@ -124,28 +123,15 @@ app.get('/api/share', (req, res) => {
         if (!settings) return res.status(404).json({ error: 'NOT_FOUND', message: '该分享主页未开启或不存在' });
 
         const userId = settings.user_id;
-        const kvPath = path.join(KV_DIR, `user_${userId}.json`);
-        if (!fs.existsSync(kvPath)) {
+        // 分享页以 SQL 为准，避免 KV 快照停留在注册时的默认主页
+        const dataObj = syncUserToKV(userId);
+        const publicNav = filterHiddenNav(dataObj);
+        if (navSnapshotIsEmpty(publicNav)) {
             return res.status(404).json({ error: 'EMPTY_DATA', message: '该用户尚未同步任何导航数据' });
         }
 
-        const dataObj = JSON.parse(fs.readFileSync(kvPath, 'utf-8'));
-
-        // 严格的安全过滤脱敏，防止隐藏内容与个人隐私泄漏
-        dataObj.categories = (dataObj.categories || []).filter(c => !c.hidden);
-        dataObj.items = (dataObj.items || []).filter(i => !i.hidden);
-
         const owner = db.prepare('SELECT username, uid FROM users WHERE id = ?').get(userId);
-
-        res.json({
-            categories: dataObj.categories,
-            items: dataObj.items,
-            settings: dataObj.settings || {},
-            isReadOnlyShare: true,
-            shareOwner: owner ? owner.username : "Nav User",
-            shareUid: owner ? owner.uid : null,
-            shareSlug: slug
-        });
+        res.json(sharePagePayload(publicNav, owner, slug));
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

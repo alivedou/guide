@@ -887,6 +887,7 @@ const renderTools = () => {
 
 // 周期性自动备份调度器
 const checkAutoSyncSchedule = async () => {
+    if (window.isSharedPageMode) return;
     if (!window.sysToken) return;
 
     const intervalDays = window.appData.settings?.syncInterval || 0;
