@@ -31,5 +31,9 @@ test.describe('P4 smoke', () => {
     }
     await expect(page.locator('#grid-container')).toBeVisible();
     await expect(page.locator('#sea-input')).toBeAttached();
+    await expect(page.locator('.copyright-text a')).toHaveAttribute(
+      'href',
+      'https://github.com/alivedou/CF-nav'
+    );
   });
 });
