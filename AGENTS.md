@@ -3,11 +3,12 @@
 给后续的人（和 AI）用：改代码前先读本文，避免踩 Docker / Cloudflare 双部署坑。
 
 - **仓库**：https://github.com/alivedou/CF-nav
-- **主分支 / 生产分支**：`v4`
-- **本地目录名**可能是 `CF-nav-multiple-v4`，仓库名仍是 `CF-nav`，不要按文件夹名改对外 URL。
+- **主分支 / 生产分支**：`main`
+- **版本号**：用 Git tag、Docker 镜像 tag 或 GitHub Release，不要靠改分支名发版。
+- **本地目录名**可以任意，仓库名仍是 `CF-nav`，不要按文件夹名改对外 URL。
 - **作者习惯**：增量开发、不乱动旧结构、不擅自重构、交付前自测。
 
-历史分支 `v1-single` / `v2-multiple` / `v3-fix` 只作演进记录，**不要**往 `v4` 合、也不要以它们为改代码基线。
+历史分支 `v1-single` / `v2-multiple` / `v3-fix` / `v4` / `v5` 只作存档，**不要**往它们合新功能，也不要以它们为改代码基线。
 
 ---
 
@@ -87,7 +88,7 @@ CF-nav/
 | `server.js` / `src/server/` / `Dockerfile` / `package.json` | Docker 与本地 `npm run dev` |
 | `migrations/` | server 自愈 + wrangler migrate |
 | `nav-main/` | CF 构建根；前端与 Functions 都在这 |
-| `ikun.sh` | README 一键 URL：`https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh` |
+| `ikun.sh` | README 一键 URL：`https://raw.githubusercontent.com/alivedou/CF-nav/main/ikun.sh` |
 | `README.md` / `LICENSE` | 门面 |
 
 ### 可以收纳、但已约定位置
@@ -151,7 +152,7 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 
 | 项 | 必须值 |
 |----|--------|
-| 生产分支 | `v4` |
+| 生产分支 | `main` |
 | Root directory | **`nav-main`** |
 | Build command | `npm install` |
 | Build output | **`public`** |

@@ -8,7 +8,8 @@
 
 这是一个具有超强自适应性、高辨识度视觉设计、支持实时自定义编辑的极致导航网站。本项目支持 **Cloudflare Pages +  KV + D1** 无服务器极速部署，同时也自带本地 Node.js 离线开发模拟服务，为您实现“线上线下、一键全通”的无缝体验。
 
-- **本项目地址**：[cf-nav](https://github.com/alivedou/CF-nav/tree/v4)
+- **本项目地址**：[cf-nav](https://github.com/alivedou/CF-nav)
+- **默认分支**：`main`（请在此开发与部署；历史 `v4` / `v5` 仅作存档，发版请用 Git tag / Docker 镜像 tag，不要靠改分支名）
 
 - **本项目测试地址**：[项目测试地址](https://test--ikun-nav--25d5j47qxf4z.code.run)
 - **vps极速部署视频**：[YouTube视频地址](https://test--ikun-nav--25d5j47qxf4z.code.run/?p=test)
@@ -98,7 +99,7 @@ graph TD
 
 *   **安全审计日志**：自动记录敏感操作，并在每日通过邮件/Telegram 发送安全汇总日报。
 
-**本项目地址**：[项目地址](https://github.com/alivedou/CF-nav/tree/v4)
+**本项目地址**：[项目地址](https://github.com/alivedou/CF-nav)
 
 ---
 ## ☁️ 部署方式一：VPS-Docker 极速部署
@@ -112,18 +113,18 @@ graph TD
 境外 VPS 用户（GitHub 原生链接）
 
 ```bash
-bash <(curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh)
+bash <(curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/main/ikun.sh)
 ```
 ---
 ### 🔹 方式2：分步本地下载运行（适合需要留存脚本的用户）
 1.下载脚本（境外 VPS）
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/v4/ikun.sh -o ikun.sh
+curl -sSfL https://raw.githubusercontent.com/alivedou/CF-nav/main/ikun.sh -o ikun.sh
 ```
 
 大陆境内 VPS 请直接创建一个`ikun.sh`，复制本项目中`ikun.sh`的内容执行吧。（我试了好几个镜像源都不行，只有这个土办法了）
-- [`ikun.sh`跳转](https://github.com/alivedou/CF-nav/blob/v4/ikun.sh)
+- [`ikun.sh`跳转](https://github.com/alivedou/CF-nav/blob/main/ikun.sh)
 
 2.赋予脚本可执行权限
 
@@ -183,13 +184,13 @@ npx wrangler d1 migrations apply cloudnav-db --remote
 ```
 
 ### 第三步：部署 Cloudflare Pages 项目
-1. 将本项目 **fork** 到您的 GitHub（分支使用 **`v4`**）。
+1. 将本项目 **fork** 到您的 GitHub（使用默认分支 **`main`**）。
 2. Cloudflare：**Workers 和 Pages** → **创建** → **Pages** → **连接到 Git**。
 3. **构建设置（非常重要，写错会 404 / 函数不生效）**：
 
 | 项 | 必须填 |
 | :--- | :--- |
-| 生产分支 | **`v4`** |
+| 生产分支 | **`main`** |
 | 框架预设 | **None** |
 | **根目录 (Root directory)** | **`nav-main`** |
 | 构建命令 | `npm install` |

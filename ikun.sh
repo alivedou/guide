@@ -136,7 +136,7 @@ EOF
         if docker pull --platform linux/amd64 "$FULL_IMAGE"; then
             PLATFORM_ARGS=(--platform linux/amd64)
         else
-            echo -e "${RED}镜像拉取失败。ARM 机器需要 multi-arch 镜像：在 GitHub Actions 用 v5 分支重新构建并勾选 amd64+arm64。${NC}"
+            echo -e "${RED}镜像拉取失败。ARM 机器需要 multi-arch 镜像：在 GitHub 默认分支 main 上用 Actions 重新构建 amd64+arm64。${NC}"
             pause_and_back
             return
         fi
