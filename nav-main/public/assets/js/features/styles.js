@@ -2,6 +2,7 @@
  * @fileoverview Feature module: styles
  * Split from the former app.js God-file. Window bridge kept for inline onclick.
  */
+import { resolveNavBackground } from '../bg-resolve.js';
 const initThemeMode = (...args) => window.initThemeMode(...args);
 const manualSyncCloud = (...args) => window.manualSyncCloud(...args);
 const escapeHTML = (...args) => (window.utils && window.utils.escapeHTML ? window.utils.escapeHTML(...args) : String(args[0] ?? ''));
@@ -114,55 +115,35 @@ const updateStyles = () => {
         if (typeof refreshNoticeBadge === 'function') refreshNoticeBadge();
     } catch (e) { console.warn('[Notice] UI sync failed'); }
 
-    // 背景阶梯式对齐与类型标记
-    let bg = window.appData.settings?.bgUrl;
-
-    // 💡 针对公开分享页的特殊处理：若原作者使用了“本地上传图片”作为壁纸，
-    // 由于该图片只保存在原作者本地浏览器的 IndexedDB 中，访客访问时绝对拿不到。
-    // 为了防止页面背景空白或显示破碎，我们强行将其重置为空，以便访客自动加载必应每日壁纸！
-    if (window.isSharedPageMode && bg === 'local_upload') {
-        bg = '';
+    // 背景：本地上传只存在 IndexedDB。云端只有 local_upload 指针时，缺图回退必应，禁止指向不存在的 default-bg.jpg。
+    let bingUrl = null;
+    const bingCache = localStorage.getItem('nav_bing_cache');
+    if (bingCache) {
+        try {
+            const parsed = JSON.parse(bingCache);
+            if (parsed.url && parsed.url.startsWith('http')) bingUrl = parsed.url;
+        } catch (e) { /* ignore bad cache */ }
     }
 
-    if (bg && bg.trim() !== '') {
-        console.log('[Style] Applying user custom background:', bg);
-        document.body.dataset.bgType = 'custom';
-        if (bg === 'local_upload') {
-            // 🚀 读取本地缓存的高清 Base64 格式壁纸
-            const localBg = window.navLocalBgImage || localStorage.getItem('nav_local_bg_image');
-            if (localBg) {
-                document.body.style.background = `url("${localBg}") center/cover fixed`;
-            } else {
-                document.body.style.background = `url("/assets/img/default-bg.jpg") center/cover fixed`; // 安全兜底
-            }
-        } else if (bg.startsWith('http')) {
-            document.body.style.background = `url("${bg}") center/cover fixed`;
-        } else {
-            document.body.style.background = bg;
-        }
-    } else {
-        const cache = localStorage.getItem('nav_bing_cache');
-        let bingUrl = null;
-        if (cache) {
-            try {
-                const parsed = JSON.parse(cache);
-                if (parsed.url && parsed.url.startsWith('http')) {
-                    bingUrl = parsed.url;
-                }
-            } catch (e) {}
-        }
+    const resolved = resolveNavBackground({
+        bgUrl: window.appData.settings?.bgUrl,
+        localBg: window.navLocalBgImage || localStorage.getItem('nav_local_bg_image'),
+        bingUrl,
+        isSharedPage: window.isSharedPageMode
+    });
 
-        if (bingUrl) {
-            console.log('[Style] Applying cached Bing background:', bingUrl);
-            document.body.dataset.bgType = 'bing';
-            document.body.style.background = `url("${bingUrl}") center/cover fixed`;
-            document.body.style.backgroundSize = 'cover';
-            document.body.style.backgroundAttachment = 'fixed';
-        } else {
-            console.log('[Style] No valid background found, clearing inline styles for CSS fallback.');
-            document.body.dataset.bgType = 'none';
-            document.body.style.background = '';
-        }
+    document.body.style.background = resolved.cssBackground;
+    if (resolved.kind === 'custom-local' || resolved.kind === 'custom-url' || resolved.kind === 'custom-css') {
+        document.body.dataset.bgType = 'custom';
+        console.log('[Style] Applying user custom background:', window.appData.settings?.bgUrl);
+    } else if (resolved.kind === 'bing') {
+        document.body.dataset.bgType = 'bing';
+        document.body.style.backgroundSize = 'cover';
+        document.body.style.backgroundAttachment = 'fixed';
+        console.log('[Style] Applying cached Bing background:', bingUrl);
+    } else {
+        document.body.dataset.bgType = 'none';
+        console.log('[Style] No valid background found, clearing inline styles for CSS fallback.');
     }
 
     // 处理背景遮罩

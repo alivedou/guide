@@ -20,6 +20,19 @@ const initAnnouncements = (...args) => window.initAnnouncements(...args);
 const initSiteConfig = (...args) => window.initSiteConfig(...args);
 const initLocalBgImage = (...args) => window.initLocalBgImage(...args);
 const getBingWallpaper = (...args) => window.getBingWallpaper(...args);
+const shouldFetchBingWallpaper = (...args) =>
+    typeof window.shouldFetchBingWallpaper === 'function'
+        ? window.shouldFetchBingWallpaper(...args)
+        : !window.appData?.settings?.bgUrl;
+const refreshBingIfNeeded = () => {
+    if (shouldFetchBingWallpaper({
+        bgUrl: window.appData?.settings?.bgUrl,
+        localBg: window.navLocalBgImage || localStorage.getItem('nav_local_bg_image'),
+        isSharedPage: window.isSharedPageMode
+    })) {
+        getBingWallpaper().then(() => updateStyles());
+    }
+};
 const handleAuthError = (...args) => window.handleAuthError(...args);
 const openLoginModal = (...args) => window.openLoginModal(...args);
 const openNoticeCenter = (...args) => window.openNoticeCenter(...args);
@@ -125,11 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 2. 初始视觉校准 & 本地大壁纸预载 (IndexedDB 异步)
     initLocalBgImage().then(() => {
         updateStyles();
-
-        // 3. 异步获取 Bing 壁纸
-        if (!window.appData.settings?.bgUrl) {
-            getBingWallpaper().then(() => updateStyles());
-        }
+        refreshBingIfNeeded();
     });
 
     // 4. 异步获取云端配置与公告
@@ -183,9 +192,7 @@ const init = async (forceRender = false) => {
             renderNav();
             renderTools();
             updateStyles();
-            if (!window.appData.settings?.bgUrl) {
-                getBingWallpaper(); // 异步触发
-            }
+            refreshBingIfNeeded();
             console.log('[Init] Stale-First: Loaded from local cache instantly.');
         } catch (e) {
             console.warn('[Init] Local cache parse failed:', e);
@@ -339,9 +346,7 @@ const init = async (forceRender = false) => {
             renderTools();
 
             // 强制背景校验闭环
-            if (!window.appData.settings?.bgUrl) {
-                getBingWallpaper(); // 异步触发
-            }
+            refreshBingIfNeeded();
 
             updateStyles();
 

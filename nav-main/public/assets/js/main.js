@@ -7,6 +7,7 @@ import './utils.js';
 import './colorExtractor.js';
 import './emoji-pool.js';
 import './theme-mode.js';
+import './bg-resolve.js';
 import './personalization.js';
 import './cloud-sync.js';
 import './sys-config.js';

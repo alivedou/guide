@@ -20,7 +20,7 @@ jobs:
       - run: npm run test:phase1
       - run: npm run test:phase2
       - run: npm run test:phase3
-      - run: node --test --test-concurrency=1 tests/phase4/*.test.mjs tests/unit/sanitize.test.mjs
+      - run: node --test --test-concurrency=1 tests/phase4/*.test.mjs tests/unit/sanitize.test.mjs tests/unit/bg-resolve.test.mjs
       - run: node --test --test-concurrency=1 tests/phase5/*.test.mjs
       - run: npm run sql:check
 
@@ -34,6 +34,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/search.spec.ts tests/e2e/admin.spec.ts tests/e2e/visual.spec.ts tests/e2e/responsive.spec.ts
+      - run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/search.spec.ts tests/e2e/admin.spec.ts tests/e2e/visual.spec.ts tests/e2e/responsive.spec.ts tests/e2e/background.spec.ts
         env:
           CI: true

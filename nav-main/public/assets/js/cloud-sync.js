@@ -175,10 +175,24 @@ window.executePullBackupFromCloud = async () => {
                     localStorage.setItem('nav_last_cloud_sync', Date.now().toString());
                 }
 
-                // 重新刷新与渲染
+                // 重新刷新与渲染：先把 IndexedDB 壁纸读回内存，缺图时回退必应，避免白屏
+                if (typeof window.initLocalBgImage === 'function') {
+                    await window.initLocalBgImage();
+                }
                 if (typeof window.renderNav === 'function') window.renderNav();
                 if (typeof window.renderTools === 'function') window.renderTools();
                 if (typeof window.updateStyles === 'function') window.updateStyles();
+                const needBing = typeof window.shouldFetchBingWallpaper === 'function'
+                    && window.shouldFetchBingWallpaper({
+                        bgUrl: window.appData?.settings?.bgUrl,
+                        localBg: window.navLocalBgImage || localStorage.getItem('nav_local_bg_image'),
+                        isSharedPage: window.isSharedPageMode
+                    });
+                if (needBing && typeof window.getBingWallpaper === 'function') {
+                    window.getBingWallpaper().then(() => {
+                        if (typeof window.updateStyles === 'function') window.updateStyles();
+                    });
+                }
 
                 window.showToast("云端备份拉取并覆盖本地成功！", "#27ae60");
                 if (typeof window.closeAllModals === 'function') window.closeAllModals(true); // 静默关闭弹窗

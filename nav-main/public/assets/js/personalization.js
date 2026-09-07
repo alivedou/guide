@@ -58,6 +58,10 @@ window.openVisualLab = () => {
             <p style="font-size: 11px; opacity: 0.6; margin-top: 4px; line-height: 1.4;">
                 提示: 支持外链或上传本地壁纸（建议 10MB 内，纯本地缓存，零开销）。
             </p>
+            ${window.appData.settings?.bgUrl === 'local_upload' && !(window.navLocalBgImage || (typeof localStorage !== 'undefined' && localStorage.getItem('nav_local_bg_image'))) ? `
+            <p class="visual-lab-local-bg-missing" style="font-size: 11px; color: #e67e22; margin-top: 6px; line-height: 1.4;">
+                这台设备没有本地壁纸文件（图片不会上传云端）。已改用必应壁纸，避免白屏。可重新上传，或改用网络图片地址。
+            </p>` : ''}
         </div>
         <div class="visual-option-group">
             <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
