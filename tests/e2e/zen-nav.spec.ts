@@ -53,7 +53,9 @@ test.describe('Zen category chips wrap instead of clipping', () => {
     expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewH);
     expect(geometry.bottom).toBeGreaterThan(0);
 
-    await last.click();
+    const box = await last.boundingBox();
+    expect(box).toBeTruthy();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await expect(last).toHaveClass(/active/);
   });
 });
