@@ -257,7 +257,7 @@ docker run -d --name ikun-navigation -p 3000:3000 \
 
 - **能新增模块就新增**；不要再把逻辑堆回已弃用的 `app.js` 桩文件；Node 路由改 `src/server/routes/`。
 - 浏览器地址栏焦点无法被网页抢走；omnibox 聚焦时做不到「开浏览器就键入进导航搜索」。
-- 改 PWA 缓存逻辑时升 `ServiceWorker.js` 里的 `CACHE_NAME`（当前 `nav-core-v15`）。
+- 改 PWA 缓存逻辑时升 `ServiceWorker.js` 里的 `CACHE_NAME`（当前 `nav-core-v16`）。
 - CSS 按 `tokens.css` 最先的顺序 link 八个文件；不要再给 `index.html` 挂 `style.css`（会双份层叠）。快捷键指南不要写回 inline `style=`。
 
 本地偏好键示例：`nav_token`、`nav_current_user`、`nav_app_data`、`nav_search_engine`、`nav_search_prefix`、`nav_sidebar_pinned`、`nav_theme_mode`、`nav_clicks_history`、`nav_last_cloud_sync`。

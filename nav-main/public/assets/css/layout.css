@@ -797,14 +797,16 @@ body.zen-active:not(.zen-silent) .zen-horizon {
 
 .zen-nav-menu {
     display: flex;
-    overflow-x: auto;
-    white-space: nowrap;
+    flex-wrap: wrap;
+    align-items: center;
+    overflow: visible;
+    white-space: normal;
     width: 100%;
+    max-width: 100%;
     gap: 10px;
     padding: 10px 0; /* 取消水平 padding，依靠父级 zen-horizon 的 padding 对齐 */
     margin-bottom: 20px;
-    scrollbar-width: none; /* Firefox */
-    -webkit-overflow-scrolling: touch; /* iOS 滚动丝滑 */
+    box-sizing: border-box;
 }
 
 /* 移动端菜单优化 (T9) */
@@ -836,6 +838,10 @@ body.zen-active:not(.zen-silent) .zen-horizon {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    max-width: 100%;
+    box-sizing: border-box;
     /* T8: Stagger 入场 */
     opacity: 0;
     transform: translateY(10px);
