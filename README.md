@@ -335,6 +335,6 @@ npm install
 3. 在插件设置里输入你的导航页网址（自定义域名）。
 4. 点击 **Save** 并保存，开启对应按钮。
 
-![部署示例](https://img.163898.xyz/api/rfile/guide1.png)
+![插件使用示例](https://nice.ddns.ge/api/rfile/r2_1788749545595_b4h8kk.png)
 
 完成后，浏览器启动页和新建标签页都将自动打开你的私有导航站！🚀
